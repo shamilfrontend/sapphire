@@ -131,8 +131,8 @@ async function main() {
   console.log('[dev] Starting watch (client + extensions)...');
   spawnNpm('watch', { label: 'watch' });
 
-  console.log('[dev] Starting watchreact...');
-  spawnNpm('watchreact', { label: 'watchreact' });
+  console.log('[dev] Starting watchvue...');
+  spawnNpm('watchvue', { label: 'watchvue' });
 
   console.log('[dev] Waiting for first compile after clean-out (this can take a few minutes)...');
   await waitForFreshCompile(watchStartedAt);

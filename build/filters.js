@@ -26,8 +26,8 @@ module.exports.all = [
   '!out*/**',
   '!test/**/out/**',
   '!**/node_modules/**',
-  '!src/vs/workbench/contrib/sapphire/browser/react/out/**',
-  '!src/vs/workbench/contrib/sapphire/browser/react/src2/**',
+  '!src/vs/workbench/contrib/sapphire/browser/vue/out/**',
+  '!src/vs/workbench/contrib/sapphire/browser/vue/src2/**',
 ];
 
 module.exports.unicodeFilter = [
@@ -107,8 +107,8 @@ module.exports.indentationFilter = [
   '!extensions/vscode-api-tests/testWorkspace2/**',
   '!build/monaco/**',
   '!build/win32/**',
-  '!src/vs/workbench/contrib/sapphire/browser/react/out/**',
-  '!src/vs/workbench/contrib/sapphire/browser/react/src2/**',
+  '!src/vs/workbench/contrib/sapphire/browser/vue/out/**',
+  '!src/vs/workbench/contrib/sapphire/browser/vue/src2/**',
   '!src/vs/workbench/contrib/sapphire/**',
 
   // except multiple specific files
@@ -147,8 +147,8 @@ module.exports.indentationFilter = [
   '!extensions/ipynb/notebook-out/**',
   '!extensions/notebook-renderers/renderer-out/*.js',
   '!extensions/simple-browser/media/*.js',
-  '!src/vs/workbench/contrib/sapphire/browser/react/out/**',
-  '!src/vs/workbench/contrib/sapphire/browser/react/src2/**',
+  '!src/vs/workbench/contrib/sapphire/browser/vue/out/**',
+  '!src/vs/workbench/contrib/sapphire/browser/vue/src2/**',
 ];
 
 module.exports.copyrightFilter = [
@@ -190,8 +190,8 @@ module.exports.copyrightFilter = [
   '!extensions/typescript-language-features/node-maintainer/**',
   '!extensions/html-language-features/server/src/modes/typescript/*',
   '!extensions/*/server/bin/*',
-  '!src/vs/workbench/contrib/sapphire/browser/react/out/**',
-  '!src/vs/workbench/contrib/sapphire/browser/react/src2/**',
+  '!src/vs/workbench/contrib/sapphire/browser/vue/out/**',
+  '!src/vs/workbench/contrib/sapphire/browser/vue/src2/**',
   '!src/vs/workbench/contrib/sapphire/**',
 ];
 

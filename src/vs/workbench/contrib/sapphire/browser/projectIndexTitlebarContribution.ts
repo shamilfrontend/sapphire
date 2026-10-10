@@ -12,7 +12,7 @@ import {
   WorkbenchPhase,
 } from '../../../common/contributions.js';
 import { ISapphireSettingsService } from '../common/sapphireSettingsService.js';
-import { mountProjectIndexTitlebar } from './react/out/project-index-titlebar-tsx/index.js';
+import { mountProjectIndexTitlebar } from './vue/out/project-index-titlebar-tsx/index.js';
 
 const HOST_CLASS = 'ppr-project-index-titlebar';
 

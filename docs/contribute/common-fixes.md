@@ -5,7 +5,7 @@
 | Не та версия Node                                 | `nvm use` по `.nvmrc`                                                                                   |
 | Пробелы в пути к репо                             | перенести проект                                                                                        |
 | `Failed to fetch dynamically imported module`     | импорты с суффиксом `.js`                                                                               |
-| Ошибки React / OOM                                | `NODE_OPTIONS="--max-old-space-size=8192" npm run buildreact`                                           |
+| Ошибки Vue / OOM                                | `NODE_OPTIONS="--max-old-space-size=8192" npm run buildvue`                                           |
 | Пропали стили                                     | подождать сборку Tailwind, Reload Window                                                                |
 | `libtool: unrecognised option: '-static'` (macOS) | нужен GNU libtool, не BSD                                                                               |
 | SUID sandbox helper                               | `sudo chown root:root .build/electron/chrome-sandbox && sudo chmod 4755 .build/electron/chrome-sandbox` |

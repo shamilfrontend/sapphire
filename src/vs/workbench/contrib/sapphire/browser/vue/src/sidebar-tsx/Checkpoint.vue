@@ -1,0 +1,65 @@
+<script setup lang="ts">
+/*--------------------------------------------------------------------------------------
+ *  Copyright 2025 Glass Devtools, Inc. All rights reserved.
+ *  Licensed under the Apache License, Version 2.0. See LICENSE.txt for more information.
+ *--------------------------------------------------------------------------------------*/
+
+import { computed } from 'vue';
+import { useAccessor, useChatThreadsStreamState, useFullChatThreadsStreamState } from '../util/services.js';
+import { CheckpointEntry } from '../../../../common/chatThreadServiceTypes.js';
+
+const props = defineProps<{
+  message: CheckpointEntry;
+  threadId: string;
+  messageIdx: number;
+  isCheckpointGhost: boolean;
+  threadIsRunning: boolean;
+}>();
+
+const accessor = useAccessor();
+const chatThreadService = accessor.get('IChatThreadService');
+const streamState = useFullChatThreadsStreamState();
+const threadStream = useChatThreadsStreamState(() => props.threadId);
+
+const isRunning = computed(() => threadStream.value?.isRunning);
+const isDisabled = computed(() => {
+  if (isRunning.value) return true;
+  return !!Object.keys(streamState.value).find((threadId2) => streamState.value[threadId2]?.isRunning);
+});
+
+const onClick = () => {
+  if (props.threadIsRunning) return;
+  if (isDisabled.value) return;
+  chatThreadService.jumpToCheckpointBeforeMessageIdx({
+    threadId: props.threadId,
+    messageIdx: props.messageIdx,
+    jumpToUserModified:
+      props.messageIdx === (chatThreadService.state.allThreads[props.threadId]?.messages.length ?? 0) - 1,
+  });
+};
+</script>
+
+<template>
+  <div class="flex items-center justify-center px-2 ">
+    <div
+      :class="`
+                    text-xs
+                    text-void-fg-3
+                    select-none
+                    ${isCheckpointGhost ? 'opacity-50' : 'opacity-100'}
+					${isDisabled ? 'cursor-default' : 'cursor-pointer'}
+                `"
+      :style="{ position: 'relative', display: 'inline-block' }"
+      :data-tooltip-id="isDisabled ? 'sapphire-tooltip' : undefined"
+      :data-tooltip-content="
+        isDisabled
+          ? `Недоступно ${isRunning ? 'во время выполнения' : 'пока выполняется другой чат'}`
+          : undefined
+      "
+      :data-tooltip-place="isDisabled ? 'top' : undefined"
+      @click="onClick"
+    >
+      Контрольная точка
+    </div>
+  </div>
+</template>

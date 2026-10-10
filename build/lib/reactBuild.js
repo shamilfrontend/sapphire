@@ -10,11 +10,11 @@ const task = require('./task');
 
 /**
  * Builds Sapphire/PPR React+Tailwind UI into
- * `src/vs/workbench/contrib/sapphire/browser/react/out/`.
+ * `src/vs/workbench/contrib/sapphire/browser/vue/out/`.
  * Must run before compile-client / compile-build so the bundle is copied into out/.
  */
 const buildReactTask = task.define('build-react', async () => {
-  const reactDir = path.join(__dirname, '../../src/vs/workbench/contrib/sapphire/browser/react');
+  const reactDir = path.join(__dirname, '../../src/vs/workbench/contrib/sapphire/browser/vue');
   // Prefer existing NODE_OPTIONS (e.g. from `npm run gulp`); otherwise give tsup enough heap.
   const env = { ...process.env };
   if (!env.NODE_OPTIONS) {

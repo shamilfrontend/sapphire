@@ -11,7 +11,7 @@ import {
   WorkbenchPhase,
 } from '../../../common/contributions.js';
 import { ServicesAccessor } from '../../../../editor/browser/editorExtensions.js';
-import { mountSapphireTooltip } from './react/out/void-tooltip/index.js';
+import { mountSapphireTooltip } from './vue/out/void-tooltip/index.js';
 import { h, getActiveWindow } from '../../../../base/browser/dom.js';
 
 // Contribution: монтирует tooltip при старте workbench

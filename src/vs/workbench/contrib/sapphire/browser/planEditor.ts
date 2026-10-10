@@ -82,7 +82,7 @@ import {
   parsePlanMarkdown,
   type ParsedPlanMarkdown,
 } from '../common/prompt/planFileHelpers.js';
-import { mountPlanEditor } from './react/out/plan-editor-tsx/index.js';
+import { mountPlanEditor } from './vue/out/plan-editor-tsx/index.js';
 
 type PlanEditorMode = 'preview' | 'markdown';
 

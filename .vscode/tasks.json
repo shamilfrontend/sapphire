@@ -30,8 +30,8 @@
     {
       // Sapphire added this
       "type": "npm",
-      "script": "watchreactd",
-      "label": "React - Build",
+      "script": "watchvued",
+      "label": "Vue - Build",
       "isBackground": true,
       "presentation": {
         "reveal": "never",

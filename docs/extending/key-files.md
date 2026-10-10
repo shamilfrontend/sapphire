@@ -27,9 +27,9 @@
 | `common/jira/*` | URL Jira/Confluence + мост |
 | `electron-main/llmMessage/sendLLMMessage.impl.ts` | HTTP-клиент Transitcard |
 | `electron-main/mcpChannel.ts` | MCP на main |
-| `browser/react/.../SapphireOnboarding.tsx` | онбординг |
-| `browser/react/.../Settings.tsx` | Settings UI |
-| `browser/react/.../agents-window-tsx/` | UI Режима Агент |
+| `browser/vue/.../SapphireOnboarding.vue` | онбординг |
+| `browser/vue/.../Settings.vue` | Settings UI |
+| `browser/vue/.../agents-window-tsx/` | UI Режима Агент |
 | `browser/sapphire.contribution.ts` | регистрация контрибуции |
 | `product.json` (корень репо) | trusted domains и branding |
 

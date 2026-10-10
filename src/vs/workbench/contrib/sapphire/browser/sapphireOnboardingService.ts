@@ -11,7 +11,7 @@ import {
   WorkbenchPhase,
 } from '../../../common/contributions.js';
 import { ServicesAccessor } from '../../../../editor/browser/editorExtensions.js';
-import { mountSapphireOnboarding } from './react/out/void-onboarding/index.js';
+import { mountSapphireOnboarding } from './vue/out/void-onboarding/index.js';
 import { h, getActiveWindow } from '../../../../base/browser/dom.js';
 
 // Contribution: монтирует onboarding при старте workbench

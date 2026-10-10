@@ -18,7 +18,7 @@ import {
 } from '../../../../editor/browser/editorBrowser.js';
 import { Emitter, Event } from '../../../../base/common/event.js';
 import { ICodeEditorService } from '../../../../editor/browser/services/codeEditorService.js';
-import { mountSapphireCommandBar } from './react/out/void-editor-widgets-tsx/index.js';
+import { mountSapphireCommandBar } from './vue/out/void-editor-widgets-tsx/index.js';
 import { deepClone } from '../../../../base/common/objects.js';
 import {
   InstantiationType,

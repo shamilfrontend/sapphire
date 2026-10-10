@@ -18,7 +18,7 @@ import { IEditorContribution } from '../../../../editor/common/editorCommon.js';
 import { Selection } from '../../../../editor/common/core/selection.js';
 import { RunOnceScheduler } from '../../../../base/common/async.js';
 import * as dom from '../../../../base/browser/dom.js';
-import { mountSapphireSelectionHelper } from './react/out/void-editor-widgets-tsx/index.js';
+import { mountSapphireSelectionHelper } from './vue/out/void-editor-widgets-tsx/index.js';
 import { IInstantiationService } from '../../../../platform/instantiation/common/instantiation.js';
 import { ISapphireSettingsService } from '../common/sapphireSettingsService.js';
 import { EditorOption } from '../../../../editor/common/config/editorOptions.js';

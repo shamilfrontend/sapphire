@@ -52,7 +52,7 @@ npm install
 npm run dev
 ```
 
-`npm run dev` параллельно поднимает `watch` (client + extensions) и `watchreact`, ждёт появления `out/main.js` при холодном старте и запускает приложение. Аргументы пробрасываются в `code.sh`, например:
+`npm run dev` параллельно поднимает `watch` (client + extensions) и `watchvue`, ждёт появления `out/main.js` при холодном старте и запускает приложение. Аргументы пробрасываются в `code.sh`, например:
 
 ```bash
 npm run dev -- --user-data-dir ./.tmp/user-data --extensions-dir ./.tmp/extensions
@@ -64,7 +64,7 @@ npm run dev -- --user-data-dir ./.tmp/user-data --extensions-dir ./.tmp/extensio
 
 ```bash
 npm run watch          # или Cmd/Ctrl+Shift+B в IDE — сначала build-react, потом TS watch
-npm run watchreact     # нужен для инкрементальных правок React UI
+npm run watchvue     # нужен для инкрементальных правок Vue UI
 ./scripts/code.sh      # macOS / Linux  (или npm run code)
 # Windows: .\scripts\code.bat
 ```

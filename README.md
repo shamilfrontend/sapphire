@@ -61,12 +61,12 @@ npm install
 Для ежедневной разработки:
 
 ```bash
-npm run dev            # watch + watchreact + запуск приложения
+npm run dev            # watch + watchvue + запуск приложения
 ```
 
-`npm run compile` / `gulp compile-client` / packaging (`gulp vscode-*`) сами вызывают **build-react** перед компиляцией TS — отдельный `buildreact` для полной сборки не нужен.
+`npm run compile` / `gulp compile-client` / packaging (`gulp vscode-*`) сами вызывают **build-react** перед компиляцией TS — отдельный `buildvue` для полной сборки не нужен.
 
-По отдельности: `npm run watch`, `npm run watchreact`, `./scripts/code.sh` (или `npm run code`). Для итераций только по React UI удобен `npm run watchreact`.
+По отдельности: `npm run watch`, `npm run watchvue`, `./scripts/code.sh` (или `npm run code`). Для итераций только по Vue UI удобен `npm run watchvue`.
 
 #### Production (executable)
 
@@ -90,8 +90,8 @@ npm run dev            # watch + watchreact + запуск приложения
 - [`src/vs/workbench/contrib/sapphire/common/sapphireSettingsTypes.ts`](src/vs/workbench/contrib/sapphire/common/sapphireSettingsTypes.ts) — `providerNames`, дефолтные настройки.
 - [`src/vs/workbench/contrib/sapphire/electron-main/llmMessage/sendLLMMessage.impl.ts`](src/vs/workbench/contrib/sapphire/electron-main/llmMessage/sendLLMMessage.impl.ts) — OpenAI-совместимый клиент; Anthropic и Gemini рядом.
 - [`src/vs/workbench/contrib/sapphire/common/refreshModelService.ts`](src/vs/workbench/contrib/sapphire/common/refreshModelService.ts) — авто-refresh моделей при смене ключа.
-- [`src/vs/workbench/contrib/sapphire/browser/react/src/void-onboarding/SapphireOnboarding.tsx`](src/vs/workbench/contrib/sapphire/browser/react/src/void-onboarding/SapphireOnboarding.tsx) — экран онбординга.
-- [`src/vs/workbench/contrib/sapphire/browser/react/src/void-settings-tsx/Settings.tsx`](src/vs/workbench/contrib/sapphire/browser/react/src/void-settings-tsx/Settings.tsx) — Settings, секция провайдеров.
+- [`src/vs/workbench/contrib/sapphire/browser/vue/src/void-onboarding/SapphireOnboarding.vue`](src/vs/workbench/contrib/sapphire/browser/vue/src/void-onboarding/SapphireOnboarding.vue) — экран онбординга.
+- [`src/vs/workbench/contrib/sapphire/browser/vue/src/void-settings-tsx/Settings.vue`](src/vs/workbench/contrib/sapphire/browser/vue/src/void-settings-tsx/Settings.vue) — Settings, секция провайдеров.
 
 ## Лицензия
 

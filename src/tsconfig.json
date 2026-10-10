@@ -32,5 +32,8 @@
     "./vscode-dts/vscode.proposed.*.d.ts",
     "./vscode-dts/vscode.d.ts"
   ],
-  "exclude": ["./vs/workbench/contrib/sapphire/browser/react/src2/**"]
+  "exclude": [
+    "./vs/workbench/contrib/sapphire/browser/vue/src/**",
+    "./vs/workbench/contrib/sapphire/browser/vue/src2/**"
+  ]
 }

@@ -15,7 +15,7 @@ import {
   IConsistentEditorItemService,
   IConsistentItemService,
 } from './helperServices/consistentItemService.js';
-import { mountCtrlK } from './react/out/quick-edit-tsx/index.js';
+import { mountCtrlK } from './vue/out/quick-edit-tsx/index.js';
 import { ISapphireModelService } from '../common/sapphireModelService.js';
 import {
   DiffArea,

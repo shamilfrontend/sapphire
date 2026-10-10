@@ -126,5 +126,5 @@ JSONL: одна запись = один файл workspace.
 | `common/projectIndex/projectIndexTypes.ts`                   | типы, schemaVersion, пути           |
 | `common/projectIndex/projectIndexAnalyze.ts`                 | skip/kind/hash/localRole/чанки      |
 | `common/projectIndex/projectIndexSearch.ts`                  | scoring для tool                    |
-| `browser/react/.../ProjectIndexControls.tsx`                 | UI статуса / детали                 |
+| `browser/vue/.../ProjectIndexControls.vue`                 | UI статуса / детали                 |
 | `browser/projectIndexTitlebarContribution.ts`                | индикатор в titlebar                |

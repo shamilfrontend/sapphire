@@ -26,7 +26,7 @@ import { URI } from '../../../../base/common/uri.js';
 import { ContextKeyExpr } from '../../../../platform/contextkey/common/contextkey.js';
 import { ActiveEditorContext } from '../../../common/contextkeys.js';
 
-import { mountVoidSettings } from './react/out/void-settings-tsx/index.js';
+import { mountVoidSettings } from './vue/out/void-settings-tsx/index.js';
 import { Codicon } from '../../../../base/common/codicons.js';
 import { toDisposable } from '../../../../base/common/lifecycle.js';
 import { registerIcon } from '../../../../platform/theme/common/iconRegistry.js';

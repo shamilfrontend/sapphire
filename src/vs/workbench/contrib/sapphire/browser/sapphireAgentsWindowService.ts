@@ -19,7 +19,7 @@ import {
 import { IWorkbenchLayoutService, Parts } from '../../../services/layout/browser/layoutService.js';
 import { ISapphireSettingsService } from '../common/sapphireSettingsService.js';
 import { LayoutMode } from '../common/sapphireSettingsTypes.js';
-import { mountAgentsWindow } from './react/out/agents-window-tsx/index.js';
+import { mountAgentsWindow } from './vue/out/agents-window-tsx/index.js';
 
 export const SAPPHIRE_SET_LAYOUT_MODE_ACTION_ID = 'sapphire.setLayoutMode';
 

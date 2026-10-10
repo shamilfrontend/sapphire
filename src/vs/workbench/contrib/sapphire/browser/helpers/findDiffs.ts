@@ -4,7 +4,7 @@
  *--------------------------------------------------------------------------------------*/
 
 import { ComputedDiff } from '../../common/editCodeServiceTypes.js';
-import { diffLines } from '../react/out/diff/index.js';
+import { diffLines } from '../vue/out/diff/index.js';
 
 export function findDiffs(oldStr: string, newStr: string) {
   // Добавляем \n в конец: иначе diff E vs E\n даёт «edit», а E\n vs E\n\n — корректную вставку

@@ -41,5 +41,5 @@
 **/docs/.vitepress/cache/**
 **/docs/.vitepress/dist/**
 **/out/**
-**/src/vs/workbench/contrib/sapphire/browser/react/src2/**
+**/src/vs/workbench/contrib/sapphire/browser/vue/src2/**
 !.vscode

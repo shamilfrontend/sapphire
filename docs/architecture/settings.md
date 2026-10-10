@@ -35,4 +35,4 @@
 
 Настройки персистятся через сервисы Sapphire; API key — через encryption service, не plain-text.
 
-UI: `browser/react/.../Settings.tsx`. Action: `workbench.action.openSapphireSettings`.
+UI: `browser/vue/.../Settings.vue`. Action: `workbench.action.openSapphireSettings`.
