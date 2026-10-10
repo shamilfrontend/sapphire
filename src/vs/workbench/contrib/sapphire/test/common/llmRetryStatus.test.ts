@@ -1,0 +1,64 @@
+/*--------------------------------------------------------------------------------------
+ *  Copyright 2025 Glass Devtools, Inc. All rights reserved.
+ *  Licensed under the Apache License, Version 2.0. See LICENSE.txt for more information.
+ *--------------------------------------------------------------------------------------*/
+
+import assert from 'assert';
+import { ensureNoDisposablesAreLeakedInTestSuite } from '../../../../../base/test/common/utils.js';
+import {
+  formatAgentRetryStatusHint,
+  formatGatewayRetryStatusHint,
+  PPR_LLM_CONNECT_TIMEOUT_MS,
+  PPR_LLM_STREAM_IDLE_MS,
+} from '../../common/llmRetryStatus.js';
+
+suite('llmRetryStatus', () => {
+  ensureNoDisposablesAreLeakedInTestSuite();
+
+  test('PPR_LLM_STREAM_IDLE_MS is 90s', () => {
+    assert.strictEqual(PPR_LLM_STREAM_IDLE_MS, 90_000);
+  });
+
+  test('PPR_LLM_CONNECT_TIMEOUT_MS is 90s', () => {
+    assert.strictEqual(PPR_LLM_CONNECT_TIMEOUT_MS, 90_000);
+  });
+
+  test('formatGatewayRetryStatusHint — 408 with Retry-After', () => {
+    assert.strictEqual(
+      formatGatewayRetryStatusHint({
+        attempt: 2,
+        maxAttempts: 3,
+        status: 408,
+        retryAfterSec: 5,
+      }),
+      'Провайдер занят (408), повтор 2/3 через ~5 с…',
+    );
+  });
+
+  test('formatGatewayRetryStatusHint — 429 without wait', () => {
+    assert.strictEqual(
+      formatGatewayRetryStatusHint({ attempt: 3, maxAttempts: 3, status: 429 }),
+      'Лимит запросов (429), повтор 3/3…',
+    );
+  });
+
+  test('formatAgentRetryStatusHint truncates long messages', () => {
+    const long = 'x'.repeat(100);
+    const hint = formatAgentRetryStatusHint({
+      attempt: 2,
+      maxAttempts: 3,
+      message: long,
+    });
+    assert.ok(hint.startsWith('xxx'));
+    assert.ok(hint.includes('…'));
+    assert.ok(hint.endsWith('Повтор 2/3…'));
+    assert.ok(hint.length < 120);
+  });
+
+  test('formatAgentRetryStatusHint default when message empty', () => {
+    assert.strictEqual(
+      formatAgentRetryStatusHint({ attempt: 2, maxAttempts: 3 }),
+      'Ошибка ответа Повтор 2/3…',
+    );
+  });
+});

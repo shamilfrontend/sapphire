@@ -1,0 +1,109 @@
+/*--------------------------------------------------------------------------------------
+ *  Copyright 2025 Glass Devtools, Inc. All rights reserved.
+ *  Licensed under the Apache License, Version 2.0. See LICENSE.txt for more information.
+ *--------------------------------------------------------------------------------------*/
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+& {
+  /* Light / theme-adaptive (VS Code tokens) */
+  --void-bg-1: var(--vscode-input-background);
+  --void-bg-1-alt: var(--vscode-badge-background);
+  --void-bg-2: var(--vscode-sideBar-background);
+  --void-bg-2-alt: color-mix(
+    in srgb,
+    var(--vscode-editor-background) 30%,
+    var(--vscode-sideBar-background) 70%
+  );
+  --void-bg-2-hover: color-mix(
+    in srgb,
+    var(--vscode-editor-foreground) 2%,
+    var(--vscode-sideBar-background) 98%
+  );
+  --void-bg-3: var(--vscode-editor-background);
+
+  --void-header-bg: var(--void-bg-2);
+  --void-content-bg: var(--void-bg-3);
+  --void-chat-field-bg: var(--void-bg-1);
+
+  --void-fg-0: color-mix(in srgb, var(--vscode-tab-activeForeground) 90%, black 10%);
+  --void-fg-1: var(--vscode-editor-foreground);
+  --void-fg-2: var(--vscode-input-foreground);
+  --void-fg-3: var(--vscode-input-placeholderForeground);
+  --void-fg-4: var(--vscode-list-deemphasizedForeground);
+
+  --void-warning: var(--vscode-charts-yellow);
+  --void-success: #2f9e6b;
+  --void-danger: #d14b5a;
+
+  --void-border-1: var(--vscode-commandCenter-activeBorder);
+  --void-border-2: var(--vscode-commandCenter-border);
+  --void-border-3: var(--vscode-commandCenter-inactiveBorder);
+  --void-border-4: var(--vscode-editorGroup-border);
+
+  --void-ring-color: #00b0cc;
+  --void-link-color: #00b0cc;
+  --void-danger-muted: color-mix(in srgb, var(--void-danger) 12%, transparent);
+  --void-danger-border: color-mix(in srgb, var(--void-danger) 35%, transparent);
+
+  /* DeepSeek dark palette */
+  &.dark {
+    --void-bg-3: #121212;
+    --void-bg-2: #1a1a1a;
+    --void-bg-1: #2b2b2b;
+    --void-bg-1-alt: #262626;
+    --void-bg-2-alt: #2a2a2a;
+    --void-bg-2-hover: #242424;
+
+    --void-header-bg: #3c3c3c;
+    --void-content-bg: #1e1e1e;
+    --void-chat-field-bg: #393939;
+
+    --void-fg-0: #f5f5f5;
+    --void-fg-1: #ececec;
+    --void-fg-2: #d4d4d4;
+    --void-fg-3: #8e8e8e;
+    --void-fg-4: #6a6a6a;
+
+    --void-warning: #c9a227;
+    --void-success: #2f9e6b;
+    --void-danger: #d14b5a;
+    --void-danger-muted: color-mix(in srgb, var(--void-danger) 12%, transparent);
+    --void-danger-border: color-mix(in srgb, var(--void-danger) 35%, transparent);
+
+    --void-border-1: #3a3a3a;
+    --void-border-2: #2a2a2a;
+    --void-border-3: #3a3a3a;
+    --void-border-4: #242424;
+
+    --void-ring-color: #00b0cc;
+    --void-link-color: #00b0cc;
+  }
+
+  /* scope-tailwind prefixes the `dark` class to `void-dark` */
+  &.sapphire-dark {
+    --void-header-bg: #3c3c3c;
+    --void-content-bg: #1e1e1e;
+    --void-chat-field-bg: #393939;
+  }
+}
+
+.select-child-restyle select {
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  padding-right: 24px;
+}
+
+.sapphire-force-child-placeholder-void-fg-1 ::placeholder {
+  color: var(--void-fg-3);
+}
+
+* {
+  outline: none !important;
+}
+
+.bg-editor-style-override {
+  --vscode-sideBar-background: var(--vscode-editor-background);
+}
