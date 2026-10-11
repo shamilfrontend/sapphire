@@ -25,8 +25,8 @@
   "main": "./out/mergeConflictMain",
   "browser": "./dist/browser/mergeConflictMain",
   "scripts": {
-    "compile": "gulp compile-extension:merge-conflict",
-    "watch": "gulp watch-extension:merge-conflict"
+    "compile": "node ../../scripts/build/main.mjs run compile-extension:merge-conflict",
+    "watch": "node ../../scripts/build/main.mjs run watch-extension:merge-conflict"
   },
   "contributes": {
     "commands": [

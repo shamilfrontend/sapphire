@@ -223,8 +223,8 @@
   },
   "scripts": {
     "vscode:prepublish": "npm run compile",
-    "compile": "gulp compile-extension:github",
-    "watch": "gulp watch-extension:github"
+    "compile": "node ../../scripts/build/main.mjs run compile-extension:github",
+    "watch": "node ../../scripts/build/main.mjs run watch-extension:github"
   },
   "dependencies": {
     "@octokit/graphql": "8.2.0",

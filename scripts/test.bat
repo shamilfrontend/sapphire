@@ -13,7 +13,7 @@ set CODE=".build\electron\%NAMESHORT%"
 
 :: Download Electron if needed
 call node build\lib\electron.js
-if %errorlevel% neq 0 node .\node_modules\gulp\bin\gulp.js electron
+if %errorlevel% neq 0 node .\scripts\build\main.mjs run electron
 
 :: Run tests
 set ELECTRON_ENABLE_LOGGING=1

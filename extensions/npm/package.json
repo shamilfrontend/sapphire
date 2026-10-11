@@ -17,8 +17,8 @@
     "terminalQuickFixProvider"
   ],
   "scripts": {
-    "compile": "npx gulp compile-extension:npm",
-    "watch": "npx gulp watch-extension:npm"
+    "compile": "node ../../scripts/build/main.mjs run compile-extension:npm",
+    "watch": "node ../../scripts/build/main.mjs run watch-extension:npm"
   },
   "dependencies": {
     "find-up": "^5.0.0",

@@ -7,16 +7,13 @@ import es from 'event-stream';
 import fs from 'fs';
 import cp from 'child_process';
 import glob from 'glob';
-import gulp from 'gulp';
 import path from 'path';
 import crypto from 'crypto';
-import { Stream } from 'stream';
+import { Readable, Stream } from 'stream';
 import File from 'vinyl';
-import filter from 'gulp-filter';
-import rename from 'gulp-rename';
+import vfs from 'vinyl-fs';
 import fancyLog from 'fancy-log';
 import ansiColors from 'ansi-colors';
-import buffer from 'gulp-buffer';
 import * as jsoncParser from 'jsonc-parser';
 import webpack from 'webpack';
 import * as util2 from './util';
@@ -32,40 +29,79 @@ const root = path.dirname(path.dirname(__dirname));
 const commit = getVersion(root);
 const sourceMappingURLBase = `https://main.vscode-cdn.net/sourcemaps/${commit}`;
 
+function ensureBufferContents(): Stream {
+  return es.map((f: File, cb) => {
+    if (!f.contents || Buffer.isBuffer(f.contents)) {
+      cb(undefined, f);
+      return;
+    }
+
+    const stream = f.contents as Readable;
+    const chunks: Buffer[] = [];
+    stream.on('data', (chunk) =>
+      chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk)),
+    );
+    stream.on('error', (err) => cb(err));
+    stream.on('end', () => {
+      f.contents = Buffer.concat(chunks);
+      cb(undefined, f);
+    });
+  });
+}
+
+function remapDirname(mapper: (dirname: string) => string): Stream {
+  return es.mapSync((f: File) => {
+    f.dirname = mapper(f.dirname || '');
+    return f;
+  });
+}
+
+function filterStream(predicate: (f: File) => boolean): Stream {
+  return es.through(function (f: File) {
+    if (predicate(f)) {
+      this.emit('data', f);
+    }
+  });
+}
+
+function getRelativePath(f: File): string {
+  return path.relative(f.base, f.path).replace(/\\/g, '/');
+}
+
 function minifyExtensionResources(input: Stream): Stream {
-  const jsonFilter = filter(['**/*.json', '**/*.code-snippets'], { restore: true });
   return input
-    .pipe(jsonFilter)
-    .pipe(buffer())
+    .pipe(ensureBufferContents())
     .pipe(
       es.mapSync((f: File) => {
-        const errors: jsoncParser.ParseError[] = [];
-        const value = jsoncParser.parse(f.contents.toString('utf8'), errors, {
-          allowTrailingComma: true,
-        });
-        if (errors.length === 0) {
-          // file parsed OK => just stringify to drop whitespace and comments
-          f.contents = Buffer.from(JSON.stringify(value));
+        const relative = getRelativePath(f);
+        if (/\.(json|code-snippets)$/.test(relative)) {
+          const errors: jsoncParser.ParseError[] = [];
+          const value = jsoncParser.parse(f.contents.toString('utf8'), errors, {
+            allowTrailingComma: true,
+          });
+          if (errors.length === 0) {
+            // file parsed OK => just stringify to drop whitespace and comments
+            f.contents = Buffer.from(JSON.stringify(value));
+          }
         }
         return f;
       }),
-    )
-    .pipe(jsonFilter.restore);
+    );
 }
 
 function updateExtensionPackageJSON(input: Stream, update: (data: any) => any): Stream {
-  const packageJsonFilter = filter('extensions/*/package.json', { restore: true });
   return input
-    .pipe(packageJsonFilter)
-    .pipe(buffer())
+    .pipe(ensureBufferContents())
     .pipe(
       es.mapSync((f: File) => {
-        const data = JSON.parse(f.contents.toString('utf8'));
-        f.contents = Buffer.from(JSON.stringify(update(data)));
+        const normalizedPath = f.path.replace(/\\/g, '/');
+        if (/\/extensions\/[^/]+\/package\.json$/.test(normalizedPath)) {
+          const data = JSON.parse(f.contents.toString('utf8'));
+          f.contents = Buffer.from(JSON.stringify(update(data)));
+        }
         return f;
       }),
-    )
-    .pipe(packageJsonFilter.restore);
+    );
 }
 
 function fromLocal(extensionPath: string, forWeb: boolean, disableMangle: boolean): Stream {
@@ -270,14 +306,10 @@ export function fromMarketplace(
   serviceUrl: string,
   { name: extensionName, version, sha256, metadata }: IExtensionDefinition,
 ): Stream {
-  const json = require('gulp-json-editor') as typeof import('gulp-json-editor');
-
   const [publisher, name] = extensionName.split('.');
   const url = `${serviceUrl}/publishers/${publisher}/vsextensions/${name}/${version}/vspackage`;
 
   fancyLog('Downloading extension:', ansiColors.yellow(`${extensionName}@${version}`), '...');
-
-  const packageJsonFilter = filter('package.json', { restore: true });
 
   return fetchUrls('', {
     base: url,
@@ -287,31 +319,34 @@ export function fromMarketplace(
     checksumSha256: sha256,
   })
     .pipe(vzip.src())
-    .pipe(filter('extension/**'))
-    .pipe(rename((p) => (p.dirname = p.dirname!.replace(/^extension\/?/, ''))))
-    .pipe(packageJsonFilter)
-    .pipe(buffer())
-    .pipe(json({ __metadata: metadata }))
-    .pipe(packageJsonFilter.restore);
+    .pipe(filterStream((f) => getRelativePath(f).startsWith('extension/')))
+    .pipe(remapDirname((dirname) => dirname.replace(/^extension\/?/, '')))
+    .pipe(ensureBufferContents())
+    .pipe(
+      es.mapSync((f: File) => {
+        if (getRelativePath(f) === 'package.json') {
+          const data = JSON.parse(f.contents.toString('utf8'));
+          data.__metadata = metadata;
+          f.contents = Buffer.from(JSON.stringify(data));
+        }
+        return f;
+      }),
+    );
 }
 
 export function fromVsix(
   vsixPath: string,
   { name: extensionName, version, sha256, metadata }: IExtensionDefinition,
 ): Stream {
-  const json = require('gulp-json-editor') as typeof import('gulp-json-editor');
-
   fancyLog(
     'Using local VSIX for extension:',
     ansiColors.yellow(`${extensionName}@${version}`),
     '...',
   );
 
-  const packageJsonFilter = filter('package.json', { restore: true });
-
-  return gulp
+  return vfs
     .src(vsixPath)
-    .pipe(buffer())
+    .pipe(ensureBufferContents())
     .pipe(
       es.mapSync((f: File) => {
         const hash = crypto.createHash('sha256');
@@ -326,12 +361,19 @@ export function fromVsix(
       }),
     )
     .pipe(vzip.src())
-    .pipe(filter('extension/**'))
-    .pipe(rename((p) => (p.dirname = p.dirname!.replace(/^extension\/?/, ''))))
-    .pipe(packageJsonFilter)
-    .pipe(buffer())
-    .pipe(json({ __metadata: metadata }))
-    .pipe(packageJsonFilter.restore);
+    .pipe(filterStream((f) => getRelativePath(f).startsWith('extension/')))
+    .pipe(remapDirname((dirname) => dirname.replace(/^extension\/?/, '')))
+    .pipe(ensureBufferContents())
+    .pipe(
+      es.mapSync((f: File) => {
+        if (getRelativePath(f) === 'package.json') {
+          const data = JSON.parse(f.contents.toString('utf8'));
+          data.__metadata = metadata;
+          f.contents = Buffer.from(JSON.stringify(data));
+        }
+        return f;
+      }),
+    );
 }
 
 export function fromGithub({
@@ -341,25 +383,28 @@ export function fromGithub({
   sha256,
   metadata,
 }: IExtensionDefinition): Stream {
-  const json = require('gulp-json-editor') as typeof import('gulp-json-editor');
-
   fancyLog('Downloading extension from GH:', ansiColors.yellow(`${name}@${version}`), '...');
-
-  const packageJsonFilter = filter('package.json', { restore: true });
 
   return fetchGithub(new URL(repo).pathname, {
     version,
     name: (name) => name.endsWith('.vsix'),
     checksumSha256: sha256,
   })
-    .pipe(buffer())
+    .pipe(ensureBufferContents())
     .pipe(vzip.src())
-    .pipe(filter('extension/**'))
-    .pipe(rename((p) => (p.dirname = p.dirname!.replace(/^extension\/?/, ''))))
-    .pipe(packageJsonFilter)
-    .pipe(buffer())
-    .pipe(json({ __metadata: metadata }))
-    .pipe(packageJsonFilter.restore);
+    .pipe(filterStream((f) => getRelativePath(f).startsWith('extension/')))
+    .pipe(remapDirname((dirname) => dirname.replace(/^extension\/?/, '')))
+    .pipe(ensureBufferContents())
+    .pipe(
+      es.mapSync((f: File) => {
+        if (getRelativePath(f) === 'package.json') {
+          const data = JSON.parse(f.contents.toString('utf8'));
+          data.__metadata = metadata;
+          f.contents = Buffer.from(JSON.stringify(data));
+        }
+        return f;
+      }),
+    );
 }
 
 /**
@@ -495,7 +540,7 @@ function doPackageLocalExtensionsStream(
     es.merge(
       ...localExtensionsDescriptions.map((extension) =>
         fromLocal(extension.path, forWeb, disableMangle).pipe(
-          rename((p) => (p.dirname = `extensions/${extension.name}/${p.dirname}`)),
+          remapDirname((dirname) => `extensions/${extension.name}/${dirname}`),
         ),
       ),
     ),
@@ -514,7 +559,7 @@ function doPackageLocalExtensionsStream(
 
     result = es.merge(
       localExtensionsStream,
-      gulp
+      vfs
         .src(dependenciesSrc, { base: '.' })
         .pipe(util2.cleanNodeModules(path.join(root, 'build', '.moduleignore')))
         .pipe(
@@ -537,7 +582,7 @@ export function packageMarketplaceExtensionsStream(forWeb: boolean): Stream {
     es.merge(
       ...marketplaceExtensionsDescriptions.map((extension) => {
         const src = getExtensionStream(extension).pipe(
-          rename((p) => (p.dirname = `extensions/${p.dirname}`)),
+          remapDirname((dirname) => `extensions/${dirname}`),
         );
         return updateExtensionPackageJSON(src, (data: any) => {
           delete data.scripts;

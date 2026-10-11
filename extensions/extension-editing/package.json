@@ -22,8 +22,8 @@
     }
   },
   "scripts": {
-    "compile": "gulp compile-extension:extension-editing",
-    "watch": "gulp watch-extension:extension-editing"
+    "compile": "node ../../scripts/build/main.mjs run compile-extension:extension-editing",
+    "watch": "node ../../scripts/build/main.mjs run watch-extension:extension-editing"
   },
   "dependencies": {
     "jsonc-parser": "^3.2.0",

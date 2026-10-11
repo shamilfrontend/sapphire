@@ -5,8 +5,8 @@
 
 import fs from 'fs';
 import path from 'path';
+import es from 'event-stream';
 import vfs from 'vinyl-fs';
-import filter from 'gulp-filter';
 import * as util from './util';
 import { getVersion } from './getVersion';
 
@@ -272,7 +272,6 @@ export const config = {
 function getElectron(arch: string): () => NodeJS.ReadWriteStream {
   return () => {
     const electron = require('@vscode/gulp-electron');
-    const json = require('gulp-json-editor') as typeof import('gulp-json-editor');
 
     const electronOpts = {
       ...config,
@@ -284,9 +283,23 @@ function getElectron(arch: string): () => NodeJS.ReadWriteStream {
 
     return vfs
       .src('package.json')
-      .pipe(json({ name: product.nameShort }))
+      .pipe(
+        es.mapSync((f: any) => {
+          const data = JSON.parse(f.contents.toString('utf8'));
+          data.name = product.nameShort;
+          f.contents = Buffer.from(JSON.stringify(data));
+          return f;
+        }),
+      )
       .pipe(electron(electronOpts))
-      .pipe(filter(['**', '!**/app/package.json']))
+      .pipe(
+        es.through(function (f: any) {
+          const normalized = f.path.replace(/\\/g, '/');
+          if (!/\/app\/package\.json$/.test(normalized)) {
+            this.emit('data', f);
+          }
+        }),
+      )
       .pipe(vfs.dest('.build/electron'));
   };
 }

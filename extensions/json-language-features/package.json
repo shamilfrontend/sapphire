@@ -28,8 +28,8 @@
     }
   },
   "scripts": {
-    "compile": "npx gulp compile-extension:json-language-features-client compile-extension:json-language-features-server",
-    "watch": "npx gulp watch-extension:json-language-features-client watch-extension:json-language-features-server",
+    "compile": "node ../../scripts/build/main.mjs run compile-extension:json-language-features-client compile-extension:json-language-features-server",
+    "watch": "node ../../scripts/build/main.mjs run watch-extension:json-language-features-client watch-extension:json-language-features-server",
     "install-client-next": "npm install vscode-languageclient@next"
   },
   "categories": [

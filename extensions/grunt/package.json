@@ -14,8 +14,8 @@
     "Other"
   ],
   "scripts": {
-    "compile": "gulp compile-extension:grunt",
-    "watch": "gulp watch-extension:grunt"
+    "compile": "node ../../scripts/build/main.mjs run compile-extension:grunt",
+    "watch": "node ../../scripts/build/main.mjs run watch-extension:grunt"
   },
   "dependencies": {},
   "devDependencies": {

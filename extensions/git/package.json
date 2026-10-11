@@ -53,8 +53,8 @@
   "main": "./out/main",
   "icon": "resources/icons/git.png",
   "scripts": {
-    "compile": "gulp compile-extension:git",
-    "watch": "gulp watch-extension:git",
+    "compile": "node ../../scripts/build/main.mjs run compile-extension:git",
+    "watch": "node ../../scripts/build/main.mjs run watch-extension:git",
     "update-emoji": "node ./build/update-emoji.js",
     "test": "node ../../node_modules/mocha/bin/mocha"
   },

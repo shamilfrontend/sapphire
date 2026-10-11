@@ -13,8 +13,8 @@
     "Other"
   ],
   "scripts": {
-    "compile": "gulp compile-extension:gulp",
-    "watch": "gulp watch-extension:gulp"
+    "compile": "node ../../scripts/build/main.mjs run compile-extension:gulp",
+    "watch": "node ../../scripts/build/main.mjs run watch-extension:gulp"
   },
   "dependencies": {},
   "devDependencies": {

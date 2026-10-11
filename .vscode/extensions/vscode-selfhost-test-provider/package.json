@@ -72,8 +72,8 @@
   },
   "license": "MIT",
   "scripts": {
-    "compile": "gulp compile-extension:vscode-selfhost-test-provider",
-    "watch": "gulp watch-extension:vscode-selfhost-test-provider",
+    "compile": "node ../../../scripts/build/main.mjs run compile-extension:vscode-selfhost-test-provider",
+    "watch": "node ../../../scripts/build/main.mjs run watch-extension:vscode-selfhost-test-provider",
     "test": "npx mocha --ui tdd 'out/*.test.js'"
   },
   "devDependencies": {

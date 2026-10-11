@@ -8,10 +8,9 @@ import es from 'event-stream';
 import Vinyl from 'vinyl';
 import vfs from 'vinyl-fs';
 import { ClientAssertionCredential } from '@azure/identity';
+import { BlobServiceClient } from '@azure/storage-blob';
 import * as util from '../lib/util';
 import { getProductionDependencies } from '../lib/dependencies';
-
-const azure = require('gulp-azure-storage');
 
 const root = path.dirname(path.dirname(__dirname));
 const commit = process.env.BUILD_SOURCEVERSION;
@@ -20,6 +19,32 @@ const credential = new ClientAssertionCredential(
   process.env.AZURE_CLIENT_ID!,
   () => Promise.resolve(process.env.AZURE_ID_TOKEN!),
 );
+
+function uploadToAzure(prefix: string): NodeJS.ReadWriteStream {
+  const account = process.env.AZURE_STORAGE_ACCOUNT!;
+  const container = '$web';
+  const blobServiceClient = new BlobServiceClient(
+    `https://${account}.blob.core.windows.net`,
+    credential,
+  );
+  const containerClient = blobServiceClient.getContainerClient(container);
+
+  return es.map(async (file: Vinyl, cb) => {
+    try {
+      const blobPath = `${prefix}${file.relative.replace(/\\/g, '/')}`;
+      const blobClient = containerClient.getBlockBlobClient(blobPath);
+      const contents = file.contents as Buffer;
+      await blobClient.uploadData(contents, {
+        blobHTTPHeaders: {
+          blobContentType: 'application/json',
+        },
+      });
+      cb(undefined, file);
+    } catch (error) {
+      cb(error as Error);
+    }
+  });
+}
 
 // optionally allow to pass in explicit base/maps to upload
 const [, , base, maps] = process.argv;
@@ -63,6 +88,7 @@ function main(): Promise<void> {
   }
 
   return new Promise((c, e) => {
+    const uploader = uploadToAzure(`sourcemaps/${commit}/`);
     es.merge(...sources)
       .pipe(
         es.through(function (data: Vinyl) {
@@ -70,14 +96,7 @@ function main(): Promise<void> {
           this.emit('data', data);
         }),
       )
-      .pipe(
-        azure.upload({
-          account: process.env.AZURE_STORAGE_ACCOUNT,
-          credential,
-          container: '$web',
-          prefix: `sourcemaps/${commit}/`,
-        }),
-      )
+      .pipe(uploader)
       .on('end', () => c())
       .on('error', (err: any) => e(err));
   });

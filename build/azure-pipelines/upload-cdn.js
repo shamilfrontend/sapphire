@@ -10,11 +10,10 @@ Object.defineProperty(exports, "__esModule", { value: true });
 const event_stream_1 = __importDefault(require("event-stream"));
 const vinyl_1 = __importDefault(require("vinyl"));
 const vinyl_fs_1 = __importDefault(require("vinyl-fs"));
-const gulp_filter_1 = __importDefault(require("gulp-filter"));
-const gulp_gzip_1 = __importDefault(require("gulp-gzip"));
+const zlib_1 = __importDefault(require("zlib"));
 const mime_1 = __importDefault(require("mime"));
 const identity_1 = require("@azure/identity");
-const azure = require('gulp-azure-storage');
+const storage_blob_1 = require("@azure/storage-blob");
 const commit = process.env['BUILD_SOURCEVERSION'];
 const credential = new identity_1.ClientAssertionCredential(process.env['AZURE_TENANT_ID'], process.env['AZURE_CLIENT_ID'], () => Promise.resolve(process.env['AZURE_ID_TOKEN']));
 mime_1.default.define({
@@ -73,27 +72,57 @@ function wait(stream) {
         stream.on('error', (err) => e(err));
     });
 }
-async function main() {
-    const files = [];
-    const options = (compressed) => ({
-        account: process.env.AZURE_STORAGE_ACCOUNT,
-        credential,
-        container: '$web',
-        prefix: `${process.env.VSCODE_QUALITY}/${commit}/`,
-        contentSettings: {
-            contentEncoding: compressed ? 'gzip' : undefined,
-            cacheControl: 'max-age=31536000, public'
+function uploadToAzure({ prefix, compressed }) {
+    const account = process.env.AZURE_STORAGE_ACCOUNT;
+    const container = '$web';
+    const blobServiceClient = new storage_blob_1.BlobServiceClient(`https://${account}.blob.core.windows.net`, credential);
+    const containerClient = blobServiceClient.getContainerClient(container);
+    return event_stream_1.default.map(async (file, cb) => {
+        try {
+            const blobPath = `${prefix}${file.relative.replace(/\\/g, '/')}`;
+            const blobClient = containerClient.getBlockBlobClient(blobPath);
+            const contentType = mime_1.default.lookup(file.path) || undefined;
+            const contents = file.contents;
+            await blobClient.uploadData(contents, {
+                blobHTTPHeaders: {
+                    blobContentType: typeof contentType === 'string' ? contentType : undefined,
+                    blobContentEncoding: compressed ? 'gzip' : undefined,
+                    blobCacheControl: 'max-age=31536000, public'
+                }
+            });
+            cb(undefined, file);
+        }
+        catch (error) {
+            cb(error);
         }
     });
+}
+function gzipContents() {
+    return event_stream_1.default.mapSync((file) => {
+        const contents = file.contents;
+        file.contents = zlib_1.default.gzipSync(contents);
+        return file;
+    });
+}
+function filterStream(predicate) {
+    return event_stream_1.default.through(function (file) {
+        if (predicate(file)) {
+            this.emit('data', file);
+        }
+    });
+}
+async function main() {
+    const files = [];
+    const prefix = `${process.env.VSCODE_QUALITY}/${commit}/`;
     const all = vinyl_fs_1.default.src('**', { cwd: '../vscode-web', base: '../vscode-web', dot: true })
-        .pipe((0, gulp_filter_1.default)(f => !f.isDirectory()));
+        .pipe(filterStream((f) => !f.isDirectory()));
     const compressed = all
-        .pipe((0, gulp_filter_1.default)(f => MimeTypesToCompress.has(mime_1.default.lookup(f.path))))
-        .pipe((0, gulp_gzip_1.default)({ append: false }))
-        .pipe(azure.upload(options(true)));
+        .pipe(filterStream((f) => MimeTypesToCompress.has(mime_1.default.lookup(f.path))))
+        .pipe(gzipContents())
+        .pipe(uploadToAzure({ prefix, compressed: true }));
     const uncompressed = all
-        .pipe((0, gulp_filter_1.default)(f => !MimeTypesToCompress.has(mime_1.default.lookup(f.path))))
-        .pipe(azure.upload(options(false)));
+        .pipe(filterStream((f) => !MimeTypesToCompress.has(mime_1.default.lookup(f.path))))
+        .pipe(uploadToAzure({ prefix, compressed: false }));
     const out = event_stream_1.default.merge(compressed, uncompressed)
         .pipe(event_stream_1.default.through(function (f) {
         console.log('Uploaded:', f.relative);
@@ -108,8 +137,8 @@ async function main() {
         stat: { mode: 0o666 }
     });
     const filesOut = event_stream_1.default.readArray([listing])
-        .pipe((0, gulp_gzip_1.default)({ append: false }))
-        .pipe(azure.upload(options(true)));
+        .pipe(gzipContents())
+        .pipe(uploadToAzure({ prefix, compressed: true }));
     console.log(`Uploading: files.txt (${files.length} files)`); // debug
     await wait(filesOut);
 }

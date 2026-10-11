@@ -64,7 +64,7 @@ npm install
 npm run dev            # watch + watchvue + запуск приложения
 ```
 
-`npm run compile` / `gulp compile-client` / packaging (`gulp vscode-*`) сами вызывают **build-react** перед компиляцией TS — отдельный `buildvue` для полной сборки не нужен.
+`npm run compile` / `npm run build:task -- compile-client` / packaging (`npm run build:task -- vscode-*`) сами вызывают **build-react** перед компиляцией TS — отдельный `buildvue` для полной сборки не нужен.
 
 По отдельности: `npm run watch`, `npm run watchvue`, `./scripts/code.sh` (или `npm run code`). Для итераций только по Vue UI удобен `npm run watchvue`.
 
@@ -74,10 +74,10 @@ npm run dev            # watch + watchvue + запуск приложения
 
 | ОС                  | Команда                            |
 | ------------------- | ---------------------------------- |
-| macOS Apple Silicon | `npm run gulp vscode-darwin-arm64` |
-| macOS Intel         | `npm run gulp vscode-darwin-x64`   |
-| Windows x64         | `npm run gulp vscode-win32-x64`    |
-| Linux x64           | `npm run gulp vscode-linux-x64`    |
+| macOS Apple Silicon | `npm run build:task -- vscode-darwin-arm64` |
+| macOS Intel         | `npm run build:task -- vscode-darwin-x64`   |
+| Windows x64         | `npm run build:task -- vscode-win32-x64`    |
+| Linux x64           | `npm run build:task -- vscode-linux-x64`    |
 
 Артефакт появится рядом с репозиторием, например `../VSCode-darwin-arm64/`.
 

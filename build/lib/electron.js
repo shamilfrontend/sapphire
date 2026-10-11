@@ -43,8 +43,8 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.config = void 0;
 const fs_1 = __importDefault(require("fs"));
 const path_1 = __importDefault(require("path"));
+const event_stream_1 = __importDefault(require("event-stream"));
 const vinyl_fs_1 = __importDefault(require("vinyl-fs"));
-const gulp_filter_1 = __importDefault(require("gulp-filter"));
 const util = __importStar(require("./util"));
 const getVersion_1 = require("./getVersion");
 function isDocumentSuffix(str) {
@@ -224,7 +224,6 @@ exports.config = {
 function getElectron(arch) {
     return () => {
         const electron = require('@vscode/gulp-electron');
-        const json = require('gulp-json-editor');
         const electronOpts = {
             ...exports.config,
             platform: process.platform,
@@ -233,9 +232,19 @@ function getElectron(arch) {
             keepDefaultApp: true
         };
         return vinyl_fs_1.default.src('package.json')
-            .pipe(json({ name: product.nameShort }))
+            .pipe(event_stream_1.default.mapSync((f) => {
+            const data = JSON.parse(f.contents.toString('utf8'));
+            data.name = product.nameShort;
+            f.contents = Buffer.from(JSON.stringify(data));
+            return f;
+        }))
             .pipe(electron(electronOpts))
-            .pipe((0, gulp_filter_1.default)(['**', '!**/app/package.json']))
+            .pipe(event_stream_1.default.through(function (f) {
+            const normalized = f.path.replace(/\\/g, '/');
+            if (!/\/app\/package\.json$/.test(normalized)) {
+                this.emit('data', f);
+            }
+        }))
             .pipe(vinyl_fs_1.default.dest('.build/electron'));
     };
 }

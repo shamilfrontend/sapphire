@@ -273,9 +273,9 @@
   },
   "scripts": {
     "vscode:prepublish": "npm run compile",
-    "compile": "gulp compile-extension:open-remote-wsl",
+    "compile": "node ../../scripts/build/main.mjs run compile-extension:open-remote-wsl",
     "compile-web": "npx webpack-cli --config extension-browser.webpack.config --mode none",
-    "watch": "gulp watch-extension:open-remote-wsl",
+    "watch": "node ../../scripts/build/main.mjs run watch-extension:open-remote-wsl",
     "watch-web": "npx webpack-cli --config extension-browser.webpack.config --mode none --watch --info-verbosity verbose"
   }
 }

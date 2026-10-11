@@ -5,8 +5,6 @@
 
 import es from 'event-stream';
 import _debounce from 'debounce';
-import _filter from 'gulp-filter';
-import rename from 'gulp-rename';
 import path from 'path';
 import fs from 'fs';
 import _rimraf from 'rimraf';
@@ -15,6 +13,7 @@ import { ThroughStream } from 'through';
 import sm from 'source-map';
 import { pathToFileURL } from 'url';
 import ternaryStream from 'ternary-stream';
+import minimatch from 'minimatch';
 
 const root = path.dirname(path.dirname(__dirname));
 
@@ -142,7 +141,7 @@ export function fixWin32DirectoryPermissions(): NodeJS.ReadWriteStream {
 }
 
 export function setExecutableBit(pattern?: string | string[]): NodeJS.ReadWriteStream {
-  const setBit = es.mapSync<VinylFile, VinylFile>((f) => {
+  const setBit = (f: VinylFile): VinylFile => {
     if (!f.stat) {
       f.stat = {
         isFile() {
@@ -152,17 +151,18 @@ export function setExecutableBit(pattern?: string | string[]): NodeJS.ReadWriteS
     }
     f.stat.mode = /* 100755 */ 33261;
     return f;
-  });
+  };
 
   if (!pattern) {
-    return setBit;
+    return es.mapSync<VinylFile, VinylFile>((f) => setBit(f));
   }
 
-  const input = es.through();
-  const filter = _filter(pattern, { restore: true });
-  const output = input.pipe(filter).pipe(setBit).pipe(filter.restore);
-
-  return es.duplex(input, output);
+  const patterns = Array.isArray(pattern) ? pattern : [pattern];
+  return es.mapSync<VinylFile, VinylFile>((f) => {
+    const relative = f.relative ? f.relative.replace(/\\/g, '/') : '';
+    const isMatch = patterns.some((p) => minimatch(relative, p, { dot: true }));
+    return isMatch ? setBit(f) : f;
+  });
 }
 
 export function toFileUri(filePath: string): string {
@@ -190,17 +190,19 @@ export function cleanNodeModules(rulePath: string): NodeJS.ReadWriteStream {
     .map((line) => line.trim())
     .filter((line) => line && !/^#/.test(line));
 
-  const excludes = rules
-    .filter((line) => !/^!/.test(line))
-    .map((line) => `!**/node_modules/${line}`);
+  const excludes = rules.filter((line) => !/^!/.test(line)).map((line) => `**/node_modules/${line}`);
   const includes = rules
     .filter((line) => /^!/.test(line))
-    .map((line) => `**/node_modules/${line.substr(1)}`);
+    .map((line) => `**/node_modules/${line.slice(1)}`);
 
-  const input = es.through();
-  const output = es.merge(input.pipe(_filter(['**', ...excludes])), input.pipe(_filter(includes)));
-
-  return es.duplex(input, output);
+  return es.through(function (f: VinylFile) {
+    const relative = f.relative ? f.relative.replace(/\\/g, '/') : '';
+    const isIncluded = includes.some((p) => minimatch(relative, p, { dot: true }));
+    const isExcluded = excludes.some((p) => minimatch(relative, p, { dot: true }));
+    if (!isExcluded || isIncluded) {
+      this.emit('data', f);
+    }
+  });
 }
 
 declare class FileSourceMap extends VinylFile {
@@ -376,9 +378,10 @@ export function ensureDir(dirPath: string): void {
 }
 
 export function rebase(count: number): NodeJS.ReadWriteStream {
-  return rename((f) => {
+  return es.mapSync<VinylFile, VinylFile>((f) => {
     const parts = f.dirname ? f.dirname.split(/[\/\\]/) : [];
     f.dirname = parts.slice(count).join(path.sep);
+    return f;
   });
 }
 

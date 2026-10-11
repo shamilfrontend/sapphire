@@ -3,18 +3,13 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import es from 'event-stream';
-import Vinyl from 'vinyl';
-import vfs from 'vinyl-fs';
-import merge from 'gulp-merge-json';
-import gzip from 'gulp-gzip';
+import fs from 'fs';
+import path from 'path';
+import zlib from 'zlib';
 import { ClientAssertionCredential } from '@azure/identity';
-import path = require('path');
-import { readFileSync } from 'fs';
+import { BlobServiceClient } from '@azure/storage-blob';
 
-const azure = require('gulp-azure-storage');
-
-const commit = process.env.BUILD_SOURCEVERSION;
+const commit = process.env.BUILD_SOURCEVERSION!;
 const credential = new ClientAssertionCredential(
   process.env.AZURE_TENANT_ID!,
   process.env.AZURE_CLIENT_ID!,
@@ -22,138 +17,125 @@ const credential = new ClientAssertionCredential(
 );
 
 interface NlsMetadata {
-  keys: { [module: string]: string };
-  messages: { [module: string]: string };
+  keys: { [module: string]: any };
+  messages: { [module: string]: any };
   bundles: { [bundle: string]: string[] };
 }
 
-function main(): Promise<void> {
-  return new Promise((c, e) => {
-    const combinedMetadataJson = es
-      .merge(
-        // vscode: we are not using `out-build/nls.metadata.json` here because
-        // it includes metadata for translators for `keys`. but for our purpose
-        // we want only the `keys` and `messages` as `string`.
-        es
-          .merge(
-            vfs.src('out-build/nls.keys.json', { base: 'out-build' }),
-            vfs.src('out-build/nls.messages.json', { base: 'out-build' }),
-          )
-          .pipe(
-            merge({
-              fileName: 'vscode.json',
-              jsonSpace: '',
-              concatArrays: true,
-              edit: (parsedJson, file) => {
-                if (file.base === 'out-build') {
-                  if (file.basename === 'nls.keys.json') {
-                    return { keys: parsedJson };
-                  }
-                  return { messages: parsedJson };
-                }
-              },
-            }),
-          ),
+function readJson(filePath: string): any {
+  return JSON.parse(fs.readFileSync(filePath, 'utf8'));
+}
 
-        // extensions
-        vfs.src('.build/extensions/**/nls.metadata.json', { base: '.build/extensions' }),
-        vfs.src('.build/extensions/**/nls.metadata.header.json', { base: '.build/extensions' }),
-        vfs.src('.build/extensions/**/package.nls.json', { base: '.build/extensions' }),
-      )
-      .pipe(
-        merge({
-          fileName: 'combined.nls.metadata.json',
-          jsonSpace: '',
-          concatArrays: true,
-          edit: (parsedJson, file) => {
-            if (file.basename === 'vscode.json') {
-              return { vscode: parsedJson };
-            }
+function convertPackageNls(json: Record<string, string>): NlsMetadata {
+  return {
+    messages: { package: Object.values(json) as string[] },
+    keys: { package: Object.keys(json) as string[] },
+    bundles: { main: ['package'] },
+  };
+}
 
-            // Handle extensions and follow the same structure as the Core nls file.
-            switch (file.basename) {
-              case 'package.nls.json':
-                // put package.nls.json content in Core NlsMetadata format
-                // language packs use the key "package" to specify that
-                // translations are for the package.json file
-                parsedJson = {
-                  messages: {
-                    package: Object.values(parsedJson),
-                  },
-                  keys: {
-                    package: Object.keys(parsedJson),
-                  },
-                  bundles: {
-                    main: ['package'],
-                  },
-                };
-                break;
+function convertExtensionNlsMetadata(json: Record<string, any>): NlsMetadata {
+  const modules = Object.keys(json);
+  const result: NlsMetadata = {
+    keys: {},
+    messages: {},
+    bundles: { main: [] },
+  };
+  for (const module of modules) {
+    result.messages[module] = json[module].messages;
+    result.keys[module] = json[module].keys;
+    result.bundles.main.push(module);
+  }
+  return result;
+}
 
-              case 'nls.metadata.header.json':
-                parsedJson = { header: parsedJson };
-                break;
+function buildCombinedMetadata(): any {
+  const combined: Record<string, any> = {};
+  combined.vscode = {
+    keys: readJson(path.join('out-build', 'nls.keys.json')),
+    messages: readJson(path.join('out-build', 'nls.messages.json')),
+  };
 
-              case 'nls.metadata.json': {
-                // put nls.metadata.json content in Core NlsMetadata format
-                const modules = Object.keys(parsedJson);
+  const extensionsRoot = path.join('.build', 'extensions');
+  if (!fs.existsSync(extensionsRoot)) {
+    return combined;
+  }
 
-                const json: NlsMetadata = {
-                  keys: {},
-                  messages: {},
-                  bundles: {
-                    main: [],
-                  },
-                };
-                for (const module of modules) {
-                  json.messages[module] = parsedJson[module].messages;
-                  json.keys[module] = parsedJson[module].keys;
-                  json.bundles.main.push(module);
-                }
-                parsedJson = json;
-                break;
-              }
-            }
+  const extensionDirs = fs.readdirSync(extensionsRoot, { withFileTypes: true }).filter((entry) => entry.isDirectory());
+  for (const dir of extensionDirs) {
+    const folderPath = path.join(extensionsRoot, dir.name);
+    const manifestPath = path.join(folderPath, 'package.json');
+    if (!fs.existsSync(manifestPath)) {
+      continue;
+    }
 
-            // Get extension id and use that as the key
-            const folderPath = path.join(file.base, file.relative.split('/')[0]);
-            const manifest = readFileSync(path.join(folderPath, 'package.json'), 'utf-8');
-            const manifestJson = JSON.parse(manifest);
-            const key = `${manifestJson.publisher}.${manifestJson.name}`;
-            return { [key]: parsedJson };
-          },
-        }),
-      );
+    const manifest = readJson(manifestPath);
+    const extensionKey = `${manifest.publisher}.${manifest.name}`;
+    const target = combined[extensionKey] ?? {};
 
-    const nlsMessagesJs = vfs.src('out-build/nls.messages.js', { base: 'out-build' });
+    const metadataPath = path.join(folderPath, 'nls.metadata.json');
+    if (fs.existsSync(metadataPath)) {
+      Object.assign(target, convertExtensionNlsMetadata(readJson(metadataPath)));
+    }
 
-    es.merge(combinedMetadataJson, nlsMessagesJs)
-      .pipe(gzip({ append: false }))
-      .pipe(vfs.dest('./nlsMetadata'))
-      .pipe(
-        es.through(function (data: Vinyl) {
-          console.log(`Uploading ${data.path}`);
-          // trigger artifact upload
-          console.log(
-            `##vso[artifact.upload containerfolder=nlsmetadata;artifactname=${data.basename}]${data.path}`,
-          );
-          this.emit('data', data);
-        }),
-      )
-      .pipe(
-        azure.upload({
-          account: process.env.AZURE_STORAGE_ACCOUNT,
-          credential,
-          container: '$web',
-          prefix: `nlsmetadata/${commit}/`,
-          contentSettings: {
-            contentEncoding: 'gzip',
-            cacheControl: 'max-age=31536000, public',
-          },
-        }),
-      )
-      .on('end', () => c())
-      .on('error', (err: any) => e(err));
+    const headerPath = path.join(folderPath, 'nls.metadata.header.json');
+    if (fs.existsSync(headerPath)) {
+      target.header = readJson(headerPath);
+    }
+
+    const packageNlsPath = path.join(folderPath, 'package.nls.json');
+    if (fs.existsSync(packageNlsPath)) {
+      Object.assign(target, convertPackageNls(readJson(packageNlsPath)));
+    }
+
+    combined[extensionKey] = target;
+  }
+
+  return combined;
+}
+
+async function uploadGzip(fileName: string, contents: Buffer): Promise<void> {
+  const account = process.env.AZURE_STORAGE_ACCOUNT!;
+  const blobServiceClient = new BlobServiceClient(
+    `https://${account}.blob.core.windows.net`,
+    credential,
+  );
+  const containerClient = blobServiceClient.getContainerClient('$web');
+  const blobPath = `nlsmetadata/${commit}/${fileName}`;
+  const blobClient = containerClient.getBlockBlobClient(blobPath);
+
+  const gzipContents = zlib.gzipSync(contents);
+  await blobClient.uploadData(gzipContents, {
+    blobHTTPHeaders: {
+      blobContentType: fileName.endsWith('.js') ? 'application/javascript' : 'application/json',
+      blobContentEncoding: 'gzip',
+      blobCacheControl: 'max-age=31536000, public',
+    },
   });
+}
+
+async function main(): Promise<void> {
+  fs.mkdirSync('./nlsMetadata', { recursive: true });
+  const combined = buildCombinedMetadata();
+  const combinedContent = Buffer.from(JSON.stringify(combined));
+  const nlsMessagesJsContent = fs.readFileSync(path.join('out-build', 'nls.messages.js'));
+
+  const combinedGzipPath = path.join('nlsMetadata', 'combined.nls.metadata.json');
+  const messagesGzipPath = path.join('nlsMetadata', 'nls.messages.js');
+  fs.writeFileSync(combinedGzipPath, zlib.gzipSync(combinedContent));
+  fs.writeFileSync(messagesGzipPath, zlib.gzipSync(nlsMessagesJsContent));
+
+  console.log(`Uploading ${combinedGzipPath}`);
+  console.log(
+    `##vso[artifact.upload containerfolder=nlsmetadata;artifactname=combined.nls.metadata.json]${combinedGzipPath}`,
+  );
+  await uploadGzip('combined.nls.metadata.json', combinedContent);
+
+  console.log(`Uploading ${messagesGzipPath}`);
+  console.log(
+    `##vso[artifact.upload containerfolder=nlsmetadata;artifactname=nls.messages.js]${messagesGzipPath}`,
+  );
+  await uploadGzip('nls.messages.js', nlsMessagesJsContent);
 }
 
 main().catch((err) => {

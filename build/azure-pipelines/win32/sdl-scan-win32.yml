@@ -102,7 +102,7 @@ steps:
   - powershell: npm run compile
     displayName: Compile
 
-  - powershell: npm run gulp "vscode-symbols-win32-${{ parameters.VSCODE_ARCH }}"
+  - powershell: npm run build:task -- "vscode-symbols-win32-${{ parameters.VSCODE_ARCH }}"
     env:
       GITHUB_TOKEN: '$(github-distro-mixin-password)'
     displayName: Download Symbols

@@ -55,9 +55,9 @@
   "main": "./out/extension.js",
   "browser": "./dist/browser/extension.js",
   "scripts": {
-    "compile": "gulp compile-extension:github-authentication",
+    "compile": "node ../../scripts/build/main.mjs run compile-extension:github-authentication",
     "compile-web": "npx webpack-cli --config extension-browser.webpack.config --mode none",
-    "watch": "gulp watch-extension:github-authentication",
+    "watch": "node ../../scripts/build/main.mjs run watch-extension:github-authentication",
     "watch-web": "npx webpack-cli --config extension-browser.webpack.config --mode none --watch --info-verbosity verbose",
     "vscode:prepublish": "npm run compile"
   },

@@ -8,7 +8,6 @@ import path from 'path';
 import os from 'os';
 import rimraf from 'rimraf';
 import es from 'event-stream';
-import rename from 'gulp-rename';
 import vfs from 'vinyl-fs';
 import fancyLog from 'fancy-log';
 import ansiColors from 'ansi-colors';
@@ -47,6 +46,13 @@ function log(...messages: string[]): void {
   }
 }
 
+function remapDirname(mapper: (dirname: string) => string): Stream {
+  return es.mapSync((f: any) => {
+    f.dirname = mapper(f.dirname || '');
+    return f;
+  });
+}
+
 function getExtensionPath(extension: IExtensionDefinition): string {
   return path.join(root, '.build', 'builtInExtensions', extension.name);
 }
@@ -79,7 +85,7 @@ function getExtensionDownloadStream(extension: IExtensionDefinition) {
     input = ext.fromGithub(extension);
   }
 
-  return input.pipe(rename((p) => (p.dirname = `${extension.name}/${p.dirname}`)));
+  return input.pipe(remapDirname((dirname) => `${extension.name}/${dirname}`));
 }
 
 export function getExtensionStream(extension: IExtensionDefinition) {
@@ -88,7 +94,7 @@ export function getExtensionStream(extension: IExtensionDefinition) {
     log('[extensions]', `${extension.name}@${extension.version} up to date`, ansiColors.green('✔︎'));
     return vfs
       .src(['**'], { cwd: getExtensionPath(extension), dot: true })
-      .pipe(rename((p) => (p.dirname = `${extension.name}/${p.dirname}`)));
+      .pipe(remapDirname((dirname) => `${extension.name}/${dirname}`));
   }
 
   return getExtensionDownloadStream(extension);

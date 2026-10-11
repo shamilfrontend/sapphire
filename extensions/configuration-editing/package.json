@@ -21,8 +21,8 @@
   "main": "./out/configurationEditingMain",
   "browser": "./dist/browser/configurationEditingMain",
   "scripts": {
-    "compile": "gulp compile-extension:configuration-editing",
-    "watch": "gulp watch-extension:configuration-editing"
+    "compile": "node ../../scripts/build/main.mjs run compile-extension:configuration-editing",
+    "watch": "node ../../scripts/build/main.mjs run watch-extension:configuration-editing"
   },
   "dependencies": {
     "@octokit/rest": "^21.1.1",

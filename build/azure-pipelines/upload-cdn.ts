@@ -6,12 +6,10 @@
 import es from 'event-stream';
 import Vinyl from 'vinyl';
 import vfs from 'vinyl-fs';
-import filter from 'gulp-filter';
-import gzip from 'gulp-gzip';
+import zlib from 'zlib';
 import mime from 'mime';
 import { ClientAssertionCredential } from '@azure/identity';
-
-const azure = require('gulp-azure-storage');
+import { BlobServiceClient } from '@azure/storage-blob';
 
 const commit = process.env.BUILD_SOURCEVERSION;
 const credential = new ClientAssertionCredential(
@@ -79,31 +77,73 @@ function wait(stream: es.ThroughStream): Promise<void> {
   });
 }
 
+function uploadToAzure({
+  prefix,
+  compressed,
+}: {
+  prefix: string;
+  compressed: boolean;
+}): NodeJS.ReadWriteStream {
+  const account = process.env.AZURE_STORAGE_ACCOUNT!;
+  const container = '$web';
+  const blobServiceClient = new BlobServiceClient(
+    `https://${account}.blob.core.windows.net`,
+    credential,
+  );
+  const containerClient = blobServiceClient.getContainerClient(container);
+
+  return es.map(async (file: Vinyl, cb) => {
+    try {
+      const blobPath = `${prefix}${file.relative.replace(/\\/g, '/')}`;
+      const blobClient = containerClient.getBlockBlobClient(blobPath);
+      const contentType = mime.lookup(file.path) || undefined;
+      const contents = file.contents as Buffer;
+      await blobClient.uploadData(contents, {
+        blobHTTPHeaders: {
+          blobContentType: typeof contentType === 'string' ? contentType : undefined,
+          blobContentEncoding: compressed ? 'gzip' : undefined,
+          blobCacheControl: 'max-age=31536000, public',
+        },
+      });
+      cb(undefined, file);
+    } catch (error) {
+      cb(error as Error);
+    }
+  });
+}
+
+function gzipContents(): NodeJS.ReadWriteStream {
+  return es.mapSync((file: Vinyl) => {
+    const contents = file.contents as Buffer;
+    file.contents = zlib.gzipSync(contents);
+    return file;
+  });
+}
+
+function filterStream(predicate: (file: Vinyl) => boolean): NodeJS.ReadWriteStream {
+  return es.through(function (file: Vinyl) {
+    if (predicate(file)) {
+      this.emit('data', file);
+    }
+  });
+}
+
 async function main(): Promise<void> {
   const files: string[] = [];
-  const options = (compressed: boolean) => ({
-    account: process.env.AZURE_STORAGE_ACCOUNT,
-    credential,
-    container: '$web',
-    prefix: `${process.env.VSCODE_QUALITY}/${commit}/`,
-    contentSettings: {
-      contentEncoding: compressed ? 'gzip' : undefined,
-      cacheControl: 'max-age=31536000, public',
-    },
-  });
+  const prefix = `${process.env.VSCODE_QUALITY}/${commit}/`;
 
   const all = vfs
     .src('**', { cwd: '../vscode-web', base: '../vscode-web', dot: true })
-    .pipe(filter((f) => !f.isDirectory()));
+    .pipe(filterStream((f) => !f.isDirectory()));
 
   const compressed = all
-    .pipe(filter((f) => MimeTypesToCompress.has(mime.lookup(f.path))))
-    .pipe(gzip({ append: false }))
-    .pipe(azure.upload(options(true)));
+    .pipe(filterStream((f) => MimeTypesToCompress.has(mime.lookup(f.path))))
+    .pipe(gzipContents())
+    .pipe(uploadToAzure({ prefix, compressed: true }));
 
   const uncompressed = all
-    .pipe(filter((f) => !MimeTypesToCompress.has(mime.lookup(f.path))))
-    .pipe(azure.upload(options(false)));
+    .pipe(filterStream((f) => !MimeTypesToCompress.has(mime.lookup(f.path))))
+    .pipe(uploadToAzure({ prefix, compressed: false }));
 
   const out = es.merge(compressed, uncompressed).pipe(
     es.through(function (f) {
@@ -124,8 +164,8 @@ async function main(): Promise<void> {
 
   const filesOut = es
     .readArray([listing])
-    .pipe(gzip({ append: false }))
-    .pipe(azure.upload(options(true)));
+    .pipe(gzipContents())
+    .pipe(uploadToAzure({ prefix, compressed: true }));
 
   console.log(`Uploading: files.txt (${files.length} files)`); // debug
   await wait(filesOut);

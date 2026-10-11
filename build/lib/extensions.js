@@ -55,18 +55,15 @@ const event_stream_1 = __importDefault(require("event-stream"));
 const fs_1 = __importDefault(require("fs"));
 const child_process_1 = __importDefault(require("child_process"));
 const glob_1 = __importDefault(require("glob"));
-const gulp_1 = __importDefault(require("gulp"));
 const path_1 = __importDefault(require("path"));
 const crypto_1 = __importDefault(require("crypto"));
 const vinyl_1 = __importDefault(require("vinyl"));
+const vinyl_fs_1 = __importDefault(require("vinyl-fs"));
 const stats_1 = require("./stats");
 const util2 = __importStar(require("./util"));
 const vzip = require('gulp-vinyl-zip');
-const gulp_filter_1 = __importDefault(require("gulp-filter"));
-const gulp_rename_1 = __importDefault(require("gulp-rename"));
 const fancy_log_1 = __importDefault(require("fancy-log"));
 const ansi_colors_1 = __importDefault(require("ansi-colors"));
-const gulp_buffer_1 = __importDefault(require("gulp-buffer"));
 const jsoncParser = __importStar(require("jsonc-parser"));
 const dependencies_1 = require("./dependencies");
 const builtInExtensions_1 = require("./builtInExtensions");
@@ -75,33 +72,65 @@ const fetch_1 = require("./fetch");
 const root = path_1.default.dirname(path_1.default.dirname(__dirname));
 const commit = (0, getVersion_1.getVersion)(root);
 const sourceMappingURLBase = `https://main.vscode-cdn.net/sourcemaps/${commit}`;
+function ensureBufferContents() {
+    return event_stream_1.default.map((f, cb) => {
+        if (!f.contents || Buffer.isBuffer(f.contents)) {
+            cb(undefined, f);
+            return;
+        }
+        const stream = f.contents;
+        const chunks = [];
+        stream.on('data', (chunk) => chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk)));
+        stream.on('error', (err) => cb(err));
+        stream.on('end', () => {
+            f.contents = Buffer.concat(chunks);
+            cb(undefined, f);
+        });
+    });
+}
+function remapDirname(mapper) {
+    return event_stream_1.default.mapSync((f) => {
+        f.dirname = mapper(f.dirname || '');
+        return f;
+    });
+}
+function filterStream(predicate) {
+    return event_stream_1.default.through(function (f) {
+        if (predicate(f)) {
+            this.emit('data', f);
+        }
+    });
+}
+function getRelativePath(f) {
+    return path_1.default.relative(f.base, f.path).replace(/\\/g, '/');
+}
 function minifyExtensionResources(input) {
-    const jsonFilter = (0, gulp_filter_1.default)(['**/*.json', '**/*.code-snippets'], { restore: true });
     return input
-        .pipe(jsonFilter)
-        .pipe((0, gulp_buffer_1.default)())
+        .pipe(ensureBufferContents())
         .pipe(event_stream_1.default.mapSync((f) => {
-        const errors = [];
-        const value = jsoncParser.parse(f.contents.toString('utf8'), errors, { allowTrailingComma: true });
-        if (errors.length === 0) {
-            // file parsed OK => just stringify to drop whitespace and comments
-            f.contents = Buffer.from(JSON.stringify(value));
+        const relative = getRelativePath(f);
+        if (/\.(json|code-snippets)$/.test(relative)) {
+            const errors = [];
+            const value = jsoncParser.parse(f.contents.toString('utf8'), errors, { allowTrailingComma: true });
+            if (errors.length === 0) {
+                // file parsed OK => just stringify to drop whitespace and comments
+                f.contents = Buffer.from(JSON.stringify(value));
+            }
         }
         return f;
-    }))
-        .pipe(jsonFilter.restore);
+    }));
 }
 function updateExtensionPackageJSON(input, update) {
-    const packageJsonFilter = (0, gulp_filter_1.default)('extensions/*/package.json', { restore: true });
     return input
-        .pipe(packageJsonFilter)
-        .pipe((0, gulp_buffer_1.default)())
+        .pipe(ensureBufferContents())
         .pipe(event_stream_1.default.mapSync((f) => {
-        const data = JSON.parse(f.contents.toString('utf8'));
-        f.contents = Buffer.from(JSON.stringify(update(data)));
+        const normalizedPath = f.path.replace(/\\/g, '/');
+        if (/\/extensions\/[^/]+\/package\.json$/.test(normalizedPath)) {
+            const data = JSON.parse(f.contents.toString('utf8'));
+            f.contents = Buffer.from(JSON.stringify(update(data)));
+        }
         return f;
-    }))
-        .pipe(packageJsonFilter.restore);
+    }));
 }
 function fromLocal(extensionPath, forWeb, disableMangle) {
     const webpackConfigFileName = forWeb ? 'extension-browser.webpack.config.js' : 'extension.webpack.config.js';
@@ -247,11 +276,9 @@ const baseHeaders = {
     'X-Market-User-Id': '291C1CD0-051A-4123-9B4B-30D60EF52EE2',
 };
 function fromMarketplace(serviceUrl, { name: extensionName, version, sha256, metadata }) {
-    const json = require('gulp-json-editor');
     const [publisher, name] = extensionName.split('.');
     const url = `${serviceUrl}/publishers/${publisher}/vsextensions/${name}/${version}/vspackage`;
     (0, fancy_log_1.default)('Downloading extension:', ansi_colors_1.default.yellow(`${extensionName}@${version}`), '...');
-    const packageJsonFilter = (0, gulp_filter_1.default)('package.json', { restore: true });
     return (0, fetch_1.fetchUrls)('', {
         base: url,
         nodeFetchOptions: {
@@ -260,19 +287,22 @@ function fromMarketplace(serviceUrl, { name: extensionName, version, sha256, met
         checksumSha256: sha256
     })
         .pipe(vzip.src())
-        .pipe((0, gulp_filter_1.default)('extension/**'))
-        .pipe((0, gulp_rename_1.default)(p => p.dirname = p.dirname.replace(/^extension\/?/, '')))
-        .pipe(packageJsonFilter)
-        .pipe((0, gulp_buffer_1.default)())
-        .pipe(json({ __metadata: metadata }))
-        .pipe(packageJsonFilter.restore);
+        .pipe(filterStream((f) => getRelativePath(f).startsWith('extension/')))
+        .pipe(remapDirname((dirname) => dirname.replace(/^extension\/?/, '')))
+        .pipe(ensureBufferContents())
+        .pipe(event_stream_1.default.mapSync((f) => {
+        if (getRelativePath(f) === 'package.json') {
+            const data = JSON.parse(f.contents.toString('utf8'));
+            data.__metadata = metadata;
+            f.contents = Buffer.from(JSON.stringify(data));
+        }
+        return f;
+    }));
 }
 function fromVsix(vsixPath, { name: extensionName, version, sha256, metadata }) {
-    const json = require('gulp-json-editor');
     (0, fancy_log_1.default)('Using local VSIX for extension:', ansi_colors_1.default.yellow(`${extensionName}@${version}`), '...');
-    const packageJsonFilter = (0, gulp_filter_1.default)('package.json', { restore: true });
-    return gulp_1.default.src(vsixPath)
-        .pipe((0, gulp_buffer_1.default)())
+    return vinyl_fs_1.default.src(vsixPath)
+        .pipe(ensureBufferContents())
         .pipe(event_stream_1.default.mapSync((f) => {
         const hash = crypto_1.default.createHash('sha256');
         hash.update(f.contents);
@@ -283,30 +313,38 @@ function fromVsix(vsixPath, { name: extensionName, version, sha256, metadata }) 
         return f;
     }))
         .pipe(vzip.src())
-        .pipe((0, gulp_filter_1.default)('extension/**'))
-        .pipe((0, gulp_rename_1.default)(p => p.dirname = p.dirname.replace(/^extension\/?/, '')))
-        .pipe(packageJsonFilter)
-        .pipe((0, gulp_buffer_1.default)())
-        .pipe(json({ __metadata: metadata }))
-        .pipe(packageJsonFilter.restore);
+        .pipe(filterStream((f) => getRelativePath(f).startsWith('extension/')))
+        .pipe(remapDirname((dirname) => dirname.replace(/^extension\/?/, '')))
+        .pipe(ensureBufferContents())
+        .pipe(event_stream_1.default.mapSync((f) => {
+        if (getRelativePath(f) === 'package.json') {
+            const data = JSON.parse(f.contents.toString('utf8'));
+            data.__metadata = metadata;
+            f.contents = Buffer.from(JSON.stringify(data));
+        }
+        return f;
+    }));
 }
 function fromGithub({ name, version, repo, sha256, metadata }) {
-    const json = require('gulp-json-editor');
     (0, fancy_log_1.default)('Downloading extension from GH:', ansi_colors_1.default.yellow(`${name}@${version}`), '...');
-    const packageJsonFilter = (0, gulp_filter_1.default)('package.json', { restore: true });
     return (0, fetch_1.fetchGithub)(new URL(repo).pathname, {
         version,
         name: name => name.endsWith('.vsix'),
         checksumSha256: sha256
     })
-        .pipe((0, gulp_buffer_1.default)())
+        .pipe(ensureBufferContents())
         .pipe(vzip.src())
-        .pipe((0, gulp_filter_1.default)('extension/**'))
-        .pipe((0, gulp_rename_1.default)(p => p.dirname = p.dirname.replace(/^extension\/?/, '')))
-        .pipe(packageJsonFilter)
-        .pipe((0, gulp_buffer_1.default)())
-        .pipe(json({ __metadata: metadata }))
-        .pipe(packageJsonFilter.restore);
+        .pipe(filterStream((f) => getRelativePath(f).startsWith('extension/')))
+        .pipe(remapDirname((dirname) => dirname.replace(/^extension\/?/, '')))
+        .pipe(ensureBufferContents())
+        .pipe(event_stream_1.default.mapSync((f) => {
+        if (getRelativePath(f) === 'package.json') {
+            const data = JSON.parse(f.contents.toString('utf8'));
+            data.__metadata = metadata;
+            f.contents = Buffer.from(JSON.stringify(data));
+        }
+        return f;
+    }));
 }
 /**
  * All extensions that are known to have some native component and thus must be built on the
@@ -412,7 +450,7 @@ function doPackageLocalExtensionsStream(forWeb, disableMangle, native) {
         .filter(({ manifestPath }) => (forWeb ? isWebExtension(require(manifestPath)) : true)));
     const localExtensionsStream = minifyExtensionResources(event_stream_1.default.merge(...localExtensionsDescriptions.map(extension => {
         return fromLocal(extension.path, forWeb, disableMangle)
-            .pipe((0, gulp_rename_1.default)(p => p.dirname = `extensions/${extension.name}/${p.dirname}`));
+            .pipe(remapDirname((dirname) => `extensions/${extension.name}/${dirname}`));
     })));
     let result;
     if (forWeb) {
@@ -422,7 +460,7 @@ function doPackageLocalExtensionsStream(forWeb, disableMangle, native) {
         // also include shared production node modules
         const productionDependencies = (0, dependencies_1.getProductionDependencies)('extensions/');
         const dependenciesSrc = productionDependencies.map(d => path_1.default.relative(root, d)).map(d => [`${d}/**`, `!${d}/**/{test,tests}/**`]).flat();
-        result = event_stream_1.default.merge(localExtensionsStream, gulp_1.default.src(dependenciesSrc, { base: '.' })
+        result = event_stream_1.default.merge(localExtensionsStream, vinyl_fs_1.default.src(dependenciesSrc, { base: '.' })
             .pipe(util2.cleanNodeModules(path_1.default.join(root, 'build', '.moduleignore')))
             .pipe(util2.cleanNodeModules(path_1.default.join(root, 'build', `.moduleignore.${process.platform}`))));
     }
@@ -436,7 +474,7 @@ function packageMarketplaceExtensionsStream(forWeb) {
     ];
     const marketplaceExtensionsStream = minifyExtensionResources(event_stream_1.default.merge(...marketplaceExtensionsDescriptions
         .map(extension => {
-        const src = (0, builtInExtensions_1.getExtensionStream)(extension).pipe((0, gulp_rename_1.default)(p => p.dirname = `extensions/${p.dirname}`));
+        const src = (0, builtInExtensions_1.getExtensionStream)(extension).pipe(remapDirname((dirname) => `extensions/${dirname}`));
         return updateExtensionPackageJSON(src, (data) => {
             delete data.scripts;
             delete data.dependencies;

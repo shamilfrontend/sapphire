@@ -46,10 +46,32 @@ const vinyl_fs_1 = __importDefault(require("vinyl-fs"));
 const util = __importStar(require("../lib/util"));
 const dependencies_1 = require("../lib/dependencies");
 const identity_1 = require("@azure/identity");
-const azure = require('gulp-azure-storage');
+const storage_blob_1 = require("@azure/storage-blob");
 const root = path_1.default.dirname(path_1.default.dirname(__dirname));
 const commit = process.env['BUILD_SOURCEVERSION'];
 const credential = new identity_1.ClientAssertionCredential(process.env['AZURE_TENANT_ID'], process.env['AZURE_CLIENT_ID'], () => Promise.resolve(process.env['AZURE_ID_TOKEN']));
+function uploadToAzure(prefix) {
+    const account = process.env['AZURE_STORAGE_ACCOUNT'];
+    const container = '$web';
+    const blobServiceClient = new storage_blob_1.BlobServiceClient(`https://${account}.blob.core.windows.net`, credential);
+    const containerClient = blobServiceClient.getContainerClient(container);
+    return event_stream_1.default.map(async (file, cb) => {
+        try {
+            const blobPath = `${prefix}${file.relative.replace(/\\/g, '/')}`;
+            const blobClient = containerClient.getBlockBlobClient(blobPath);
+            const contents = file.contents;
+            await blobClient.uploadData(contents, {
+                blobHTTPHeaders: {
+                    blobContentType: 'application/json'
+                }
+            });
+            cb(undefined, file);
+        }
+        catch (error) {
+            cb(error);
+        }
+    });
+}
 // optionally allow to pass in explicit base/maps to upload
 const [, , base, maps] = process.argv;
 function src(base, maps = `${base}/**/*.map`) {
@@ -79,17 +101,13 @@ function main() {
         sources.push(src(base, maps));
     }
     return new Promise((c, e) => {
+        const uploader = uploadToAzure(`sourcemaps/${commit}/`);
         event_stream_1.default.merge(...sources)
             .pipe(event_stream_1.default.through(function (data) {
             console.log('Uploading Sourcemap', data.relative); // debug
             this.emit('data', data);
         }))
-            .pipe(azure.upload({
-            account: process.env.AZURE_STORAGE_ACCOUNT,
-            credential,
-            container: '$web',
-            prefix: `sourcemaps/${commit}/`
-        }))
+            .pipe(uploader)
             .on('end', () => c())
             .on('error', (err) => e(err));
     });

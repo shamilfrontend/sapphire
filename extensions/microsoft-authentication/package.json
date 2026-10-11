@@ -125,9 +125,9 @@
   "browser": "./dist/browser/extension.js",
   "scripts": {
     "vscode:prepublish": "npm run compile",
-    "compile": "gulp compile-extension:microsoft-authentication",
+    "compile": "node ../../scripts/build/main.mjs run compile-extension:microsoft-authentication",
     "compile-web": "npx webpack-cli --config extension-browser.webpack.config --mode none",
-    "watch": "gulp watch-extension:microsoft-authentication",
+    "watch": "node ../../scripts/build/main.mjs run watch-extension:microsoft-authentication",
     "watch-web": "npx webpack-cli --config extension-browser.webpack.config --mode none --watch --info-verbosity verbose"
   },
   "devDependencies": {

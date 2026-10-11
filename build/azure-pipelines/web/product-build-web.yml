@@ -101,7 +101,7 @@ steps:
 
   - script: |
       set -e
-      npm run gulp vscode-web-min-ci
+      npm run build:task -- vscode-web-min-ci
       ARCHIVE_PATH=".build/web/vscode-web.tar.gz"
       mkdir -p $(dirname $ARCHIVE_PATH)
       tar --owner=0 --group=0 -czf $ARCHIVE_PATH -C .. vscode-web

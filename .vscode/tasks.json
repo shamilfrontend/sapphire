@@ -196,8 +196,9 @@
       "label": "Download electron"
     },
     {
-      "type": "gulp",
-      "task": "hygiene",
+      "type": "npm",
+      "script": "hygiene",
+      "label": "Run hygiene",
       "problemMatcher": []
     },
     {

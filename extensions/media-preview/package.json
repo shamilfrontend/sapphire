@@ -118,10 +118,10 @@
     }
   },
   "scripts": {
-    "compile": "gulp compile-extension:media-preview",
-    "watch": "npm run build-preview && gulp watch-extension:media-preview",
+    "compile": "node ../../scripts/build/main.mjs run compile-extension:media-preview",
+    "watch": "npm run build-preview && node ../../scripts/build/main.mjs run watch-extension:media-preview",
     "vscode:prepublish": "npm run build-ext",
-    "build-ext": "node ../../node_modules/gulp/bin/gulp.js --gulpfile ../../build/gulpfile.extensions.js compile-extension:media-preview ./tsconfig.json",
+    "build-ext": "node ../../scripts/build/main.mjs run compile-extension:media-preview",
     "compile-web": "npx webpack-cli --config extension-browser.webpack.config --mode none",
     "watch-web": "npx webpack-cli --config extension-browser.webpack.config --mode none --watch --info-verbosity verbose"
   },

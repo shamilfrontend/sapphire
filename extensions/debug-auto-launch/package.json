@@ -20,8 +20,8 @@
   ],
   "main": "./out/extension",
   "scripts": {
-    "compile": "gulp compile-extension:debug-auto-launch",
-    "watch": "gulp watch-extension:debug-auto-launch"
+    "compile": "node ../../scripts/build/main.mjs run compile-extension:debug-auto-launch",
+    "watch": "node ../../scripts/build/main.mjs run watch-extension:debug-auto-launch"
   },
   "contributes": {
     "commands": [

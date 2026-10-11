@@ -3,13 +3,13 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-const filter = require('gulp-filter');
 const es = require('event-stream');
 const VinylFile = require('vinyl');
 const vfs = require('vinyl-fs');
 const path = require('path');
 const fs = require('fs');
 const pall = require('p-all');
+const minimatch = require('minimatch');
 
 const {
   all,
@@ -20,6 +20,46 @@ const {
   eslintFilter,
   stylelintFilter,
 } = require('./filters');
+
+function createFilter(patternOrPredicate, _options) {
+  if (typeof patternOrPredicate === 'function') {
+    const result = es.through(function (file) {
+      if (patternOrPredicate(file)) {
+        this.emit('data', file);
+      } else {
+        result.restore.push(file);
+      }
+    });
+    result.restore = es.through();
+    return result;
+  }
+
+  const patterns = Array.isArray(patternOrPredicate) ? patternOrPredicate : [patternOrPredicate];
+  const includes = patterns.filter((pattern) => !String(pattern).startsWith('!'));
+  const excludes = patterns
+    .filter((pattern) => String(pattern).startsWith('!'))
+    .map((pattern) => String(pattern).slice(1));
+
+  const matches = (file) => {
+    const relative = file.relative.replace(/\\/g, '/');
+    const included =
+      includes.length === 0 || includes.some((pattern) => minimatch(relative, pattern, { dot: true }));
+    if (!included) {
+      return false;
+    }
+    return !excludes.some((pattern) => minimatch(relative, pattern, { dot: true }));
+  };
+
+  const result = es.through(function (file) {
+    if (matches(file)) {
+      this.emit('data', file);
+    } else {
+      result.restore.push(file);
+    }
+  });
+  result.restore = es.through();
+  return result;
+}
 
 const copyrightHeaderLines = [
   '/*---------------------------------------------------------------------------------------------',
@@ -151,7 +191,7 @@ function hygiene(some, linting = true) {
   if (Array.isArray(some) || typeof some === 'string' || !some) {
     const options = { base: '.', follow: true, allowEmpty: true };
     if (some) {
-      input = vfs.src(some, options).pipe(filter(all)); // split this up to not unnecessarily filter all a second time
+      input = vfs.src(some, options).pipe(createFilter(all)); // split this up to not unnecessarily filter all a second time
     } else {
       input = vfs.src(all, options);
     }
@@ -159,13 +199,13 @@ function hygiene(some, linting = true) {
     input = some;
   }
 
-  const productJsonFilter = filter('product.json', { restore: true });
-  const snapshotFilter = filter(['**', '!**/*.snap', '!**/*.snap.actual']);
-  const yarnLockFilter = filter(['**', '!**/yarn.lock']);
-  const unicodeFilterStream = filter(unicodeFilter, { restore: true });
+  const productJsonFilter = createFilter('product.json', { restore: true });
+  const snapshotFilter = createFilter(['**', '!**/*.snap', '!**/*.snap.actual']);
+  const yarnLockFilter = createFilter(['**', '!**/yarn.lock']);
+  const unicodeFilterStream = createFilter(unicodeFilter, { restore: true });
 
   const result = input
-    .pipe(filter((f) => !f.stat.isDirectory()))
+    .pipe(createFilter((f) => !f.stat.isDirectory()))
     .pipe(snapshotFilter)
     .pipe(yarnLockFilter)
     .pipe(productJsonFilter)
@@ -174,9 +214,9 @@ function hygiene(some, linting = true) {
     .pipe(unicodeFilterStream)
     .pipe(unicode)
     .pipe(unicodeFilterStream.restore)
-    .pipe(filter(indentationFilter))
+    .pipe(createFilter(indentationFilter))
     .pipe(indentation)
-    .pipe(filter(copyrightFilter))
+    .pipe(createFilter(copyrightFilter))
     .pipe(copyrights);
 
   // Prettier is the source of truth for formatting (see npm run format).
@@ -185,7 +225,7 @@ function hygiene(some, linting = true) {
 
   if (linting) {
     streams.push(
-      result.pipe(filter(eslintFilter)).pipe(
+      result.pipe(createFilter(eslintFilter)).pipe(
         eslint((results) => {
           errorCount += results.warningCount;
           errorCount += results.errorCount;
@@ -193,7 +233,7 @@ function hygiene(some, linting = true) {
       ),
     );
     streams.push(
-      result.pipe(filter(stylelintFilter)).pipe(
+      result.pipe(createFilter(stylelintFilter)).pipe(
         gulpstylelint((message, isError) => {
           if (isError) {
             console.error(message);
@@ -221,7 +261,7 @@ function hygiene(some, linting = true) {
         if (errorCount > 0) {
           this.emit(
             'error',
-            `Hygiene failed with ${errorCount} errors. Check 'build / gulpfile.hygiene.js'.`,
+            `Hygiene failed with ${errorCount} errors.`,
           );
         } else {
           this.emit('end');

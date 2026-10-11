@@ -28,13 +28,12 @@ exports.streamToPromise = streamToPromise;
 exports.getElectronVersion = getElectronVersion;
 const event_stream_1 = __importDefault(require("event-stream"));
 const debounce_1 = __importDefault(require("debounce"));
-const gulp_filter_1 = __importDefault(require("gulp-filter"));
-const gulp_rename_1 = __importDefault(require("gulp-rename"));
 const path_1 = __importDefault(require("path"));
 const fs_1 = __importDefault(require("fs"));
 const rimraf_1 = __importDefault(require("rimraf"));
 const url_1 = require("url");
 const ternary_stream_1 = __importDefault(require("ternary-stream"));
+const minimatch_1 = __importDefault(require("minimatch"));
 const root = path_1.default.dirname(path_1.default.dirname(__dirname));
 const NoCancellationToken = { isCancellationRequested: () => false };
 function incremental(streamProvider, initial, supportsCancellation) {
@@ -114,23 +113,22 @@ function fixWin32DirectoryPermissions() {
     });
 }
 function setExecutableBit(pattern) {
-    const setBit = event_stream_1.default.mapSync(f => {
+    const setBit = (f) => {
         if (!f.stat) {
             f.stat = { isFile() { return true; } };
         }
         f.stat.mode = /* 100755 */ 33261;
         return f;
-    });
+    };
     if (!pattern) {
-        return setBit;
+        return event_stream_1.default.mapSync(f => setBit(f));
     }
-    const input = event_stream_1.default.through();
-    const filter = (0, gulp_filter_1.default)(pattern, { restore: true });
-    const output = input
-        .pipe(filter)
-        .pipe(setBit)
-        .pipe(filter.restore);
-    return event_stream_1.default.duplex(input, output);
+    const patterns = Array.isArray(pattern) ? pattern : [pattern];
+    return event_stream_1.default.mapSync((f) => {
+        const relative = f.relative ? f.relative.replace(/\\/g, '/') : '';
+        const isMatch = patterns.some((p) => (0, minimatch_1.default)(relative, p, { dot: true }));
+        return isMatch ? setBit(f) : f;
+    });
 }
 function toFileUri(filePath) {
     const match = filePath.match(/^([a-z])\:(.*)$/i);
@@ -151,11 +149,16 @@ function cleanNodeModules(rulePath) {
         .split(/\r?\n/g)
         .map(line => line.trim())
         .filter(line => line && !/^#/.test(line));
-    const excludes = rules.filter(line => !/^!/.test(line)).map(line => `!**/node_modules/${line}`);
-    const includes = rules.filter(line => /^!/.test(line)).map(line => `**/node_modules/${line.substr(1)}`);
-    const input = event_stream_1.default.through();
-    const output = event_stream_1.default.merge(input.pipe((0, gulp_filter_1.default)(['**', ...excludes])), input.pipe((0, gulp_filter_1.default)(includes)));
-    return event_stream_1.default.duplex(input, output);
+    const excludes = rules.filter(line => !/^!/.test(line)).map(line => `**/node_modules/${line}`);
+    const includes = rules.filter(line => /^!/.test(line)).map(line => `**/node_modules/${line.slice(1)}`);
+    return event_stream_1.default.through(function (f) {
+        const relative = f.relative ? f.relative.replace(/\\/g, '/') : '';
+        const isIncluded = includes.some((p) => (0, minimatch_1.default)(relative, p, { dot: true }));
+        const isExcluded = excludes.some((p) => (0, minimatch_1.default)(relative, p, { dot: true }));
+        if (!isExcluded || isIncluded) {
+            this.emit('data', f);
+        }
+    });
 }
 function loadSourcemaps() {
     const input = event_stream_1.default.through();
@@ -282,9 +285,10 @@ function ensureDir(dirPath) {
     fs_1.default.mkdirSync(dirPath);
 }
 function rebase(count) {
-    return (0, gulp_rename_1.default)(f => {
+    return event_stream_1.default.mapSync((f) => {
         const parts = f.dirname ? f.dirname.split(/[\/\\]/) : [];
         f.dirname = parts.slice(count).join(path_1.default.sep);
+        return f;
     });
 }
 function filter(fn) {

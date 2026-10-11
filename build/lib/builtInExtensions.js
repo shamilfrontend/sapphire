@@ -47,7 +47,6 @@ const path_1 = __importDefault(require("path"));
 const os_1 = __importDefault(require("os"));
 const rimraf_1 = __importDefault(require("rimraf"));
 const event_stream_1 = __importDefault(require("event-stream"));
-const gulp_rename_1 = __importDefault(require("gulp-rename"));
 const vinyl_fs_1 = __importDefault(require("vinyl-fs"));
 const ext = __importStar(require("./extensions"));
 const fancy_log_1 = __importDefault(require("fancy-log"));
@@ -62,6 +61,12 @@ function log(...messages) {
     if (ENABLE_LOGGING) {
         (0, fancy_log_1.default)(...messages);
     }
+}
+function remapDirname(mapper) {
+    return event_stream_1.default.mapSync((f) => {
+        f.dirname = mapper(f.dirname || '');
+        return f;
+    });
 }
 function getExtensionPath(extension) {
     return path_1.default.join(root, '.build', 'builtInExtensions', extension.name);
@@ -91,14 +96,14 @@ function getExtensionDownloadStream(extension) {
     else {
         input = ext.fromGithub(extension);
     }
-    return input.pipe((0, gulp_rename_1.default)(p => p.dirname = `${extension.name}/${p.dirname}`));
+    return input.pipe(remapDirname((dirname) => `${extension.name}/${dirname}`));
 }
 function getExtensionStream(extension) {
     // if the extension exists on disk, use those files instead of downloading anew
     if (isUpToDate(extension)) {
         log('[extensions]', `${extension.name}@${extension.version} up to date`, ansi_colors_1.default.green('✔︎'));
         return vinyl_fs_1.default.src(['**'], { cwd: getExtensionPath(extension), dot: true })
-            .pipe((0, gulp_rename_1.default)(p => p.dirname = `${extension.name}/${p.dirname}`));
+            .pipe(remapDirname((dirname) => `${extension.name}/${dirname}`));
     }
     return getExtensionDownloadStream(extension);
 }

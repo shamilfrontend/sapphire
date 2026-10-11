@@ -26,8 +26,8 @@
     }
   },
   "scripts": {
-    "compile": "npx gulp compile-extension:html-language-features-client compile-extension:html-language-features-server",
-    "watch": "npx gulp watch-extension:html-language-features-client watch-extension:html-language-features-server",
+    "compile": "node ../../scripts/build/main.mjs run compile-extension:html-language-features-client compile-extension:html-language-features-server",
+    "watch": "node ../../scripts/build/main.mjs run watch-extension:html-language-features-client watch-extension:html-language-features-server",
     "install-client-next": "npm install vscode-languageclient@next"
   },
   "categories": [

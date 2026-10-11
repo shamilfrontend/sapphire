@@ -23,8 +23,8 @@
   ],
   "main": "./out/extension",
   "scripts": {
-    "compile": "gulp compile-extension:debug-server-ready",
-    "watch": "gulp watch-extension:debug-server-ready"
+    "compile": "node ../../scripts/build/main.mjs run compile-extension:debug-server-ready",
+    "watch": "node ../../scripts/build/main.mjs run watch-extension:debug-server-ready"
   },
   "contributes": {
     "debuggers": [

@@ -129,7 +129,7 @@ steps:
         retryCountOnTaskFailure: 3
 
   - ${{ if eq(parameters.VSCODE_QUALITY, 'oss') }}:
-      - powershell: npm run gulp "transpile-client-esbuild" "transpile-extensions"
+      - powershell: npm run build:task -- "transpile-client-esbuild" "transpile-extensions"
         env:
           GITHUB_TOKEN: '$(github-distro-mixin-password)'
         displayName: Transpile client and extensions
@@ -142,8 +142,8 @@ steps:
       - powershell: |
           . build/azure-pipelines/win32/exec.ps1
           $ErrorActionPreference = "Stop"
-          exec { npm run gulp "vscode-win32-$(VSCODE_ARCH)-min-ci" }
-          exec { npm run gulp "vscode-win32-$(VSCODE_ARCH)-inno-updater" }
+          exec { npm run build:task -- "vscode-win32-$(VSCODE_ARCH)-min-ci" }
+          exec { npm run build:task -- "vscode-win32-$(VSCODE_ARCH)-inno-updater" }
           echo "##vso[task.setvariable variable=BUILT_CLIENT]true"
           echo "##vso[task.setvariable variable=CodeSigningFolderPath]$(Agent.BuildDirectory)/VSCode-win32-$(VSCODE_ARCH)"
         env:
@@ -153,7 +153,7 @@ steps:
       - powershell: |
           . build/azure-pipelines/win32/exec.ps1
           $ErrorActionPreference = "Stop"
-          exec { npm run gulp "vscode-reh-win32-$(VSCODE_ARCH)-min-ci" }
+          exec { npm run build:task -- "vscode-reh-win32-$(VSCODE_ARCH)-min-ci" }
           mv ..\vscode-reh-win32-$(VSCODE_ARCH) ..\vscode-server-win32-$(VSCODE_ARCH) # TODO@joaomoreno
           echo "##vso[task.setvariable variable=BUILT_SERVER]true"
           echo "##vso[task.setvariable variable=CodeSigningFolderPath]$(CodeSigningFolderPath),$(Agent.BuildDirectory)/vscode-server-win32-$(VSCODE_ARCH)"
@@ -164,7 +164,7 @@ steps:
       - powershell: |
           . build/azure-pipelines/win32/exec.ps1
           $ErrorActionPreference = "Stop"
-          exec { npm run gulp "vscode-reh-web-win32-$(VSCODE_ARCH)-min-ci" }
+          exec { npm run build:task -- "vscode-reh-web-win32-$(VSCODE_ARCH)-min-ci" }
           mv ..\vscode-reh-web-win32-$(VSCODE_ARCH) ..\vscode-server-win32-$(VSCODE_ARCH)-web # TODO@joaomoreno
           echo "##vso[task.setvariable variable=BUILT_WEB]true"
         env:
@@ -294,7 +294,7 @@ steps:
           - powershell: |
               . build/azure-pipelines/win32/exec.ps1
               $ErrorActionPreference = "Stop"
-              exec { npm exec -- npm-run-all -lp "gulp vscode-win32-$(VSCODE_ARCH)-system-setup -- --sign" "gulp vscode-win32-$(VSCODE_ARCH)-user-setup -- --sign"  }
+              exec { npm exec -- npm-run-all -lp "build:task -- vscode-win32-$(VSCODE_ARCH)-system-setup -- --sign" "build:task -- vscode-win32-$(VSCODE_ARCH)-user-setup -- --sign"  }
 
               $SystemSetupPath = ".build\win32-$(VSCODE_ARCH)\system-setup\VSCodeSetup-$(VSCODE_ARCH)-$(VSCODE_VERSION).exe"
               $UserSetupPath = ".build\win32-$(VSCODE_ARCH)\user-setup\VSCodeUserSetup-$(VSCODE_ARCH)-$(VSCODE_VERSION).exe"

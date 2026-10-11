@@ -20,8 +20,8 @@
     "@types/node": "20.x"
   },
   "scripts": {
-    "compile": "gulp compile-extension:css-language-features-server",
-    "watch": "gulp watch-extension:css-language-features-server",
+    "compile": "node ../../../scripts/build/main.mjs run compile-extension:css-language-features-server",
+    "watch": "node ../../../scripts/build/main.mjs run watch-extension:css-language-features-server",
     "install-service-next": "npm install vscode-css-languageservice",
     "install-service-local": "npm link vscode-css-languageservice",
     "install-server-next": "npm install vscode-languageserver@next",

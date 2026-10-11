@@ -129,7 +129,7 @@ steps:
   - ${{ if ne(parameters.VSCODE_QUALITY, 'oss') }}:
       - script: |
           set -e
-          npm run gulp vscode-darwin-$(VSCODE_ARCH)-min-ci
+          npm run build:task -- vscode-darwin-$(VSCODE_ARCH)-min-ci
           echo "##vso[task.setvariable variable=BUILT_CLIENT]true"
         env:
           GITHUB_TOKEN: '$(github-distro-mixin-password)'
@@ -137,7 +137,7 @@ steps:
 
       - script: |
           set -e
-          npm run gulp vscode-reh-darwin-$(VSCODE_ARCH)-min-ci
+          npm run build:task -- vscode-reh-darwin-$(VSCODE_ARCH)-min-ci
           mv ../vscode-reh-darwin-$(VSCODE_ARCH) ../vscode-server-darwin-$(VSCODE_ARCH) # TODO@joaomoreno
           ARCHIVE_PATH=".build/darwin/server/vscode-server-darwin-$(VSCODE_ARCH).zip"
           mkdir -p $(dirname $ARCHIVE_PATH)
@@ -149,7 +149,7 @@ steps:
 
       - script: |
           set -e
-          npm run gulp vscode-reh-web-darwin-$(VSCODE_ARCH)-min-ci
+          npm run build:task -- vscode-reh-web-darwin-$(VSCODE_ARCH)-min-ci
           mv ../vscode-reh-web-darwin-$(VSCODE_ARCH) ../vscode-server-darwin-$(VSCODE_ARCH)-web # TODO@joaomoreno
           ARCHIVE_PATH=".build/darwin/server/vscode-server-darwin-$(VSCODE_ARCH)-web.zip"
           mkdir -p $(dirname $ARCHIVE_PATH)
@@ -160,7 +160,7 @@ steps:
         displayName: Build server (web)
 
   - ${{ else }}:
-      - script: npm run gulp transpile-client-esbuild transpile-extensions
+      - script: npm run build:task -- transpile-client-esbuild transpile-extensions
         env:
           GITHUB_TOKEN: '$(github-distro-mixin-password)'
         displayName: Transpile
