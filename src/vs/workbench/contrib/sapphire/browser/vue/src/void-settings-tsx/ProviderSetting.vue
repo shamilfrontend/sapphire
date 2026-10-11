@@ -110,7 +110,7 @@ const inputValue = computed(() => (saveOnButton ? draftValue.value : settingValu
             :value="inputValue"
             :placeholder="`${settingTitle} (${placeholder})`"
             :passwordBlur="isPasswordField"
-            :compact="true"
+            :compact="false"
             @changeValue="handleChangeValue"
             @keydown="onInputKeyDown"
           />

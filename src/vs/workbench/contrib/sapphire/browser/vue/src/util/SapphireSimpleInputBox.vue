@@ -68,13 +68,29 @@ const handleInput = (e: Event) => {
   emit('changeValue', target.value);
 };
 
-const inputClass = computed(
-  () =>
-    `w-full resize-none bg-void-bg-1 text-void-fg-1 placeholder:text-void-fg-3 border border-void-border-2 focus:border-void-border-1
-				${props.compact ? 'py-1 px-2' : 'py-2 px-4 '}
-				rounded
-				${props.disabled ? 'opacity-50 cursor-not-allowed' : ''}`,
-);
+const inputClass = computed(() => {
+  const spacingClass = props.compact ? 'py-1 px-2' : 'py-2 px-4';
+  const disabledClass = props.disabled ? 'opacity-50 cursor-not-allowed' : '';
+  return [
+    'w-full',
+    'min-h-[32px]',
+    'appearance-none',
+    'resize-none',
+    'rounded-sm',
+    'border',
+    'border-void-border-2',
+    'bg-void-bg-1',
+    'text-void-fg-1',
+    'placeholder:text-void-fg-3',
+    'transition-colors',
+    'focus:outline-none',
+    'focus:border-void-border-1',
+    spacingClass,
+    disabledClass,
+  ]
+    .filter(Boolean)
+    .join(' ');
+});
 
 const inputStyle = computed((): CSSProperties & { WebkitTextSecurity?: 'disc' } => ({
   ...(props.passwordBlur ? { WebkitTextSecurity: 'disc' as const } : {}),

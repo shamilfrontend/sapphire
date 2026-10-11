@@ -7,10 +7,11 @@
 import { computed, ref } from 'vue';
 import { Asterisk, Settings as SettingsIcon } from 'lucide-vue-next';
 import {
+  cloudProviderNames,
+  localProviderNames,
   ProviderName,
   SapphireStatefulModelInfo,
   displayInfoOfProviderName,
-  providerNames,
 } from '../../../../common/sapphireSettingsTypes.js';
 import SapphireSwitch from '../util/SapphireSwitch.vue';
 import { useAccessor, useSettingsState } from '../util/services.js';
@@ -26,40 +27,66 @@ const accessor = useAccessor();
 const settingsStateService = accessor.get('ISapphireSettingsService');
 const settingsState = useSettingsState();
 
-// Какая модель открыта в диалоге расширенных настроек
 const openSettingsModel = ref<OpenModel | null>(null);
 
-// Плоский список моделей всех провайдеров с флагом доступности
-const modelDump = computed(() => {
-  const rows: (SapphireStatefulModelInfo & {
-    providerName: ProviderName;
-    providerEnabled: boolean;
-  })[] = [];
-  const state = settingsState.value;
+type ModelRow = SapphireStatefulModelInfo & {
+  providerName: ProviderName;
+};
 
-  for (const providerName of providerNames) {
-    const providerSettings = state.settingsOfProvider[providerName];
-    rows.push(
-      ...providerSettings.models.map((model) => ({
+type ModelProviderGroup = {
+  providerName: ProviderName;
+  providerTitle: string;
+  rows: ModelRow[];
+};
+
+type ModelSection = {
+  id: 'cloud' | 'local';
+  title: string;
+  providers: ModelProviderGroup[];
+};
+
+const modelSections = computed<ModelSection[]>(() => {
+  const state = settingsState.value;
+  const providersBySection = [
+    { id: 'cloud' as const, title: 'Облачные', providerNames: cloudProviderNames },
+    { id: 'local' as const, title: 'Локальные', providerNames: localProviderNames },
+  ];
+
+  const sections: ModelSection[] = [];
+
+  for (const section of providersBySection) {
+    const providerGroups: ModelProviderGroup[] = [];
+
+    for (const providerName of section.providerNames) {
+      const providerSettings = state.settingsOfProvider[providerName];
+      if (!providerSettings._didFillInProviderSettings) continue;
+
+      const rows = providerSettings.models.map((model) => ({
         ...model,
         providerName,
-        providerEnabled: !!providerSettings._didFillInProviderSettings,
-      })),
-    );
+      }));
+      if (rows.length === 0) continue;
+
+      providerGroups.push({
+        providerName,
+        providerTitle: providerTitleOf(providerName),
+        rows,
+      });
+    }
+
+    if (providerGroups.length > 0) {
+      sections.push({
+        id: section.id,
+        title: section.title,
+        providers: providerGroups,
+      });
+    }
   }
 
-  // Сначала модели от подключённых провайдеров
-  rows.sort((a, b) => Number(b.providerEnabled) - Number(a.providerEnabled));
-  return rows;
+  return sections;
 });
 
 const providerTitleOf = (providerName: ProviderName) => displayInfoOfProviderName(providerName).title;
-
-const isNewProviderName = (index: number) => {
-  const rows = modelDump.value;
-  const providerName = rows[index]?.providerName;
-  return (index > 0 ? rows[index - 1] : undefined)?.providerName !== providerName;
-};
 
 const hasOverrides = (providerName: ProviderName, modelName: string) =>
   !!settingsState.value.overridesOfModel?.[providerName]?.[modelName];
@@ -67,81 +94,79 @@ const hasOverrides = (providerName: ProviderName, modelName: string) =>
 
 <template>
   <div>
-    <div v-for="(m, i) in modelDump" :key="`${m.modelName}${m.providerName}`">
-      <div v-if="isNewProviderName(i)" class="text-sm text-void-fg-3 px-3 pt-4 pb-1">
-        {{ providerTitleOf(m.providerName) }}
-      </div>
-      <div
-        class="flex items-center justify-between gap-4 hover:bg-black/10 dark:hover:bg-gray-300/10 py-1 px-3 rounded-sm overflow-hidden cursor-default truncate group"
-      >
-        <!-- Левая часть — имя модели, flex-grow -->
-        <div class="flex flex-grow items-center gap-4 min-w-0">
-          <span class="w-fit max-w-[400px] truncate">{{ m.modelName }}</span>
-        </div>
-
-        <!-- Правая часть — иконки и переключатель -->
-        <div class="flex items-center gap-2 w-fit">
-          <!-- Шестерёнка: скрыта, если провайдер не настроен -->
-          <div v-if="m.providerEnabled" class="w-5 flex items-center justify-center">
-            <button
-              data-tooltip-id="sapphire-tooltip"
-              data-tooltip-place="right"
-              data-tooltip-content="Расширенные настройки"
-              class="transition-opacity"
-              :class="
-                hasOverrides(m.providerName, m.modelName) ? '' : 'opacity-0 group-hover:opacity-100'
-              "
-              @click="
-                openSettingsModel = {
-                  modelName: m.modelName,
-                  providerName: m.providerName,
-                  type: m.type,
-                }
-              "
-            >
-              <SettingsIcon :size="14" class="text-void-fg-3 opacity-70" />
-            </button>
-          </div>
-
-          <!-- Маркер autodetected / custom -->
-          <Asterisk
-            v-if="m.type === 'autodetected'"
-            :size="14"
-            class="inline-block align-text-top brightness-115 stroke-[2] text-[#00b0cc]"
-            data-tooltip-id="sapphire-tooltip"
-            data-tooltip-place="right"
-            data-tooltip-content="Обнаружена автоматически"
-          />
-          <Asterisk
-            v-else-if="m.type === 'custom'"
-            :size="14"
-            class="inline-block align-text-top brightness-115 stroke-[2] text-[#00b0cc]"
-            data-tooltip-id="sapphire-tooltip"
-            data-tooltip-place="right"
-            data-tooltip-content="Пользовательская модель"
-          />
-
-          <!-- Показать/скрыть в списках выбора модели -->
-          <SapphireSwitch
-            :value="m.providerEnabled ? !m.isHidden : false"
-            :disabled="!m.providerEnabled"
-            size="sm"
-            data-tooltip-id="sapphire-tooltip"
-            data-tooltip-place="right"
-            :data-tooltip-content="
-              !m.providerEnabled
-                ? `Подключите ${providerTitleOf(m.providerName)}, чтобы включить`
-                : m.providerEnabled && !m.isHidden
-                  ? 'Показывать в списке'
-                  : 'Скрыть из списка'
-            "
-            @change="settingsStateService.toggleModelHidden(m.providerName, m.modelName)"
-          />
-        </div>
-      </div>
+    <div v-if="modelSections.length === 0" class="text-sm text-void-fg-3 px-3 py-2">
+      Нет моделей у подключённых провайдеров.
     </div>
+    <section v-for="section in modelSections" :key="section.id" class="mb-4">
+      <h3 class="text-sm uppercase tracking-wide text-void-fg-3 px-3 pt-2 pb-1">{{ section.title }}</h3>
 
-    <!-- Диалог переопределений модели -->
+      <div v-for="provider in section.providers" :key="provider.providerName">
+        <div class="text-sm text-void-fg-3 px-3 pt-4 pb-1">
+          {{ provider.providerTitle }}
+        </div>
+        <div v-for="m in provider.rows" :key="`${m.modelName}${m.providerName}`">
+          <div
+            class="flex items-center justify-between gap-4 hover:bg-black/10 dark:hover:bg-gray-300/10 py-1 px-3 rounded-sm overflow-hidden cursor-default truncate group"
+          >
+            <div class="flex flex-grow items-center gap-4 min-w-0">
+              <span class="w-fit max-w-[400px] truncate">{{ m.modelName }}</span>
+            </div>
+
+            <div class="flex items-center gap-2 w-fit">
+              <div class="w-5 flex items-center justify-center">
+                <button
+                  data-tooltip-id="sapphire-tooltip"
+                  data-tooltip-place="right"
+                  data-tooltip-content="Расширенные настройки"
+                  class="transition-opacity"
+                  :class="
+                    hasOverrides(m.providerName, m.modelName)
+                      ? ''
+                      : 'opacity-0 group-hover:opacity-100'
+                  "
+                  @click="
+                    openSettingsModel = {
+                      modelName: m.modelName,
+                      providerName: m.providerName,
+                      type: m.type,
+                    }
+                  "
+                >
+                  <SettingsIcon :size="14" class="text-void-fg-3 opacity-70" />
+                </button>
+              </div>
+
+              <Asterisk
+                v-if="m.type === 'autodetected'"
+                :size="14"
+                class="inline-block align-text-top brightness-115 stroke-[2] text-[#00b0cc]"
+                data-tooltip-id="sapphire-tooltip"
+                data-tooltip-place="right"
+                data-tooltip-content="Обнаружена автоматически"
+              />
+              <Asterisk
+                v-else-if="m.type === 'custom'"
+                :size="14"
+                class="inline-block align-text-top brightness-115 stroke-[2] text-[#00b0cc]"
+                data-tooltip-id="sapphire-tooltip"
+                data-tooltip-place="right"
+                data-tooltip-content="Пользовательская модель"
+              />
+
+              <SapphireSwitch
+                :value="!m.isHidden"
+                size="sm"
+                data-tooltip-id="sapphire-tooltip"
+                data-tooltip-place="right"
+                :data-tooltip-content="!m.isHidden ? 'Показывать в списке' : 'Скрыть из списка'"
+                @change="settingsStateService.toggleModelHidden(m.providerName, m.modelName)"
+              />
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
     <SimpleModelSettingsDialog
       v-if="openSettingsModel"
       :modelInfo="openSettingsModel"

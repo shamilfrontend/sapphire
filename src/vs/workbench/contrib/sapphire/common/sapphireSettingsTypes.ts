@@ -16,6 +16,59 @@ type UnionOfKeys<T> = T extends T ? keyof T : never;
 
 export type ProviderName = keyof typeof defaultProviderSettings;
 export const providerNames = Object.keys(defaultProviderSettings) as ProviderName[];
+export type ProviderCategory = 'cloud' | 'local';
+
+/** Провайдеры, которые не показываем в текущем UI настроек. */
+export const hiddenProviderNamesInSettings = [
+  'googleVertex',
+  'microsoftAzure',
+  'awsBedrock',
+] as const satisfies readonly ProviderName[];
+
+/** Видимые облачные провайдеры в порядке отображения (DeepSeek первым). */
+export const cloudProviderNames = [
+  'deepseek',
+  'anthropic',
+  'openAI',
+  'openRouter',
+  'gemini',
+  'groq',
+  'xAI',
+  'mistral',
+] as const satisfies readonly ProviderName[];
+
+/** Видимые локальные/кастомные endpoint-провайдеры в порядке отображения. */
+export const localProviderNames = [
+  'ollama',
+  'vLLM',
+  'lmStudio',
+  'openAICompatible',
+  'liteLLM',
+] as const satisfies readonly ProviderName[];
+
+export const visibleProviderNames = [
+  ...cloudProviderNames,
+  ...localProviderNames,
+] as const satisfies readonly ProviderName[];
+
+export const providerCategoryByName: Record<ProviderName, ProviderCategory> = {
+  anthropic: 'cloud',
+  openAI: 'cloud',
+  deepseek: 'cloud',
+  ollama: 'local',
+  vLLM: 'local',
+  openRouter: 'cloud',
+  openAICompatible: 'local',
+  gemini: 'cloud',
+  groq: 'cloud',
+  xAI: 'cloud',
+  mistral: 'cloud',
+  lmStudio: 'local',
+  liteLLM: 'local',
+  googleVertex: 'cloud',
+  microsoftAzure: 'cloud',
+  awsBedrock: 'cloud',
+};
 
 type CustomSettingName = UnionOfKeys<(typeof defaultProviderSettings)[ProviderName]>;
 type CustomProviderSettings<providerName extends ProviderName> = {

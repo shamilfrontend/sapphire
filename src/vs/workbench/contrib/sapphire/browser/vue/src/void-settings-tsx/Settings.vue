@@ -5,7 +5,12 @@
  *--------------------------------------------------------------------------------------*/
 
 import { computed, ref } from 'vue';
-import { displayInfoOfFeatureName, LayoutMode, providerNames } from '../../../../common/sapphireSettingsTypes.js';
+import {
+  cloudProviderNames,
+  displayInfoOfFeatureName,
+  LayoutMode,
+  localProviderNames,
+} from '../../../../common/sapphireSettingsTypes.js';
 import { LLM_IDE_TITLE } from '../../../../common/llmProviderConfig.js';
 import ErrorBoundary from '../sidebar-tsx/ErrorBoundary.vue';
 import SapphireButtonBgDarken from '../util/SapphireButtonBgDarken.vue';
@@ -66,6 +71,11 @@ Use Model Context Protocol to provide Agent mode with more tools.
 const revealMcpConfig = async () => {
   await mcpService.revealMCPConfigFile();
 };
+
+const providerSections = [
+  { id: 'cloud', title: 'Облачные', providers: cloudProviderNames },
+  { id: 'local', title: 'Локальные', providers: localProviderNames },
+] as const;
 </script>
 
 <template>
@@ -143,14 +153,23 @@ const revealMcpConfig = async () => {
               У каждого провайдера свой ключ или адрес. {{ LLM_IDE_TITLE }} отправляет запросы только
               на выбранный endpoint.
             </p>
-            <div class="flex flex-col gap-8">
-              <SettingsForProvider
-                v-for="providerName in providerNames"
-                :key="providerName"
-                :providerName="providerName"
-                :showProviderTitle="true"
-                :showProviderSuggestions="true"
-              />
+            <div class="flex flex-col gap-10">
+              <section
+                v-for="section in providerSections"
+                :key="section.id"
+                class="flex flex-col gap-6"
+              >
+                <h3 class="text-sm uppercase tracking-wide text-void-fg-3">{{ section.title }}</h3>
+                <div class="flex flex-col gap-8">
+                  <SettingsForProvider
+                    v-for="providerName in section.providers"
+                    :key="providerName"
+                    :providerName="providerName"
+                    :showProviderTitle="true"
+                    :showProviderSuggestions="true"
+                  />
+                </div>
+              </section>
             </div>
           </ErrorBoundary>
         </div>

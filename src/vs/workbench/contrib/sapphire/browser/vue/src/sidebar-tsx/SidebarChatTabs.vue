@@ -50,6 +50,22 @@ const historyRef = ref<HTMLDivElement | null>(null);
 const tabRefs = ref<Record<string, HTMLDivElement | null>>({});
 const historyVisible = computed(() => props.showHistoryButton ?? props.variant !== 'agents');
 const settingsActive = computed(() => !!props.settingsTab?.active);
+const isAgentsVariant = computed(() => props.variant === 'agents');
+
+const tabsRootClass = computed(() =>
+  `relative flex items-stretch gap-1 w-full h-8 px-1.5 select-none border-b ${
+    isAgentsVariant.value ? 'bg-[var(--void-header-bg)] border-void-border-2' : 'bg-void-bg-2 border-void-border-4'
+  }`,
+);
+
+const tabClass = (isActive: boolean) =>
+  `group flex items-center gap-1.5 max-w-[160px] h-full pl-2 pr-1 text-xs shrink-0 cursor-pointer transition-colors border-b-2 ${
+    isActive
+      ? isAgentsVariant.value
+        ? 'border-transparent text-void-fg-0 font-medium bg-[var(--void-content-bg)]'
+        : 'border-void-ring-color text-void-fg-0 font-medium bg-void-bg-1'
+      : 'border-transparent text-void-fg-3 hover:bg-void-bg-2-hover hover:text-void-fg-2'
+  }`;
 
 const setTabRef = (id: string, el: unknown) => {
   tabRefs.value[id] = el instanceof HTMLDivElement ? el : null;
@@ -143,12 +159,7 @@ const onSettingsKeyDown = (e: KeyboardEvent) => {
 </script>
 
 <template>
-  <div
-    :class="`relative flex items-stretch gap-1 w-full h-8 px-1.5 select-none ${
-      variant === 'agents' ? 'bg-[var(--void-header-bg)]' : 'bg-void-bg-2'
-    }`"
-  >
-    <div class="pointer-events-none absolute inset-x-0 bottom-0 z-0 h-px bg-void-border-4" />
+  <div :class="tabsRootClass">
     <div class="relative z-10 flex items-stretch gap-0.5 min-w-0 flex-1 overflow-x-auto">
       <div
         v-for="threadId in openThreadIds"
@@ -157,13 +168,7 @@ const onSettingsKeyDown = (e: KeyboardEvent) => {
         role="tab"
         tabindex="0"
         :aria-selected="threadId === currentThreadId && !settingsActive"
-        :class="`
-								group flex items-center gap-1.5 max-w-[160px] h-full pl-2 pr-1 border-b-2 text-xs shrink-0 cursor-pointer
-								transition-colors
-								${threadId === currentThreadId && !settingsActive ? 'border-void-ring-color text-void-fg-0 font-medium' : 'border-transparent text-void-fg-3 hover:bg-void-bg-2-hover hover:text-void-fg-2'}
-								${threadId === currentThreadId && !settingsActive && variant === 'agents' ? 'bg-[var(--void-content-bg)]' : ''}
-								${threadId === currentThreadId && !settingsActive && variant !== 'agents' ? 'bg-void-bg-1' : ''}
-							`"
+        :class="tabClass(threadId === currentThreadId && !settingsActive)"
         @mousedown="onTabMouseDown($event, threadId)"
         @click="selectThread(threadId)"
         @keydown="onTabKeyDown($event, threadId)"
@@ -199,13 +204,7 @@ const onSettingsKeyDown = (e: KeyboardEvent) => {
         role="tab"
         tabindex="0"
         :aria-selected="settingsActive"
-        :class="`
-							group flex items-center gap-1.5 max-w-[160px] h-full pl-2 pr-1 border-b-2 text-xs shrink-0 cursor-pointer
-							transition-colors
-							${settingsActive ? 'border-void-ring-color text-void-fg-0 font-medium' : 'border-transparent text-void-fg-3 hover:bg-void-bg-2-hover hover:text-void-fg-2'}
-							${settingsActive && variant === 'agents' ? 'bg-[var(--void-content-bg)]' : ''}
-							${settingsActive && variant !== 'agents' ? 'bg-void-bg-1' : ''}
-						`"
+        :class="tabClass(settingsActive)"
         @mousedown="onSettingsMouseDown"
         @click="onActivateSettings?.()"
         @keydown="onSettingsKeyDown"
