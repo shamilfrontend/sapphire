@@ -16,7 +16,7 @@ const packageJsonMarkerId = 'BUILD_INSERT_PACKAGE_CONFIGURATION';
 // are done to the product configuration during build. There are
 // at least 2 more changes that kick in very late:
 // - a `darwinUniversalAssetId` is added in`create-universal-app.ts`
-// - a `target` is added in `gulpfile.vscode.win32.js`
+// - a `target` is added by the Windows packaging pipeline
 // const productJsonMarkerId = 'BUILD_INSERT_PRODUCT_CONFIGURATION';
 function inlineMeta(result, ctx) {
     return result.pipe(event_stream_1.default.through(function (file) {

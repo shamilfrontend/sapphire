@@ -9,7 +9,6 @@ let i18n = require("../lib/i18n");
 let fs = require("fs");
 let path = require("path");
 
-let gulp = require('gulp');
 let vfs = require("vinyl-fs");
 let rimraf = require('rimraf');
 let minimist = require('minimist');
@@ -71,7 +70,7 @@ function update(options) {
 
 		console.log(`Importing translations for ${languageId} form '${location}' to '${translationDataFolder}' ...`);
 		let translationPaths = [];
-		gulp.src([
+		vfs.src([
 			path.join(location, '**', languageId, '*.xlf'),
 			...i18n.EXTERNAL_EXTENSIONS.map(extensionId => path.join(externalExtensionsLocation, extensionId, languageId, '*-new.xlf'))
 		], { silent: false })

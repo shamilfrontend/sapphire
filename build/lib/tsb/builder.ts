@@ -71,7 +71,7 @@ export function createTypeScriptBuilder(
   host.getCompilationSettings().declaration = true;
 
   function file(file: Vinyl): void {
-    // support gulp-sourcemaps
+    // support pre-populated sourcemaps from upstream stream transforms
     if ((<any>file).sourceMap) {
       emitSourceMapsInStream = false;
     }

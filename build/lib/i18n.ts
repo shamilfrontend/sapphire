@@ -6,11 +6,10 @@
 import path from 'path';
 import fs from 'fs';
 
-import { map, merge, through, ThroughStream } from 'event-stream';
-import jsonMerge from 'gulp-merge-json';
+import { merge, through, ThroughStream } from 'event-stream';
 import File from 'vinyl';
+import vfs from 'vinyl-fs';
 import xml2js from 'xml2js';
-import gulp from 'gulp';
 import fancyLog from 'fancy-log';
 import ansiColors from 'ansi-colors';
 import iconv from '@vscode/iconv-lite-umd';
@@ -551,76 +550,107 @@ function createL10nBundleForExtension(
   prefixWithBuildFolder: boolean,
 ): NodeJS.ReadWriteStream {
   const prefix = prefixWithBuildFolder ? '.build/' : '';
-  return gulp
-    .src([
-      // For source code of extensions
-      `${prefix}extensions/${extensionFolderName}/{src,client,server}/**/*.{ts,tsx}`,
-      // // For any dependencies pulled in (think vscode-css-languageservice or @vscode/emmet-helper)
-      `${prefix}extensions/${extensionFolderName}/**/node_modules/{@vscode,vscode-*}/**/*.{js,jsx}`,
-      // // For any dependencies pulled in that bundle @vscode/l10n. They needed to export the bundle
-      `${prefix}extensions/${extensionFolderName}/**/bundle.l10n.json`,
-    ])
-    .pipe(
-      map((data, callback) => {
-        const file = data as File;
-        if (!file.isBuffer()) {
-          // Not a buffer so we drop it
-          callback();
-          return;
-        }
-        const extension = path.extname(file.relative);
-        if (extension !== '.json') {
-          const contents = file.contents.toString('utf8');
-          getL10nJson([{ contents, extension }])
-            .then((json) => {
-              callback(
-                undefined,
-                new File({
-                  path: `extensions/${extensionFolderName}/bundle.l10n.json`,
-                  contents: Buffer.from(JSON.stringify(json), 'utf8'),
-                }),
-              );
-            })
-            .catch((err) => {
-              callback(new Error(`File ${file.relative} threw an error when parsing: ${err}`));
-            });
-          // signal pause?
-          return false;
-        }
+  const bundlePath = `extensions/${extensionFolderName}/bundle.l10n.json`;
+  const mergedBundle: l10nJsonFormat = Object.create(null);
+  let pendingParsers = 0;
+  let streamEnded = false;
+  let hasContent = false;
 
-        // for bundle.l10n.jsons
-        let bundleJson;
-        try {
-          bundleJson = JSON.parse(file.contents.toString('utf8'));
-        } catch (err) {
-          callback(new Error(`File ${file.relative} threw an error when parsing: ${err}`));
-          return;
-        }
+  const mergeBundle = (data: l10nJsonFormat): void => {
+    for (const key of Object.keys(data)) {
+      mergedBundle[key] = data[key];
+      hasContent = true;
+    }
+  };
 
-        // some validation of the bundle.l10n.json format
-        for (const key in bundleJson) {
-          if (
-            typeof bundleJson[key] !== 'string' &&
-            (typeof bundleJson[key].message !== 'string' || !Array.isArray(bundleJson[key].comment))
-          ) {
-            callback(
-              new Error(
-                `Invalid bundle.l10n.json file. The value for key ${key} is not in the expected format.`,
-              ),
-            );
-            return;
-          }
-        }
+  const flushIfDone = (stream: ThroughStream): void => {
+    if (!streamEnded || pendingParsers > 0) {
+      return;
+    }
 
-        callback(undefined, file);
-      }),
+    if (hasContent) {
+      stream.queue(
+        new File({
+          path: bundlePath,
+          contents: Buffer.from(JSON.stringify(mergedBundle), 'utf8'),
+        }),
+      );
+    }
+
+    stream.queue(null);
+  };
+
+  return vfs
+    .src(
+      [
+        // For source code of extensions
+        `${prefix}extensions/${extensionFolderName}/{src,client,server}/**/*.{ts,tsx}`,
+        // // For any dependencies pulled in (think vscode-css-languageservice or @vscode/emmet-helper)
+        `${prefix}extensions/${extensionFolderName}/**/node_modules/{@vscode,vscode-*}/**/*.{js,jsx}`,
+        // // For any dependencies pulled in that bundle @vscode/l10n. They needed to export the bundle
+        `${prefix}extensions/${extensionFolderName}/**/bundle.l10n.json`,
+      ],
+      { allowEmpty: true },
     )
     .pipe(
-      jsonMerge({
-        fileName: `extensions/${extensionFolderName}/bundle.l10n.json`,
-        jsonSpace: '',
-        concatArrays: true,
-      }),
+      through(
+        function (this: ThroughStream, data: File) {
+          const file = data as File;
+          if (!file.isBuffer()) {
+            return;
+          }
+
+          const extension = path.extname(file.relative);
+          if (extension !== '.json') {
+            pendingParsers++;
+            const contents = file.contents.toString('utf8');
+            getL10nJson([{ contents, extension }])
+              .then((json) => {
+                mergeBundle(json);
+              })
+              .catch((err) => {
+                this.emit('error', new Error(`File ${file.relative} threw an error when parsing: ${err}`));
+              })
+              .finally(() => {
+                pendingParsers--;
+                flushIfDone(this);
+              });
+            return;
+          }
+
+          // for bundle.l10n.json files
+          let bundleJson: l10nJsonFormat;
+          try {
+            bundleJson = JSON.parse(file.contents.toString('utf8'));
+          } catch (err) {
+            this.emit('error', new Error(`File ${file.relative} threw an error when parsing: ${err}`));
+            return;
+          }
+
+          // some validation of the bundle.l10n.json format
+          for (const key in bundleJson) {
+            const value = bundleJson[key] as any;
+            if (
+              typeof value !== 'string' &&
+              (typeof value?.message !== 'string' || !Array.isArray(value?.comment))
+            ) {
+              this.emit(
+                'error',
+                new Error(
+                  `Invalid bundle.l10n.json file. The value for key ${key} is not in the expected format.`,
+                ),
+              );
+              return;
+            }
+          }
+
+          mergeBundle(bundleJson);
+        },
+        function (this: ThroughStream) {
+          streamEnded = true;
+          flushIfDone(this);
+        },
+      ),
     );
 }
 
@@ -659,7 +689,7 @@ export function createXlfFilesForExtensions(): ThroughStream {
         return _l10nMap;
       }
       merge(
-        gulp.src(
+        vfs.src(
           [
             `.build/extensions/${extensionFolderName}/package.nls.json`,
             `.build/extensions/${extensionFolderName}/**/nls.metadata.json`,

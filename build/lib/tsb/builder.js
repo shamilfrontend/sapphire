@@ -74,7 +74,7 @@ function createTypeScriptBuilder(config, projectFile, cmd) {
     // always emit declaraction files
     host.getCompilationSettings().declaration = true;
     function file(file) {
-        // support gulp-sourcemaps
+        // support pre-populated sourcemaps from upstream stream transforms
         if (file.sourceMap) {
             emitSourceMapsInStream = false;
         }

@@ -13,7 +13,6 @@ const event_stream_1 = require("event-stream");
 const vinyl_1 = __importDefault(require("vinyl"));
 const source_map_1 = __importDefault(require("source-map"));
 const path_1 = __importDefault(require("path"));
-const gulp_sort_1 = __importDefault(require("gulp-sort"));
 var CollectStepResult;
 (function (CollectStepResult) {
     CollectStepResult[CollectStepResult["Yes"] = 0] = "Yes";
@@ -21,6 +20,18 @@ var CollectStepResult;
     CollectStepResult[CollectStepResult["No"] = 2] = "No";
     CollectStepResult[CollectStepResult["NoAndRecurse"] = 3] = "NoAndRecurse";
 })(CollectStepResult || (CollectStepResult = {}));
+function sortVinylFilesByPath() {
+    const files = [];
+    return (0, event_stream_1.through)(function (file) {
+        files.push(file);
+    }, function () {
+        files.sort((a, b) => a.relative.localeCompare(b.relative));
+        for (const file of files) {
+            this.queue(file);
+        }
+        this.queue(null);
+    });
+}
 function collect(ts, node, fn) {
     const result = [];
     function loop(node) {
@@ -49,7 +60,7 @@ function nls(options) {
     let base;
     const input = (0, event_stream_1.through)();
     const output = input
-        .pipe((0, gulp_sort_1.default)()) // IMPORTANT: to ensure stable NLS metadata generation, we must sort the files because NLS messages are globally extracted and indexed across all files
+        .pipe(sortVinylFilesByPath()) // IMPORTANT: to ensure stable NLS metadata generation, we must sort the files because NLS messages are globally extracted and indexed across all files
         .pipe((0, event_stream_1.through)(function (f) {
         if (!f.sourceMap) {
             return this.emit('error', new Error(`File ${f.relative} does not have sourcemaps.`));

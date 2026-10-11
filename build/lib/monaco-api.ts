@@ -575,11 +575,11 @@ function generateDeclarationFile(
   if (version !== dtsv) {
     if (!version) {
       logErr(
-        `gulp watch restart required. 'monaco.d.ts.recipe' is written before versioning was introduced.`,
+        `'build:task -- watch' restart required. 'monaco.d.ts.recipe' is written before versioning was introduced.`,
       );
     } else {
       logErr(
-        `gulp watch restart required. 'monaco.d.ts.recipe' v${version} does not match runtime v${dtsv}.`,
+        `'build:task -- watch' restart required. 'monaco.d.ts.recipe' v${version} does not match runtime v${dtsv}.`,
       );
     }
     return null;

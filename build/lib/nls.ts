@@ -9,7 +9,6 @@ import { duplex, through } from 'event-stream';
 import File from 'vinyl';
 import sm from 'source-map';
 import path from 'path';
-import sort from 'gulp-sort';
 
 declare class FileSourceMap extends File {
   public sourceMap: sm.RawSourceMap;
@@ -20,6 +19,22 @@ enum CollectStepResult {
   YesAndRecurse,
   No,
   NoAndRecurse,
+}
+
+function sortVinylFilesByPath(): NodeJS.ReadWriteStream {
+  const files: File[] = [];
+  return through(
+    function (this: any, file: File) {
+      files.push(file);
+    },
+    function (this: any) {
+      files.sort((a, b) => a.relative.localeCompare(b.relative));
+      for (const file of files) {
+        this.queue(file);
+      }
+      this.queue(null);
+    },
+  );
 }
 
 function collect(
@@ -63,7 +78,7 @@ export function nls(options: { preserveEnglish: boolean }): NodeJS.ReadWriteStre
   let base: string;
   const input = through();
   const output = input
-    .pipe(sort()) // IMPORTANT: to ensure stable NLS metadata generation, we must sort the files because NLS messages are globally extracted and indexed across all files
+    .pipe(sortVinylFilesByPath()) // IMPORTANT: to ensure stable NLS metadata generation, we must sort the files because NLS messages are globally extracted and indexed across all files
     .pipe(
       through(
         function (f: FileSourceMap) {

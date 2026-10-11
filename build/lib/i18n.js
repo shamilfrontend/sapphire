@@ -18,10 +18,9 @@ exports.prepareIslFiles = prepareIslFiles;
 const path_1 = __importDefault(require("path"));
 const fs_1 = __importDefault(require("fs"));
 const event_stream_1 = require("event-stream");
-const gulp_merge_json_1 = __importDefault(require("gulp-merge-json"));
 const vinyl_1 = __importDefault(require("vinyl"));
+const vinyl_fs_1 = __importDefault(require("vinyl-fs"));
 const xml2js_1 = __importDefault(require("xml2js"));
-const gulp_1 = __importDefault(require("gulp"));
 const fancy_log_1 = __importDefault(require("fancy-log"));
 const ansi_colors_1 = __importDefault(require("ansi-colors"));
 const iconv_lite_umd_1 = __importDefault(require("@vscode/iconv-lite-umd"));
@@ -417,7 +416,30 @@ function createXlfFilesForCoreBundle() {
 }
 function createL10nBundleForExtension(extensionFolderName, prefixWithBuildFolder) {
     const prefix = prefixWithBuildFolder ? '.build/' : '';
-    return gulp_1.default
+    const bundlePath = `extensions/${extensionFolderName}/bundle.l10n.json`;
+    const mergedBundle = Object.create(null);
+    let pendingParsers = 0;
+    let streamEnded = false;
+    let hasContent = false;
+    const mergeBundle = (data) => {
+        for (const key of Object.keys(data)) {
+            mergedBundle[key] = data[key];
+            hasContent = true;
+        }
+    };
+    const flushIfDone = (stream) => {
+        if (!streamEnded || pendingParsers > 0) {
+            return;
+        }
+        if (hasContent) {
+            stream.queue(new vinyl_1.default({
+                path: bundlePath,
+                contents: Buffer.from(JSON.stringify(mergedBundle), 'utf8')
+            }));
+        }
+        stream.queue(null);
+    };
+    return vinyl_fs_1.default
         .src([
         // For source code of extensions
         `${prefix}extensions/${extensionFolderName}/{src,client,server}/**/*.{ts,tsx}`,
@@ -425,53 +447,51 @@ function createL10nBundleForExtension(extensionFolderName, prefixWithBuildFolder
         `${prefix}extensions/${extensionFolderName}/**/node_modules/{@vscode,vscode-*}/**/*.{js,jsx}`,
         // // For any dependencies pulled in that bundle @vscode/l10n. They needed to export the bundle
         `${prefix}extensions/${extensionFolderName}/**/bundle.l10n.json`,
-    ])
-        .pipe((0, event_stream_1.map)(function (data, callback) {
+    ], { allowEmpty: true })
+        .pipe((0, event_stream_1.through)(function (data) {
         const file = data;
         if (!file.isBuffer()) {
-            // Not a buffer so we drop it
-            callback();
             return;
         }
         const extension = path_1.default.extname(file.relative);
         if (extension !== '.json') {
+            pendingParsers++;
             const contents = file.contents.toString('utf8');
             (0, l10n_dev_1.getL10nJson)([{ contents, extension }])
                 .then((json) => {
-                callback(undefined, new vinyl_1.default({
-                    path: `extensions/${extensionFolderName}/bundle.l10n.json`,
-                    contents: Buffer.from(JSON.stringify(json), 'utf8')
-                }));
+                mergeBundle(json);
             })
                 .catch((err) => {
-                callback(new Error(`File ${file.relative} threw an error when parsing: ${err}`));
+                this.emit('error', new Error(`File ${file.relative} threw an error when parsing: ${err}`));
+            })
+                .finally(() => {
+                pendingParsers--;
+                flushIfDone(this);
             });
-            // signal pause?
-            return false;
+            return;
         }
-        // for bundle.l10n.jsons
+        // for bundle.l10n.json files
         let bundleJson;
         try {
             bundleJson = JSON.parse(file.contents.toString('utf8'));
         }
         catch (err) {
-            callback(new Error(`File ${file.relative} threw an error when parsing: ${err}`));
+            this.emit('error', new Error(`File ${file.relative} threw an error when parsing: ${err}`));
             return;
         }
         // some validation of the bundle.l10n.json format
         for (const key in bundleJson) {
-            if (typeof bundleJson[key] !== 'string' &&
-                (typeof bundleJson[key].message !== 'string' || !Array.isArray(bundleJson[key].comment))) {
-                callback(new Error(`Invalid bundle.l10n.json file. The value for key ${key} is not in the expected format.`));
+            const value = bundleJson[key];
+            if (typeof value !== 'string' &&
+                (typeof value?.message !== 'string' || !Array.isArray(value?.comment))) {
+                this.emit('error', new Error(`Invalid bundle.l10n.json file. The value for key ${key} is not in the expected format.`));
                 return;
             }
         }
-        callback(undefined, file);
-    }))
-        .pipe((0, gulp_merge_json_1.default)({
-        fileName: `extensions/${extensionFolderName}/bundle.l10n.json`,
-        jsonSpace: '',
-        concatArrays: true
+        mergeBundle(bundleJson);
+    }, function () {
+        streamEnded = true;
+        flushIfDone(this);
     }));
 }
 exports.EXTERNAL_EXTENSIONS = [
@@ -505,7 +525,7 @@ function createXlfFilesForExtensions() {
             }
             return _l10nMap;
         }
-        (0, event_stream_1.merge)(gulp_1.default.src([`.build/extensions/${extensionFolderName}/package.nls.json`, `.build/extensions/${extensionFolderName}/**/nls.metadata.json`], { allowEmpty: true }), createL10nBundleForExtension(extensionFolderName, exports.EXTERNAL_EXTENSIONS.includes(extensionId))).pipe((0, event_stream_1.through)(function (file) {
+        (0, event_stream_1.merge)(vinyl_fs_1.default.src([`.build/extensions/${extensionFolderName}/package.nls.json`, `.build/extensions/${extensionFolderName}/**/nls.metadata.json`], { allowEmpty: true }), createL10nBundleForExtension(extensionFolderName, exports.EXTERNAL_EXTENSIONS.includes(extensionId))).pipe((0, event_stream_1.through)(function (file) {
             if (file.isBuffer()) {
                 const buffer = file.contents;
                 const basename = path_1.default.basename(file.path);
