@@ -103,8 +103,8 @@ const inputValue = computed(() => (saveOnButton ? draftValue.value : settingValu
 
 <template>
   <ErrorBoundary v-if="typeof rawSettingValue === 'string'">
-    <div class="mb-3">
-      <div class="flex items-center gap-2">
+    <div class="mb-3 w-full">
+      <div class="flex w-full items-center gap-2">
         <div class="flex-1 min-w-0">
           <SapphireSimpleInputBox
             :value="inputValue"
@@ -115,58 +115,60 @@ const inputValue = computed(() => (saveOnButton ? draftValue.value : settingValu
             @keydown="onInputKeyDown"
           />
         </div>
-        <template v-if="saveOnButton && confirmDelete">
-          <span class="text-sm text-void-fg-2 whitespace-nowrap shrink-0">Удалить токен?</span>
-          <button
-            type="button"
-            class="px-4 py-1.5 rounded text-sm font-medium whitespace-nowrap transition-colors shrink-0 bg-rose-600 text-white hover:bg-rose-500"
-            @click="handleDelete"
-          >
-            Удалить
-          </button>
-          <button
-            type="button"
-            class="px-4 py-1.5 rounded text-sm font-medium whitespace-nowrap transition-colors shrink-0 text-void-fg-2 hover:text-void-fg-1"
-            @click="confirmDelete = false"
-          >
-            Отмена
-          </button>
-        </template>
-        <template v-else-if="saveOnButton">
-          <button
-            type="button"
-            class="px-4 py-1.5 rounded text-sm font-medium whitespace-nowrap transition-colors shrink-0"
-            :class="
-              !isDirty
-                ? 'bg-void-bg-3 text-void-fg-3 cursor-not-allowed'
-                : 'bg-[#00b0cc] text-white hover:bg-[#0097b2]'
-            "
-            :disabled="!isDirty"
-            @click="handleSave"
-          >
-            Сохранить
-          </button>
-          <button
-            type="button"
-            class="px-4 py-1.5 rounded text-sm font-medium whitespace-nowrap transition-colors shrink-0"
-            :class="
-              !settingValue
-                ? 'bg-void-bg-3 text-void-fg-3 cursor-not-allowed'
-                : 'bg-void-bg-3 text-void-fg-1 hover:bg-void-bg-2'
-            "
-            :disabled="!settingValue"
-            @click="confirmDelete = true"
-          >
-            Удалить
-          </button>
-          <span
-            v-if="justSaved"
-            class="flex items-center gap-1 text-emerald-500 text-sm whitespace-nowrap shrink-0"
-          >
-            <Check class="w-4 h-4" />
-            Сохранено
-          </span>
-        </template>
+        <div v-if="saveOnButton" class="flex shrink-0 items-center gap-2">
+          <template v-if="confirmDelete">
+            <span class="text-sm text-void-fg-2 whitespace-nowrap shrink-0">Удалить токен?</span>
+            <button
+              type="button"
+              class="px-4 py-1.5 rounded text-sm font-medium whitespace-nowrap transition-colors shrink-0 bg-rose-600 text-white hover:bg-rose-500"
+              @click="handleDelete"
+            >
+              Удалить
+            </button>
+            <button
+              type="button"
+              class="px-4 py-1.5 rounded text-sm font-medium whitespace-nowrap transition-colors shrink-0 text-void-fg-2 hover:text-void-fg-1"
+              @click="confirmDelete = false"
+            >
+              Отмена
+            </button>
+          </template>
+          <template v-else>
+            <button
+              type="button"
+              class="px-4 py-1.5 rounded text-sm font-medium whitespace-nowrap transition-colors shrink-0"
+              :class="
+                !isDirty
+                  ? 'bg-void-bg-3 text-void-fg-3 cursor-not-allowed'
+                  : 'bg-[#00b0cc] text-white hover:bg-[#0097b2]'
+              "
+              :disabled="!isDirty"
+              @click="handleSave"
+            >
+              Сохранить
+            </button>
+            <button
+              type="button"
+              class="px-4 py-1.5 rounded text-sm font-medium whitespace-nowrap transition-colors shrink-0"
+              :class="
+                !settingValue
+                  ? 'bg-void-bg-3 text-void-fg-3 cursor-not-allowed'
+                  : 'bg-void-bg-3 text-void-fg-1 hover:bg-void-bg-2'
+              "
+              :disabled="!settingValue"
+              @click="confirmDelete = true"
+            >
+              Удалить
+            </button>
+            <span
+              v-if="justSaved"
+              class="flex items-center gap-1 text-emerald-500 text-sm whitespace-nowrap shrink-0"
+            >
+              <Check class="w-4 h-4" />
+              Сохранено
+            </span>
+          </template>
+        </div>
       </div>
     </div>
   </ErrorBoundary>

@@ -111,6 +111,11 @@
   pointer-events: none;
 }
 
+/* Скрыть весь title Auxiliary Bar (label + крестик Hide Side Bar); вкладки — в Vue. */
+.monaco-workbench .part.auxiliarybar > .title {
+  display: none !important;
+}
+
 .monaco-workbench
   .part.titlebar
   > .titlebar-container

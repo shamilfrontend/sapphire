@@ -32,13 +32,6 @@ const isSubsequence = (text: string, pattern: string): boolean => {
   return true;
 };
 
-const categoryLabel = (category: string): string => {
-  if (category === 'design') return 'Design';
-  if (category === 'office') return 'Office';
-  if (category === 'custom') return 'Custom';
-  return category.charAt(0).toUpperCase() + category.slice(1);
-};
-
 /** Корневые категории → скиллы; фильтр по slug/name/category. */
 export const getSkillOptionsAtPath = (
   skills: UserSkill[],
@@ -109,5 +102,3 @@ export const getSkillOptionsAtPath = (
       return isSubsequence(o.fullName.toLowerCase(), filter) || o.fullName.toLowerCase().includes(filter);
     });
 };
-
-export const skillCategoryBreadcrumb = (category: string): string => categoryLabel(category);

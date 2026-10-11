@@ -119,7 +119,7 @@ const viewContainerRegistry = Registry.as<IViewContainersRegistry>(
 const container = viewContainerRegistry.registerViewContainer(
   {
     id: SAPPHIRE_VIEW_CONTAINER_ID,
-    title: nls.localize2('sapphireContainer', ''), // без label в title bar auxiliary bar
+    title: nls.localize2('sapphireContainer', 'Sapphire'), // a11y / palette; визуально скрыт в sapphire.css
     ctorDescriptor: new SyncDescriptor(ViewPaneContainer, [
       SAPPHIRE_VIEW_CONTAINER_ID,
       {
@@ -144,7 +144,7 @@ viewsRegistry.registerViews(
       id: SAPPHIRE_VIEW_ID,
       hideByDefault: false, // панель открыта при старте
       // containerIcon: sapphireViewIcon,
-      name: nls.localize2('sapphireChat', ''), // подпись view (может быть пустой)
+      name: nls.localize2('sapphireChat', 'Sapphire'), // a11y; визуально скрыт в sapphire.css
       ctorDescriptor: new SyncDescriptor(SidebarViewPane),
       canToggleVisibility: false,
       canMoveView: false, // view нельзя вынести из контейнера

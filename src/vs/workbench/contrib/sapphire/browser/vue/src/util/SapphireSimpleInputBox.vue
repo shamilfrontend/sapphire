@@ -69,31 +69,21 @@ const handleInput = (e: Event) => {
 };
 
 const inputClass = computed(() => {
-  const spacingClass = props.compact ? 'py-1 px-2' : 'py-2 px-4';
-  const disabledClass = props.disabled ? 'opacity-50 cursor-not-allowed' : '';
-  return [
-    'w-full',
-    'min-h-[32px]',
-    'appearance-none',
-    'resize-none',
-    'rounded-sm',
-    'border',
-    'border-void-border-2',
-    'bg-void-bg-1',
-    'text-void-fg-1',
-    'placeholder:text-void-fg-3',
-    'transition-colors',
-    'focus:outline-none',
-    'focus:border-void-border-1',
-    spacingClass,
-    disabledClass,
-  ]
-    .filter(Boolean)
-    .join(' ');
+  // Полный литерал в return — иначе void-префиксер не видит классы (array.join не обрабатывается).
+  // p-2 = 8px со всех сторон; дублируем padding в inputStyle на случай сбоя префикса.
+  return props.disabled
+    ? 'w-full min-h-[32px] appearance-none resize-none rounded-sm border border-void-border-2 bg-void-bg-1 text-void-fg-1 placeholder:text-void-fg-3 transition-colors focus:outline-none focus:border-void-border-1 p-2 opacity-50 cursor-not-allowed'
+    : 'w-full min-h-[32px] appearance-none resize-none rounded-sm border border-void-border-2 bg-void-bg-1 text-void-fg-1 placeholder:text-void-fg-3 transition-colors focus:outline-none focus:border-void-border-1 p-2';
 });
 
 const inputStyle = computed((): CSSProperties & { WebkitTextSecurity?: 'disc' } => ({
   ...(props.passwordBlur ? { WebkitTextSecurity: 'disc' as const } : {}),
+  width: '100%',
+  maxWidth: 'none',
+  minWidth: 0,
+  display: 'block',
+  boxSizing: 'border-box',
+  padding: '8px',
   background: asCssVariable(inputBackground),
   color: asCssVariable(inputForeground),
 }));

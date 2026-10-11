@@ -138,7 +138,7 @@ export class AuxiliaryBarPart extends AbstractPaneCompositePart {
     super(
       Parts.AUXILIARYBAR_PART,
       {
-        hasTitle: true,
+        hasTitle: false, // title chrome скрыт (Sapphire tabs); не резервировать 35px
         borderWidth: () =>
           this.getColor(SIDE_BAR_BORDER) || this.getColor(contrastBorder) ? 1 : 0,
       },

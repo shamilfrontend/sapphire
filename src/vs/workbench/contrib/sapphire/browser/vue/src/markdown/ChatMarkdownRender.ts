@@ -17,13 +17,6 @@ type ApplyBoxLocation = ChatMessageLocation & { tokenIdx: string };
 export const getApplyBoxId = ({ threadId, messageIdx, tokenIdx }: ApplyBoxLocation) =>
   `${threadId}-${messageIdx}-${tokenIdx}`;
 
-export type RenderTokenOptions = {
-  isApplyEnabled?: boolean;
-  isLinkDetectionEnabled?: boolean;
-  /** При рендере текста ссылки — не linkify-ить URL повторно. */
-  disableAutoLink?: boolean;
-};
-
 /** Похоже на абсолютный путь файла, а не на URL или фрагмент комментария. */
 export function isValidUri(s: string): boolean {
   return s.length > 5 && isAbsolute(s) && !s.includes('//') && !s.includes('/*'); // отсекаем // и /*
@@ -73,7 +66,7 @@ export const isSafeExternalHref = (href: string): boolean => {
   }
 };
 
-export type LinkifyPart =
+type LinkifyPart =
   | { kind: 'text'; key: string; text: string }
   | { kind: 'link'; key: string; href: string; label: string };
 

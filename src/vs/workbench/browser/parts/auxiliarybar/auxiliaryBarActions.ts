@@ -17,9 +17,7 @@ import { Categories } from '../../../../platform/action/common/actionCommonCateg
 import { AuxiliaryBarVisibleContext } from '../../../common/contextkeys.js';
 import { ViewContainerLocation, ViewContainerLocationToString } from '../../../common/views.js';
 import {
-  ActivityBarPosition,
   IWorkbenchLayoutService,
-  LayoutSettings,
   Parts,
 } from '../../../services/layout/browser/layoutService.js';
 import { IPaneCompositePartService } from '../../../services/panecomposite/browser/panecomposite.js';
@@ -85,15 +83,6 @@ export class ToggleAuxiliaryBarAction extends Action2 {
           id: MenuId.MenubarAppearanceMenu,
           group: '2_workbench_layout',
           order: 2,
-        },
-        {
-          id: MenuId.AuxiliaryBarTitle,
-          group: 'navigation',
-          order: 2,
-          when: ContextKeyExpr.equals(
-            `config.${LayoutSettings.ACTIVITY_BAR_LOCATION}`,
-            ActivityBarPosition.DEFAULT,
-          ),
         },
       ],
     });

@@ -48,6 +48,3 @@ export const revealSapphireRulesFile = async (accessor: ReturnType<typeof useAcc
   await sapphireModelService.initializeModel(uri);
   await commandService.executeCommand('vscode.open', uri);
 };
-
-/** @deprecated use revealSapphireRulesFile */
-export const revealVoidRulesFile = revealSapphireRulesFile;

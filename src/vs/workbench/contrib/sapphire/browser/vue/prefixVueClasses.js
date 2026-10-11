@@ -173,6 +173,17 @@ const prefixClassListLiteral = (node) => {
   return node;
 };
 
+/** Префикс class-list литералов в return / ternary / arrow expression body. */
+const visitClassExpr = (expr) => {
+  if (t.isStringLiteral(expr) || t.isTemplateLiteral(expr)) {
+    return prefixClassListLiteral(expr);
+  }
+  if (t.isConditionalExpression(expr)) {
+    return t.conditionalExpression(expr.test, visitClassExpr(expr.consequent), visitClassExpr(expr.alternate));
+  }
+  return expr;
+};
+
 const prefixTsAst = (ast, { prefixReturns = false } = {}) => {
   babel.traverse(ast, {
     ObjectProperty(path) {
@@ -195,16 +206,44 @@ const prefixTsAst = (ast, { prefixReturns = false } = {}) => {
             const arg = path.node.argument;
             if (t.isStringLiteral(arg) || t.isTemplateLiteral(arg) || t.isConditionalExpression(arg)) {
               // return 'text-void-fg-1' / ternary class lists in computed helpers
-              const visit = (expr) => {
-                if (t.isStringLiteral(expr) || t.isTemplateLiteral(expr)) {
-                  return prefixClassListLiteral(expr);
-                }
-                if (t.isConditionalExpression(expr)) {
-                  return t.conditionalExpression(expr.test, visit(expr.consequent), visit(expr.alternate));
-                }
-                return expr;
-              };
-              path.node.argument = visit(arg);
+              path.node.argument = visitClassExpr(arg);
+            }
+          },
+          // computed(() => `flex ...`) / (x) => `hover:bg-...`
+          ArrowFunctionExpression(path) {
+            const body = path.node.body;
+            if (t.isBlockStatement(body)) {
+              return;
+            }
+            if (t.isStringLiteral(body) || t.isTemplateLiteral(body) || t.isConditionalExpression(body)) {
+              path.node.body = visitClassExpr(body);
+            }
+          },
+          // stateClass = 'hover:bg-...' — только многословные/variant class lists,
+          // не одиночные 'flex' / произвольный текст.
+          VariableDeclarator(path) {
+            if (!path.node.init) {
+              return;
+            }
+            const init = path.node.init;
+            const raw = t.isStringLiteral(init)
+              ? init.value
+              : t.isTemplateLiteral(init)
+                ? init.quasis.map((q) => q.value.raw).join('')
+                : '';
+            if (raw && /\s/.test(raw) && looksLikeClassList(raw)) {
+              path.node.init = prefixClassListLiteral(init);
+            }
+          },
+          AssignmentExpression(path) {
+            const right = path.node.right;
+            const raw = t.isStringLiteral(right)
+              ? right.value
+              : t.isTemplateLiteral(right)
+                ? right.quasis.map((q) => q.value.raw).join('')
+                : '';
+            if (raw && /\s/.test(raw) && looksLikeClassList(raw)) {
+              path.node.right = prefixClassListLiteral(right);
             }
           },
         }

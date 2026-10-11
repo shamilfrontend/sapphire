@@ -50,6 +50,3 @@ export const revealSapphireSkillsFile = async (accessor: ReturnType<typeof useAc
   await sapphireModelService.initializeModel(uri);
   await commandService.executeCommand('vscode.open', uri);
 };
-
-/** @deprecated use revealSapphireSkillsFile */
-export const revealVoidSkillsFile = revealSapphireSkillsFile;

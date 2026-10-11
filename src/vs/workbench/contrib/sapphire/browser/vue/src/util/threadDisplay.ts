@@ -13,7 +13,7 @@ export const threadTitle = (thread: ThreadType | undefined): string => {
   return 'Новый чат';
 };
 
-export type ThreadActivity = 'running' | 'awaiting' | 'idle';
+type ThreadActivity = 'running' | 'awaiting' | 'idle';
 
 export function threadActivity(
   stream:

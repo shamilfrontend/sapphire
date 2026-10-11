@@ -165,19 +165,21 @@ const floatingStyle = computed(() => {
 const optionRowClass = (option: T, selected: boolean): string => {
   const optionAccent = props.getOptionDropdownAccent?.(option);
   const useAccentColorOnly = !!optionAccent && !props.accentFillSelected;
-  let stateClass = '';
+  // Полные литералы в каждой ветке — иначе hover:* не получит void- префикс при сборке.
   if (selected) {
     if (optionAccent) {
-      stateClass = useAccentColorOnly ? 'hover:bg-void-bg-2' : 'text-white/90';
-    } else {
-      stateClass = 'bg-blue-500 text-white/80';
+      return useAccentColorOnly
+        ? 'flex items-center px-2 py-1 cursor-pointer whitespace-nowrap gap-x-1.5 transition-all duration-100 hover:bg-void-bg-2-hover'
+        : 'flex items-center px-2 py-1 cursor-pointer whitespace-nowrap gap-x-1.5 transition-all duration-100 text-white/90';
     }
-  } else if (optionAccent) {
-    stateClass = useAccentColorOnly ? 'hover:bg-void-bg-2' : 'hover:brightness-125';
-  } else {
-    stateClass = 'hover:bg-blue-500 hover:text-white/80';
+    return 'flex items-center px-2 py-1 cursor-pointer whitespace-nowrap gap-x-1.5 transition-all duration-100 bg-void-bg-2 text-void-fg-1';
   }
-  return `flex items-center px-2 py-1 cursor-pointer whitespace-nowrap gap-x-1.5 transition-all duration-100 ${stateClass}`;
+  if (optionAccent) {
+    return useAccentColorOnly
+      ? 'flex items-center px-2 py-1 cursor-pointer whitespace-nowrap gap-x-1.5 transition-all duration-100 hover:bg-void-bg-2-hover'
+      : 'flex items-center px-2 py-1 cursor-pointer whitespace-nowrap gap-x-1.5 transition-all duration-100 hover:brightness-125';
+  }
+  return 'flex items-center px-2 py-1 cursor-pointer whitespace-nowrap gap-x-1.5 transition-all duration-100 hover:bg-void-bg-2-hover hover:text-void-fg-1';
 };
 
 const optionStyle = (option: T, selected: boolean): CSSProperties | undefined => {
