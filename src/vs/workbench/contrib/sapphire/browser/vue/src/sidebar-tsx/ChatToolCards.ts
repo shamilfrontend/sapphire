@@ -49,6 +49,13 @@ type ToolHeaderParams = {
   isOpen?: boolean;
   className?: string;
 };
+const toolHeader = (params: ToolHeaderParams) => {
+  const { children, ...props } = params;
+  return children === undefined
+    ? h(ToolHeaderWrapper, props)
+    : h(ToolHeaderWrapper, props, () => children);
+};
+
 const EditTool = ({
   toolMessage,
   threadId,
@@ -132,9 +139,7 @@ const EditTool = ({
       }, h(CodeChildren, null, result));
     }
   }
-  return h(ToolHeaderWrapper, {
-    ...componentParams
-  });
+  return toolHeader(componentParams);
 };
 const formatDurationMs = (ms: number): string => {
   if (ms < 1000) return `${(ms / 1000).toFixed(1)}с`;
@@ -839,9 +844,7 @@ export const UpdatePlanToolCard = defineComponent({
       title: "Ошибка"
     }, h(CodeChildren, null, toolMessage.content));
   }
-  return h(ToolHeaderWrapper, {
-    ...componentParams
-  });
+  return toolHeader(componentParams);
     };
   },
 });
@@ -924,7 +927,7 @@ const EditToolHeaderButtons = defineComponent({
     });
     return () => h("div", {
       class: "flex items-center gap-1"
-    }, editState.streamState === 'idle-no-changes' && h(CopyButton, {
+    }, editState.streamState.value === 'idle-no-changes' && h(CopyButton, {
       codeStr: props.codeStr,
       toolTipName: "Копировать"
     }), h(EditToolAcceptRejectButtonsHTML, {
@@ -962,9 +965,7 @@ export const InvalidTool = ({
   componentParams.children = h(ToolChildrenWrapper, null, h(CodeChildren, {
     class: "bg-void-bg-3"
   }, message));
-  return h(ToolHeaderWrapper, {
-    ...componentParams
-  });
+  return toolHeader(componentParams);
 };
 export const CanceledTool = ({
   toolName,
@@ -987,65 +988,34 @@ export const CanceledTool = ({
     icon,
     isRejected
   };
-  return h(ToolHeaderWrapper, {
-    ...componentParams
-  });
+  return toolHeader(componentParams);
 };
-const CommandTool = defineComponent({
-  name: "CommandTool",
-  setup(props) {
-  const {
-  toolMessage,
-  type,
-  threadId
-}: {
+type CommandToolProps = {
   threadId: string;
 } & ({
-  toolMessage: Exclude<ToolMessage<'run_command'>, {
-    type: 'invalid_params';
-  }>;
+  toolMessage: Exclude<ToolMessage<'run_command'>, { type: 'invalid_params' }>;
   type: 'run_command';
 } | {
-  toolMessage: Exclude<ToolMessage<'run_persistent_command'>, {
-    type: 'invalid_params';
-  }>;
-  type: 'run_persistent_command';
-}) = props as {
-  threadId: string;
-} & ({
-  toolMessage: Exclude<ToolMessage<'run_command'>, {
-    type: 'invalid_params';
-  }>;
-  type: 'run_command';
-} | {
-  toolMessage: Exclude<ToolMessage<'run_persistent_command'>, {
-    type: 'invalid_params';
-  }>;
+  toolMessage: Exclude<ToolMessage<'run_persistent_command'>, { type: 'invalid_params' }>;
   type: 'run_persistent_command';
 });
 
+const CommandTool = defineComponent({
+  name: "CommandTool",
+  props: {
+    toolMessage: { type: Object as PropType<CommandToolProps['toolMessage']>, required: true },
+    type: { type: String as PropType<CommandToolProps['type']>, required: true },
+    threadId: { type: String, required: true },
+  },
+  setup(props: CommandToolProps) {
   const accessor = useAccessor();
   const terminalToolsService = accessor.get('ITerminalToolService');
   const toolsService = accessor.get('IToolsService');
-  const streamState = useChatThreadsStreamState(() => props.threadId as string);
+  const streamState = useChatThreadsStreamState(() => props.threadId);
   const divRef = ref<HTMLDivElement | null>(null);
-  const isError = false;
-  const title = getTitle(toolMessage);
-  const {
-    desc1,
-    desc1Info
-  } = toolNameToDesc(toolMessage.name, toolMessage.params, accessor);
-  const icon = null;
-  const isRejected = toolMessage.type === 'rejected';
-  const componentParams: ToolHeaderParams = {
-    title,
-    desc1,
-    desc1Info,
-    isError,
-    icon,
-    isRejected
-  };
   watch(() => streamState.value?.isRunning, () => {
+    const toolMessage = props.toolMessage;
+    const type = props.type;
     if (streamState.value?.isRunning !== 'tool') return;
     if (type !== 'run_command' || toolMessage.type !== 'running_now') return;
     let cancelled = false;
@@ -1088,6 +1058,24 @@ const CommandTool = defineComponent({
     });
   }, { immediate: true });
   return () => {
+  const toolMessage = props.toolMessage;
+  const type = props.type;
+  const isError = false;
+  const title = getTitle(toolMessage);
+  const {
+    desc1,
+    desc1Info
+  } = toolNameToDesc(toolMessage.name, toolMessage.params, accessor);
+  const icon = null;
+  const isRejected = toolMessage.type === 'rejected';
+  const componentParams: ToolHeaderParams = {
+    title,
+    desc1,
+    desc1Info,
+    isError,
+    icon,
+    isRejected
+  };
   if (toolMessage.type === 'success') {
     const {
       result
@@ -1118,10 +1106,8 @@ const CommandTool = defineComponent({
       class: "relative h-[300px] text-sm"
     });
   } else if (toolMessage.type === 'rejected' || toolMessage.type === 'tool_request') {}
-  return h(ToolHeaderWrapper, {
-    ...componentParams,
-    isOpen: type === 'run_command' && toolMessage.type === 'running_now' ? true : undefined
-  });
+  componentParams.isOpen = type === 'run_command' && toolMessage.type === 'running_now' ? true : undefined;
+  return toolHeader(componentParams);
   };
   },
 });
@@ -1183,9 +1169,7 @@ export const MCPToolWrapper = ({
       title: "Ошибка"
     }, h(CodeChildren, null, result));
   }
-  return h(ToolHeaderWrapper, {
-    ...componentParams
-  });
+  return toolHeader(componentParams);
 };
 const CodeNavToolCard = ({
   toolMessage
@@ -1246,9 +1230,7 @@ const CodeNavToolCard = ({
       title: "Ошибка"
     }, h(CodeChildren, null, toolMessage.result));
   }
-  return h(ToolHeaderWrapper, {
-    ...componentParams
-  });
+  return toolHeader(componentParams);
 };
 export type ResultWrapper<T extends ToolName> = (props: WrapperProps<T>) => VNodeChild;
 export const builtinToolNameToComponent: { [T in BuiltinToolName]: {
@@ -1309,9 +1291,7 @@ export const builtinToolNameToComponent: { [T in BuiltinToolName]: {
           title: "Ошибка"
         }, h(CodeChildren, null, result));
       }
-      return h(ToolHeaderWrapper, {
-        ...componentParams
-      });
+      return toolHeader(componentParams);
     }
   },
   get_dir_tree: {
@@ -1363,9 +1343,7 @@ export const builtinToolNameToComponent: { [T in BuiltinToolName]: {
           title: "Ошибка"
         }, h(CodeChildren, null, result));
       }
-      return h(ToolHeaderWrapper, {
-        ...componentParams
-      });
+      return toolHeader(componentParams);
     }
   },
   ls_dir: {
@@ -1430,9 +1408,7 @@ export const builtinToolNameToComponent: { [T in BuiltinToolName]: {
           title: "Ошибка"
         }, h(CodeChildren, null, result));
       }
-      return h(ToolHeaderWrapper, {
-        ...componentParams
-      });
+      return toolHeader(componentParams);
     }
   },
   search_project_index: {
@@ -1471,9 +1447,7 @@ export const builtinToolNameToComponent: { [T in BuiltinToolName]: {
           title: "Ошибка"
         }, h(CodeChildren, null, toolMessage.result));
       }
-      return h(ToolHeaderWrapper, {
-        ...componentParams
-      });
+      return toolHeader(componentParams);
     }
   },
   search_pathnames_only: {
@@ -1532,9 +1506,7 @@ export const builtinToolNameToComponent: { [T in BuiltinToolName]: {
           title: "Ошибка"
         }, h(CodeChildren, null, result));
       }
-      return h(ToolHeaderWrapper, {
-        ...componentParams
-      });
+      return toolHeader(componentParams);
     }
   },
   search_for_files: {
@@ -1601,9 +1573,7 @@ export const builtinToolNameToComponent: { [T in BuiltinToolName]: {
           title: "Ошибка"
         }, h(CodeChildren, null, result));
       }
-      return h(ToolHeaderWrapper, {
-        ...componentParams
-      });
+      return toolHeader(componentParams);
     }
   },
   search_in_file: {
@@ -1657,9 +1627,7 @@ export const builtinToolNameToComponent: { [T in BuiltinToolName]: {
           title: "Ошибка"
         }, h(CodeChildren, null, result));
       }
-      return h(ToolHeaderWrapper, {
-        ...componentParams
-      });
+      return toolHeader(componentParams);
     }
   },
   read_lint_errors: {
@@ -1712,9 +1680,7 @@ export const builtinToolNameToComponent: { [T in BuiltinToolName]: {
           title: "Ошибка"
         }, h(CodeChildren, null, result));
       }
-      return h(ToolHeaderWrapper, {
-        ...componentParams
-      });
+      return toolHeader(componentParams);
     }
   },
   go_to_definition: {
@@ -1770,9 +1736,7 @@ export const builtinToolNameToComponent: { [T in BuiltinToolName]: {
           title: "Ошибка"
         }, h(CodeChildren, null, toolMessage.result));
       }
-      return h(ToolHeaderWrapper, {
-        ...componentParams
-      });
+      return toolHeader(componentParams);
     }
   },
   get_diagnostics: {
@@ -1813,9 +1777,7 @@ export const builtinToolNameToComponent: { [T in BuiltinToolName]: {
           title: "Ошибка"
         }, h(CodeChildren, null, toolMessage.result));
       }
-      return h(ToolHeaderWrapper, {
-        ...componentParams
-      });
+      return toolHeader(componentParams);
     }
   },
   search_symbols: {
@@ -1857,9 +1819,7 @@ export const builtinToolNameToComponent: { [T in BuiltinToolName]: {
           title: "Ошибка"
         }, h(CodeChildren, null, toolMessage.result));
       }
-      return h(ToolHeaderWrapper, {
-        ...componentParams
-      });
+      return toolHeader(componentParams);
     }
   },
   rename_symbol: {
@@ -1900,9 +1860,7 @@ export const builtinToolNameToComponent: { [T in BuiltinToolName]: {
           title: "Ошибка"
         }, h(CodeChildren, null, toolMessage.result));
       }
-      return h(ToolHeaderWrapper, {
-        ...componentParams
-      });
+      return toolHeader(componentParams);
     }
   },
   get_chat_history: {
@@ -1948,9 +1906,7 @@ export const builtinToolNameToComponent: { [T in BuiltinToolName]: {
           title: "Ошибка"
         }, h(CodeChildren, null, toolMessage.result));
       }
-      return h(ToolHeaderWrapper, {
-        ...componentParams
-      });
+      return toolHeader(componentParams);
     }
   },
   run_subagent: {
@@ -1989,9 +1945,7 @@ export const builtinToolNameToComponent: { [T in BuiltinToolName]: {
           title: "Ошибка"
         }, h(CodeChildren, null, toolMessage.result));
       }
-      return h(ToolHeaderWrapper, {
-        ...componentParams
-      });
+      return toolHeader(componentParams);
     }
   },
   glob_files: {
@@ -2037,9 +1991,7 @@ export const builtinToolNameToComponent: { [T in BuiltinToolName]: {
           title: "Ошибка"
         }, h(CodeChildren, null, toolMessage.result));
       }
-      return h(ToolHeaderWrapper, {
-        ...componentParams
-      });
+      return toolHeader(componentParams);
     }
   },
   web_search: {
@@ -2080,9 +2032,7 @@ export const builtinToolNameToComponent: { [T in BuiltinToolName]: {
           title: "Ошибка"
         }, h(CodeChildren, null, toolMessage.result));
       }
-      return h(ToolHeaderWrapper, {
-        ...componentParams
-      });
+      return toolHeader(componentParams);
     }
   },
   browse_url: {
@@ -2123,9 +2073,7 @@ export const builtinToolNameToComponent: { [T in BuiltinToolName]: {
           title: "Ошибка"
         }, h(CodeChildren, null, toolMessage.result));
       }
-      return h(ToolHeaderWrapper, {
-        ...componentParams
-      });
+      return toolHeader(componentParams);
     }
   },
   save_memory: {
@@ -2155,9 +2103,7 @@ export const builtinToolNameToComponent: { [T in BuiltinToolName]: {
           title: "Ошибка"
         }, h(CodeChildren, null, toolMessage.result));
       }
-      return h(ToolHeaderWrapper, {
-        ...componentParams
-      });
+      return toolHeader(componentParams);
     }
   },
   run_parallel_subagents: {
@@ -2200,9 +2146,7 @@ export const builtinToolNameToComponent: { [T in BuiltinToolName]: {
           title: "Ошибка"
         }, h(CodeChildren, null, toolMessage.result));
       }
-      return h(ToolHeaderWrapper, {
-        ...componentParams
-      });
+      return toolHeader(componentParams);
     }
   },
   create_plan: {
@@ -2244,9 +2188,7 @@ export const builtinToolNameToComponent: { [T in BuiltinToolName]: {
           title: "Ошибка"
         }, h(CodeChildren, null, toolMessage.result));
       }
-      return h(ToolHeaderWrapper, {
-        ...componentParams
-      });
+      return toolHeader(componentParams);
     }
   },
   // --- разделитель секций ---
@@ -2302,9 +2244,7 @@ export const builtinToolNameToComponent: { [T in BuiltinToolName]: {
       } else if (toolMessage.type === 'tool_request') {
         // дополнительная разметка не нужна
       }
-      return h(ToolHeaderWrapper, {
-        ...componentParams
-      });
+      return toolHeader(componentParams);
     }
   },
   delete_file_or_folder: {
@@ -2362,9 +2302,7 @@ export const builtinToolNameToComponent: { [T in BuiltinToolName]: {
           sapphireOpenFileFn(params.uri, accessor);
         };
       }
-      return h(ToolHeaderWrapper, {
-        ...componentParams
-      });
+      return toolHeader(componentParams);
     }
   },
   rewrite_file: {
@@ -2440,9 +2378,7 @@ export const builtinToolNameToComponent: { [T in BuiltinToolName]: {
           title: "Ошибка"
         }, h(CodeChildren, null, result));
       }
-      return h(ToolHeaderWrapper, {
-        ...componentParams
-      });
+      return toolHeader(componentParams);
     }
   },
   kill_persistent_terminal: {
@@ -2487,9 +2423,7 @@ export const builtinToolNameToComponent: { [T in BuiltinToolName]: {
           title: "Ошибка"
         }, h(CodeChildren, null, result));
       }
-      return h(ToolHeaderWrapper, {
-        ...componentParams
-      });
+      return toolHeader(componentParams);
     }
   }
 };

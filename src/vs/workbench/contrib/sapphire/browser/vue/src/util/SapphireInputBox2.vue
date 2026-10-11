@@ -40,6 +40,8 @@ const props = withDefaults(
     multiline: boolean;
     enableAtToMention?: boolean;
     fnsRef?: TextAreaFnsRef;
+    /** Внешний mutable-ref на textarea (SidebarChat / edit). */
+    textAreaRef?: { current: HTMLTextAreaElement | null };
     onChangeText?: (value: string) => void;
     onKeyDown?: (e: KeyboardEvent) => void;
     onFocus?: (e: FocusEvent) => void;
@@ -511,14 +513,28 @@ watch(
   { immediate: true },
 );
 
+let ownedTextArea: HTMLTextAreaElement | null = null;
+
+const syncExternalTextAreaRef = (el: HTMLTextAreaElement | null) => {
+  ownedTextArea = el;
+  if (props.textAreaRef) props.textAreaRef.current = el;
+};
+
 watch(
   textAreaRef,
-  () => {
+  (el) => {
     if (props.fnsRef) props.fnsRef.current = fns;
+    syncExternalTextAreaRef(el);
     adjustHeight();
   },
   { flush: 'post' },
 );
+
+onUnmounted(() => {
+  if (ownedTextArea && props.textAreaRef?.current === ownedTextArea) {
+    props.textAreaRef.current = null;
+  }
+});
 
 watch(
   () => props.initValue,

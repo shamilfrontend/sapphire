@@ -1,19 +1,22 @@
 /**
- * Propagates PPR Code photoreal cube assets into app / Dock / watermark targets.
+ * Propagates Sapphire precomposed logo assets into app / Dock / watermark targets.
  *
  * Usage: node scripts/generate-ppr-logo.mjs
  *
- * Sources (PNG only — no SVG logo variants):
- *   sapphire_icons/logo_cube_noshadow.png   — empty-editor watermark
+ * Sources (PNG only — full app-icon art with dark squircle + crystal):
+ *   sapphire_icons/logo_cube_noshadow.png   — empty-editor watermark / UI
  *   sapphire_icons/slice_of_sapphire_00b0cc.png  — Dock / taskbar (preferred when present)
  *
  * Writes:
  *   src/.../sapphire_cube_noshadow.png (+ out/ copies)
  *   resources/win32/logo_cube_noshadow.png
  *   src/.../sapphire-icon-sm.png
+ *   src/.../code-icon.png
  *   resources/darwin/code.icns + Assets.car  (macOS Dock / Finder)
  *   resources/linux/code.png + sapphire_icons/cubecircled.png
  *   resources/win32/code.ico (+ tile PNGs) + sapphire_icons/code.ico
+ *   resources/win32/inno-sapphire.bmp
+ *   resources/server/{favicon.ico,code-192.png,code-512.png}
  */
 import sharp from 'sharp';
 import { writeFileSync, mkdirSync, copyFileSync, existsSync, rmSync, mkdtempSync } from 'fs';
@@ -29,119 +32,35 @@ function requirePhotorealMark(preferred) {
   const mark = preferred.find((p) => existsSync(p));
   if (!mark) {
     throw new Error(
-      `Missing photoreal cube PNG. Expected one of:\n${preferred.map((p) => `  ${p}`).join('\n')}`,
+      `Missing logo PNG. Expected one of:\n${preferred.map((p) => `  ${p}`).join('\n')}`,
     );
   }
   return mark;
 }
 
-/** Soft drop shadow under the mark (matches old Sapphire dock icon treatment). */
-async function makeShadow(size, markScale = 0.62) {
-  const mark = Math.round(size * markScale);
-  const ellipseW = Math.round(mark * 0.72);
-  const ellipseH = Math.round(mark * 0.16);
-  const svg = Buffer.from(`<?xml version="1.0" encoding="UTF-8"?>
-<svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}">
-  <defs>
-    <filter id="f" x="-40%" y="-40%" width="180%" height="180%">
-      <feGaussianBlur stdDeviation="${Math.max(2, size * 0.012).toFixed(1)}"/>
-    </filter>
-  </defs>
-  <ellipse cx="${size / 2}" cy="${size * 0.72}" rx="${ellipseW / 2}" ry="${ellipseH / 2}"
-    fill="#000000" opacity="0.18" filter="url(#f)"/>
-</svg>`);
-  return sharp(svg).png().toBuffer();
-}
-
 /**
- * Punch near-white opaque pixels to transparent so we can place the cube
- * on a clean Chrome/Telegram-style white plate.
- */
-async function punchWhiteBackground(pngPathOrBuffer) {
-  const { data, info } = await sharp(pngPathOrBuffer)
-    .ensureAlpha()
-    .raw()
-    .toBuffer({ resolveWithObject: true });
-  const { width: w, height: h, channels: ch } = info;
-  const out = Buffer.from(data);
-  for (let i = 0; i < w * h; i++) {
-    const o = i * ch;
-    const r = out[o];
-    const g = out[o + 1];
-    const b = out[o + 2];
-    const a = out[o + 3];
-    if (a < 8) {
-      continue;
-    }
-    // Near-white plate (keep bright cyan/neon highlights on the cube itself).
-    if (r > 242 && g > 242 && b > 242) {
-      out[o + 3] = 0;
-    }
-  }
-  return sharp(out, { raw: { width: w, height: h, channels: 4 } }).png().toBuffer();
-}
-
-/**
- * Opaque white plate (Chrome / Telegram Dock style). macOS masks the squircle.
- */
-async function makeIconPlate(size, shape) {
-  const r = (size / 2).toFixed(1);
-  // Subtle top-lit white → light gray, same family as system app icons.
-  const svg =
-    shape === 'circle'
-      ? Buffer.from(`<?xml version="1.0" encoding="UTF-8"?>
-<svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}">
-  <defs>
-    <radialGradient id="p" cx="50%" cy="38%" r="70%">
-      <stop offset="0%" stop-color="#ffffff"/>
-      <stop offset="70%" stop-color="#f7f7f8"/>
-      <stop offset="100%" stop-color="#ececef"/>
-    </radialGradient>
-  </defs>
-  <circle cx="${r}" cy="${r}" r="${r}" fill="url(#p)"/>
-</svg>`)
-      : Buffer.from(`<?xml version="1.0" encoding="UTF-8"?>
-<svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}">
-  <defs>
-    <radialGradient id="p" cx="50%" cy="38%" r="78%">
-      <stop offset="0%" stop-color="#ffffff"/>
-      <stop offset="70%" stop-color="#f7f7f8"/>
-      <stop offset="100%" stop-color="#ececef"/>
-    </radialGradient>
-  </defs>
-  <rect width="${size}" height="${size}" fill="url(#p)"/>
-</svg>`);
-  return sharp(svg).png().toBuffer();
-}
-
-/**
- * Compose app icon on a white plate with a large, evenly padded cube
- * (Chrome / Telegram proportions: glyph ~72% of the canvas).
- * @param {'squircle'|'circle'} shape circle for Linux; squircle/full plate for macOS/Windows.
+ * Resize the precomposed logo as-is. For Linux, apply a circular alpha mask.
+ * @param {'squircle'|'circle'} shape
  */
 async function composeAppIcon(markPngPath, size, shape) {
-  // ~82% glyph + equal margins ≈ Chrome/Telegram look (logo fills the plate).
-  const markScale = 0.82;
-  const markSize = Math.round(size * markScale);
-  const punched = await punchWhiteBackground(markPngPath);
-  const mark = await sharp(punched)
+  const resized = await sharp(markPngPath)
     .ensureAlpha()
-    .trim({ threshold: 8 })
-    .resize(markSize, markSize, { fit: 'contain', background: { r: 0, g: 0, b: 0, alpha: 0 } })
+    .resize(size, size, { fit: 'cover' })
     .png()
     .toBuffer();
-  const { width: mw, height: mh } = await sharp(mark).metadata();
-  const plate = await makeIconPlate(size, shape === 'circle' ? 'circle' : 'squircle');
-  // Soft contact shadow on the white plate (same idea as Chrome/Telegram).
-  const shadow = await makeShadow(size, markScale * 0.95);
-  const left = Math.round((size - (mw ?? markSize)) / 2);
-  const top = Math.round((size - (mh ?? markSize)) / 2);
 
-  return sharp(plate)
-    .composite([
-      { input: shadow, left: 0, top: 0 },
-      { input: mark, left, top },
-    ])
+  if (shape !== 'circle') {
+    return resized;
+  }
+
+  const r = (size / 2).toFixed(1);
+  const mask = Buffer.from(`<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}">
+  <circle cx="${r}" cy="${r}" r="${r}" fill="#ffffff"/>
+</svg>`);
+
+  return sharp(resized)
+    .composite([{ input: await sharp(mask).png().toBuffer(), blend: 'dest-in' }])
     .png()
     .toBuffer();
 }
@@ -295,6 +214,51 @@ async function writeAssetsCar(squircle1024, carPath) {
   }
 }
 
+async function writeUiAndWebAssets(markPngPath) {
+  const codeIcon = join(root, 'src/vs/workbench/browser/media/code-icon.png');
+  await sharp(markPngPath).resize(1200, 1200).png().toFile(codeIcon);
+  console.log('updated', codeIcon);
+  try {
+    copyFileSync(codeIcon, join(root, 'out/vs/workbench/browser/media/code-icon.png'));
+  } catch {
+    /* out may be absent */
+  }
+
+  const server192 = join(root, 'resources/server/code-192.png');
+  const server512 = join(root, 'resources/server/code-512.png');
+  await sharp(markPngPath).resize(192, 192).png().toFile(server192);
+  await sharp(markPngPath).resize(512, 512).png().toFile(server512);
+  console.log('updated', server192);
+  console.log('updated', server512);
+
+  const faviconSizes = [16, 32, 48];
+  const favEntries = [];
+  for (const size of faviconSizes) {
+    const png = await sharp(markPngPath).resize(size, size).png().toBuffer();
+    favEntries.push({ size, png });
+  }
+  const favicon = join(root, 'resources/server/favicon.ico');
+  writeFileSync(favicon, buildIco(favEntries));
+  console.log('updated', favicon);
+
+  const innoBmp = join(root, 'resources/win32/inno-sapphire.bmp');
+  const innoStaging = mkdtempSync(join(tmpdir(), 'ppr-inno-'));
+  try {
+    const innoPng = join(innoStaging, 'inno-sapphire.png');
+    await sharp(markPngPath).resize(1200, 1200).removeAlpha().png().toFile(innoPng);
+    execFileSync('sips', ['-s', 'format', 'bmp', innoPng, '--out', innoBmp], { stdio: 'pipe' });
+    console.log('updated', innoBmp);
+  } finally {
+    rmSync(innoStaging, { recursive: true, force: true });
+  }
+
+  const darwinCube = join(root, 'resources/darwin/code.icon/Assets/cube.png');
+  if (existsSync(dirname(darwinCube))) {
+    copyFileSync(markPngPath, darwinCube);
+    console.log('updated', darwinCube);
+  }
+}
+
 async function writePlatformIcons(markPngPath) {
   const squircle = await composeAppIcon(markPngPath, 1024, 'squircle');
   const circle = await composeAppIcon(markPngPath, 1024, 'circle');
@@ -418,13 +382,16 @@ async function main() {
 
   const sm = join(root, 'src/vs/workbench/browser/media/sapphire-icon-sm.png');
   await sharp(watermarkMark).resize(128, 128).png().toFile(sm);
+  console.log('updated', sm);
   try {
     copyFileSync(sm, join(root, 'out/vs/workbench/browser/media/sapphire-icon-sm.png'));
   } catch {
     /* out may be absent */
   }
 
-  // Dock / taskbar: photoreal cube only (transparent bg after punch).
+  await writeUiAndWebAssets(watermarkMark);
+
+  // Dock / taskbar: precomposed dark-squircle logo (resize as-is).
   const platformMark = requirePhotorealMark([
     join(root, 'sapphire_icons/slice_of_sapphire_00b0cc.png'),
     join(root, 'sapphire_icons/logo_cube_noshadow.png'),

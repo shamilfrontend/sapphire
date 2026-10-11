@@ -141,6 +141,12 @@ const displayName = computed(() =>
   props.selectedOption === undefined ? '' : props.getOptionDisplayName(props.selectedOption),
 );
 
+const triggerColor = computed(() => {
+  const selected = props.selectedOption;
+  if (selected === undefined) return undefined;
+  return props.getOptionDropdownAccent?.(selected)?.fg;
+});
+
 const floatingStyle = computed(() => {
   void x.value;
   void y.value;
@@ -167,7 +173,7 @@ const optionRowClass = (option: T, selected: boolean): string => {
       stateClass = 'bg-blue-500 text-white/80';
     }
   } else if (optionAccent) {
-    stateClass = useAccentColorOnly ? 'hover:bg-void-bg-2 text-void-fg-1' : 'hover:brightness-125';
+    stateClass = useAccentColorOnly ? 'hover:bg-void-bg-2' : 'hover:brightness-125';
   } else {
     stateClass = 'hover:bg-blue-500 hover:text-white/80';
   }
@@ -179,7 +185,7 @@ const optionStyle = (option: T, selected: boolean): CSSProperties | undefined =>
   if (!optionAccent) return undefined;
   const useAccentColorOnly = !props.accentFillSelected;
   if (useAccentColorOnly) {
-    return { color: selected ? optionAccent.fg : undefined };
+    return { color: optionAccent.fg };
   }
   return {
     color: selected ? 'rgba(255,255,255,0.9)' : optionAccent.fg,
@@ -260,7 +266,7 @@ const selectOption = (option: T) => {
       ref="referenceRef"
       type="button"
       class="flex items-center h-4 bg-transparent whitespace-nowrap hover:brightness-90 w-full min-w-0"
-      :style="{ background: 'transparent' }"
+      :style="{ background: 'transparent', color: triggerColor }"
       :title="iconOnly || fillWidth ? displayName : undefined"
       @click="isOpen = !isOpen"
     >

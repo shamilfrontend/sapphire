@@ -4,7 +4,7 @@
  *  Licensed under the Apache License, Version 2.0. See LICENSE.txt for more information.
  *--------------------------------------------------------------------------------------*/
 
-import { computed, ref, watch } from 'vue';
+import { computed, nextTick, ref, watch } from 'vue';
 import { Pencil, X } from 'lucide-vue-next';
 import { useAccessor, useChatThreadsState } from '../util/services.js';
 import {
@@ -196,10 +196,24 @@ const onKeyDown = (e: KeyboardEvent) => {
   }
 };
 
+const readExposedTextArea = (el: unknown): HTMLTextAreaElement | null => {
+  if (el instanceof HTMLTextAreaElement) return el;
+  if (el && typeof el === 'object' && 'textarea' in el) {
+    const node = (el as { textarea: unknown }).textarea;
+    if (node instanceof HTMLTextAreaElement) return node;
+  }
+  return textAreaRef.current;
+};
+
 const setTextAreaEl = (el: unknown) => {
-  const node = el instanceof HTMLTextAreaElement ? el : null;
-  textAreaRefState.value = node;
-  textAreaRef.current = node;
+  const apply = () => {
+    const node = el == null ? null : readExposedTextArea(el);
+    textAreaRefState.value = node;
+    if (node) textAreaRef.current = node;
+    else if (el == null) textAreaRef.current = null;
+  };
+  apply();
+  void nextTick(apply);
 };
 
 const isMsgAfterCheckpoint = computed(

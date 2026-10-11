@@ -5,11 +5,12 @@
  *--------------------------------------------------------------------------------------*/
 
 import '../styles.css';
-import { computed, type VNode } from 'vue';
+import { computed } from 'vue';
 import { Hammer } from 'lucide-vue-next';
 import ChatMarkdownRender from '../markdown/ChatMarkdownRender.vue';
 import ProseWrapper from '../sidebar-tsx/ProseWrapper.vue';
 import ErrorBoundary from '../sidebar-tsx/ErrorBoundary.vue';
+import PlanMarkdownBody from '../agents-window-tsx/PlanMarkdownBody.vue';
 import {
   useAccessor,
   useChatThreadsState,
@@ -28,8 +29,10 @@ const props = defineProps<{
   todos: PlanTodoItem[];
   planUriFsPath: string;
   onModeChange: (mode: PlanEditorMode) => void;
-  /** Режим Markdown, когда под chrome нет редактора Monaco. */
-  markdownBody?: VNode | string;
+  /** Режим Markdown в Agents (без Monaco под chrome). */
+  markdownValue?: string;
+  onMarkdownInput?: (value: string) => void;
+  onMarkdownKeydown?: (event: KeyboardEvent) => void;
 }>();
 
 const isDark = useIsDark();
@@ -85,13 +88,9 @@ const onBuild = () => {
   void chatThreadsService.buildActivePlan(threadId);
 };
 
-const markdownBodyRenderer = {
-  name: 'PlanMarkdownBody',
-  props: ['body'],
-  setup(rendererProps: { body?: VNode | string | null }) {
-    return () => rendererProps.body ?? null;
-  },
-};
+const showMarkdownEditor = computed(
+  () => props.mode === 'markdown' && props.markdownValue !== undefined,
+);
 
 const rootStyle = {
   width: '100%',
@@ -188,8 +187,12 @@ const markdownStyle = { pointerEvents: 'auto' as const };
         </ErrorBoundary>
       </div>
     </div>
-    <div v-else-if="markdownBody" class="flex-1 min-h-0 overflow-hidden" :style="markdownStyle">
-      <component :is="markdownBodyRenderer" :body="markdownBody" />
+    <div v-else-if="showMarkdownEditor" class="flex-1 min-h-0 overflow-hidden" :style="markdownStyle">
+      <PlanMarkdownBody
+        :value="markdownValue ?? ''"
+        @input="onMarkdownInput?.($event)"
+        @keydown="onMarkdownKeydown?.($event)"
+      />
     </div>
   </div>
 </template>

@@ -125,10 +125,18 @@ function createCompile(src, { build, emitError, transpileOnly, preserveEnglish }
     pipeline.projectPath = projectPath;
     return pipeline;
 }
+/** Vue UI sources are bundled by build-react; keep them out of the main tsc stream. */
+function srcGlobs(src) {
+    return [
+        `${src}/**`,
+        `!${src}/vs/workbench/contrib/sapphire/browser/vue/src/**`,
+        `!${src}/vs/workbench/contrib/sapphire/browser/vue/src2/**`,
+    ];
+}
 function transpileTask(src, out, esbuild) {
     const task = () => {
         const transpile = createCompile(src, { build: false, emitError: true, transpileOnly: { esbuild }, preserveEnglish: false });
-        const srcPipe = gulp_1.default.src(`${src}/**`, { base: `${src}` });
+        const srcPipe = gulp_1.default.src(srcGlobs(src), { base: `${src}` });
         return srcPipe
             .pipe(transpile())
             .pipe(gulp_1.default.dest(out));
@@ -142,7 +150,7 @@ function compileTask(src, out, build, options = {}) {
             throw new Error('compilation requires 4GB of RAM');
         }
         const compile = createCompile(src, { build, emitError: true, transpileOnly: false, preserveEnglish: !!options.preserveEnglish });
-        const srcPipe = gulp_1.default.src(`${src}/**`, { base: `${src}` });
+        const srcPipe = gulp_1.default.src(srcGlobs(src), { base: `${src}` });
         const generator = new MonacoGenerator(false);
         if (src === 'src') {
             generator.execute();
@@ -179,8 +187,8 @@ function compileTask(src, out, build, options = {}) {
 function watchTask(out, build, srcPath = 'src') {
     const task = () => {
         const compile = createCompile(srcPath, { build, emitError: false, transpileOnly: false, preserveEnglish: false });
-        const src = gulp_1.default.src(`${srcPath}/**`, { base: srcPath });
-        const watchSrc = watch(`${srcPath}/**`, { base: srcPath, readDelay: 200 });
+        const src = gulp_1.default.src(srcGlobs(srcPath), { base: srcPath });
+        const watchSrc = watch(srcGlobs(srcPath), { base: srcPath, readDelay: 200 });
         const generator = new MonacoGenerator(true);
         generator.execute();
         return watchSrc

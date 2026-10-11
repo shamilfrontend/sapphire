@@ -616,7 +616,7 @@ export class ApiCommandArgument<V, O = V> {
 }
 
 export class ApiCommandResult<V, O = V> {
-  static readonly Sapphire = new ApiCommandResult<void, void>('no result', (v) => v);
+  static readonly Void = new ApiCommandResult<void, void>('no result', (v) => v);
 
   constructor(
     readonly description: string,

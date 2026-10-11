@@ -21,7 +21,6 @@ const accessor = useAccessor();
 const sapphireSettingsService = accessor.get('ISapphireSettingsService');
 const settingsState = useSettingsState();
 const chatMode = computed(() => settingsState.value.globalSettings.chatMode);
-const accent = computed(() => accentOfChatMode[chatMode.value]);
 
 const options: ChatMode[] = ['agent', 'plan', 'debug', 'normal'];
 
@@ -41,7 +40,6 @@ const optionsEqual = (a: ChatMode, b: ChatMode) => a === b;
   <SapphireCustomDropdownBox
     :class="`text-xs rounded-md py-0.5 border border-void-border-2 shrink-0 ${iconOnly ? 'px-1.5' : 'px-2'}`"
     :iconOnly="iconOnly"
-    :style="{ color: accent.fg }"
     :options="options"
     :selectedOption="chatMode"
     :onChangeOption="onChangeOption"

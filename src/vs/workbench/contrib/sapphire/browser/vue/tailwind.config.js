@@ -49,33 +49,34 @@ module.exports = {
       // common colors to use, ordered light to dark
 
       colors: {
-        'sapphire-bg-1': 'var(--void-bg-1)',
-        'sapphire-bg-1-alt': 'var(--void-bg-1-alt)',
-        'sapphire-bg-2': 'var(--void-bg-2)',
-        'sapphire-bg-2-alt': 'var(--void-bg-2-alt)',
-        'sapphire-bg-2-hover': 'var(--void-bg-2-hover)',
-        'sapphire-bg-3': 'var(--void-bg-3)',
+        // Имена совпадают с классами в шаблонах (bg-void-bg-2 → void-bg-void-bg-2 после префикса).
+        'void-bg-1': 'var(--void-bg-1)',
+        'void-bg-1-alt': 'var(--void-bg-1-alt)',
+        'void-bg-2': 'var(--void-bg-2)',
+        'void-bg-2-alt': 'var(--void-bg-2-alt)',
+        'void-bg-2-hover': 'var(--void-bg-2-hover)',
+        'void-bg-3': 'var(--void-bg-3)',
 
-        'sapphire-fg-0': 'var(--void-fg-0)',
-        'sapphire-fg-1': 'var(--void-fg-1)',
-        'sapphire-fg-2': 'var(--void-fg-2)',
-        'sapphire-fg-3': 'var(--void-fg-3)',
-        // 'sapphire-fg-4': 'var(--vscode-tab-inactiveForeground)',
-        'sapphire-fg-4': 'var(--void-fg-4)',
+        'void-fg-0': 'var(--void-fg-0)',
+        'void-fg-1': 'var(--void-fg-1)',
+        'void-fg-2': 'var(--void-fg-2)',
+        'void-fg-3': 'var(--void-fg-3)',
+        // 'void-fg-4': 'var(--vscode-tab-inactiveForeground)',
+        'void-fg-4': 'var(--void-fg-4)',
 
-        'sapphire-warning': 'var(--void-warning)',
-        'sapphire-success': 'var(--void-success)',
-        'sapphire-danger': 'var(--void-danger)',
-        'sapphire-danger-muted': 'var(--void-danger-muted)',
-        'sapphire-danger-border': 'var(--void-danger-border)',
+        'void-warning': 'var(--void-warning)',
+        'void-success': 'var(--void-success)',
+        'void-danger': 'var(--void-danger)',
+        'void-danger-muted': 'var(--void-danger-muted)',
+        'void-danger-border': 'var(--void-danger-border)',
 
-        'sapphire-border-1': 'var(--void-border-1)',
-        'sapphire-border-2': 'var(--void-border-2)',
-        'sapphire-border-3': 'var(--void-border-3)',
-        'sapphire-border-4': 'var(--void-border-4)',
+        'void-border-1': 'var(--void-border-1)',
+        'void-border-2': 'var(--void-border-2)',
+        'void-border-3': 'var(--void-border-3)',
+        'void-border-4': 'var(--void-border-4)',
 
-        'sapphire-ring-color': 'var(--void-ring-color)',
-        'sapphire-link-color': 'var(--void-link-color)',
+        'void-ring-color': 'var(--void-ring-color)',
+        'void-link-color': 'var(--void-link-color)',
 
         vscode: {
           // see: https://code.visualstudio.com/api/extension-guides/webview#theming-webview-content

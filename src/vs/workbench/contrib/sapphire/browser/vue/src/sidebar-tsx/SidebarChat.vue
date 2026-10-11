@@ -223,9 +223,11 @@ const onSubmit = async (_forceSubmit?: string) => {
   if (isDisabled.value && !_forceSubmit) return;
 
   const threadId = chatThreadsService.state.currentThreadId;
-  const userMessage = _forceSubmit || textAreaRef.current?.value || '';
+  const userMessage = _forceSubmit ?? textAreaRef.current?.value ?? draftText.value ?? '';
   const images = stagingImages.value.length ? stagingImages.value : undefined;
   const currentSelections = selections.value.length ? [...selections.value] : undefined;
+
+  if (!userMessage.trim() && !images?.length) return;
 
   const clearComposerForThread = () => {
     setSelections([]);
@@ -416,10 +418,6 @@ const placeholder = computed(() =>
       : 'Продолжить… (xlsx, docx, pptx, pdf)',
 );
 
-const setComposerTextArea = (el: unknown) => {
-  textAreaRef.current = el instanceof HTMLTextAreaElement ? el : null;
-};
-
 const onComposerPaste = async (e: ClipboardEvent) => {
   if (!supportsVision.value) return;
   const files = imageFilesFromDataTransfer(e.clipboardData);
@@ -498,7 +496,6 @@ const onComposerFileInput = async (e: Event) => {
                     :onKeyDown="onKeyDown"
                     :onPaste="onComposerPaste"
                     :onFocus="() => chatThreadsService.setCurrentlyFocusedMessageIdx(undefined)"
-                    :ref="setComposerTextArea"
                     :textAreaRef="textAreaRef"
                     :fnsRef="textAreaFnsRef"
                     multiline
@@ -572,7 +569,6 @@ const onComposerFileInput = async (e: Event) => {
                   :onKeyDown="onKeyDown"
                   :onPaste="onComposerPaste"
                   :onFocus="() => chatThreadsService.setCurrentlyFocusedMessageIdx(undefined)"
-                  :ref="setComposerTextArea"
                   :textAreaRef="textAreaRef"
                   :fnsRef="textAreaFnsRef"
                   multiline
@@ -743,7 +739,6 @@ const onComposerFileInput = async (e: Event) => {
                   :onKeyDown="onKeyDown"
                   :onPaste="onComposerPaste"
                   :onFocus="() => chatThreadsService.setCurrentlyFocusedMessageIdx(undefined)"
-                  :ref="setComposerTextArea"
                   :textAreaRef="textAreaRef"
                   :fnsRef="textAreaFnsRef"
                   multiline

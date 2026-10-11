@@ -121,6 +121,15 @@ export function createCompile(
   return pipeline;
 }
 
+/** Vue UI sources are bundled by build-react; keep them out of the main tsc stream. */
+function srcGlobs(src: string): string[] {
+  return [
+    `${src}/**`,
+    `!${src}/vs/workbench/contrib/sapphire/browser/vue/src/**`,
+    `!${src}/vs/workbench/contrib/sapphire/browser/vue/src2/**`,
+  ];
+}
+
 export function transpileTask(src: string, out: string, esbuild: boolean): task.StreamTask {
   const task = () => {
     const transpile = createCompile(src, {
@@ -129,7 +138,7 @@ export function transpileTask(src: string, out: string, esbuild: boolean): task.
       transpileOnly: { esbuild },
       preserveEnglish: false,
     });
-    const srcPipe = gulp.src(`${src}/**`, { base: `${src}` });
+    const srcPipe = gulp.src(srcGlobs(src), { base: `${src}` });
 
     return srcPipe.pipe(transpile()).pipe(gulp.dest(out));
   };
@@ -155,7 +164,7 @@ export function compileTask(
       transpileOnly: false,
       preserveEnglish: !!options.preserveEnglish,
     });
-    const srcPipe = gulp.src(`${src}/**`, { base: `${src}` });
+    const srcPipe = gulp.src(srcGlobs(src), { base: `${src}` });
     const generator = new MonacoGenerator(false);
     if (src === 'src') {
       generator.execute();
@@ -207,8 +216,8 @@ export function watchTask(out: string, build: boolean, srcPath: string = 'src'):
       preserveEnglish: false,
     });
 
-    const src = gulp.src(`${srcPath}/**`, { base: srcPath });
-    const watchSrc = watch(`${srcPath}/**`, { base: srcPath, readDelay: 200 });
+    const src = gulp.src(srcGlobs(srcPath), { base: srcPath });
+    const watchSrc = watch(srcGlobs(srcPath), { base: srcPath, readDelay: 200 });
 
     const generator = new MonacoGenerator(true);
     generator.execute();

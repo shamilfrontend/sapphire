@@ -3,7 +3,7 @@
  *  PPR Code — plan preview beside the chat in Режим Агент.
  *--------------------------------------------------------------------------------------*/
 
-import { computed, h, ref, watch } from 'vue';
+import { computed, ref, watch } from 'vue';
 import { X } from 'lucide-vue-next';
 import { URI } from '../../../../../../../base/common/uri.js';
 import { getBasename } from '../../../../common/pathLabels.js';
@@ -14,7 +14,6 @@ import {
 import PlanEditorChrome from '../plan-editor-tsx/PlanEditorChrome.vue';
 import type { PlanEditorMode } from '../plan-editor-tsx/planEditor.js';
 import { useAccessor } from '../util/services.js';
-import PlanMarkdownBody from './PlanMarkdownBody.vue';
 
 const props = defineProps<{
   fsPath: string;
@@ -101,14 +100,6 @@ const setMode = (next: PlanEditorMode) => {
   mode.value = next;
 };
 
-const markdownBody = computed(() =>
-  h(PlanMarkdownBody, {
-    value: raw.value,
-    onInput: onMarkdownChange,
-    onKeydown: onMarkdownKeyDown,
-  }),
-);
-
 const label = computed(() => getBasename(props.fsPath));
 </script>
 
@@ -136,7 +127,9 @@ const label = computed(() => getBasename(props.fsPath));
         :todos="parsed.todos"
         :planUriFsPath="fsPath"
         :onModeChange="setMode"
-        :markdownBody="markdownBody"
+        :markdownValue="raw"
+        :onMarkdownInput="onMarkdownChange"
+        :onMarkdownKeydown="onMarkdownKeyDown"
       />
       <div v-else class="p-4 text-sm text-void-fg-3">
         {{ status === 'missing' ? 'Файл недоступен' : 'Загрузка…' }}

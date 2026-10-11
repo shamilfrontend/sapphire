@@ -145,6 +145,102 @@ const prefixTemplate = (template) => {
   return next;
 };
 
+const CLASS_PROP_NAMES = new Set(['class', 'className']);
+
+/** Строка похожа на список Tailwind-классов (а не на произвольный текст). */
+const looksLikeClassList = (value) => {
+  if (!value || typeof value !== 'string') {
+    return false;
+  }
+  if (!/[\s-]/.test(value) && !/^(flex|grid|block|hidden|relative|absolute|fixed|sticky)$/.test(value)) {
+    return false;
+  }
+  return /(?:^|[\s:])(?:!?-?(?:bg|text|border|ring|outline|from|via|to|fill|stroke|decoration|divide|placeholder|accent|caret|shadow|opacity|blur|brightness|contrast|grayscale|hue|invert|saturate|sepia|backdrop|flex|grid|items|justify|content|self|place|gap|space|p|px|py|pt|pr|pb|pl|m|mx|my|mt|mr|mb|ml|w|h|min|max|size|overflow|truncate|whitespace|break|rounded|font|leading|tracking|align|underline|line|list|table|border|cursor|select|pointer|resize|scroll|snap|touch|user|visible|invisible|z|top|right|bottom|left|inset|order|grow|shrink|basis|col|row|auto|object|transition|duration|ease|delay|animate|origin|scale|rotate|translate|skew|transform|opacity|mix|isolation)-|[a-z]+-\d|flex|grid|block|inline|hidden|relative|absolute)/.test(
+    value,
+  );
+};
+
+const prefixClassListLiteral = (node) => {
+  if (t.isStringLiteral(node) && looksLikeClassList(node.value)) {
+    return t.stringLiteral(prefixClassString(node.value));
+  }
+  if (t.isTemplateLiteral(node)) {
+    const raw = node.quasis.map((q) => q.value.raw).join('');
+    if (looksLikeClassList(raw) || node.expressions.length > 0) {
+      return withPrefixAdded(node);
+    }
+  }
+  return node;
+};
+
+const prefixTsAst = (ast, { prefixReturns = false } = {}) => {
+  babel.traverse(ast, {
+    ObjectProperty(path) {
+      if (path.node.computed) {
+        return;
+      }
+      const key = path.node.key;
+      const name = t.isIdentifier(key) ? key.name : t.isStringLiteral(key) ? key.value : null;
+      if (!name || !CLASS_PROP_NAMES.has(name)) {
+        return;
+      }
+      path.node.value = withPrefixAdded(path.node.value);
+    },
+    ...(prefixReturns
+      ? {
+          ReturnStatement(path) {
+            if (!path.node.argument) {
+              return;
+            }
+            const arg = path.node.argument;
+            if (t.isStringLiteral(arg) || t.isTemplateLiteral(arg) || t.isConditionalExpression(arg)) {
+              // return 'text-void-fg-1' / ternary class lists in computed helpers
+              const visit = (expr) => {
+                if (t.isStringLiteral(expr) || t.isTemplateLiteral(expr)) {
+                  return prefixClassListLiteral(expr);
+                }
+                if (t.isConditionalExpression(expr)) {
+                  return t.conditionalExpression(expr.test, visit(expr.consequent), visit(expr.alternate));
+                }
+                return expr;
+              };
+              path.node.argument = visit(arg);
+            }
+          },
+        }
+      : {}),
+  });
+};
+
+const prefixTsSource = (code, filename = 'file.ts', { prefixReturns = false } = {}) => {
+  let parsed;
+  try {
+    parsed = babel.parseSync(code, {
+      filename,
+      configFile: false,
+      babelrc: false,
+      parserOpts: {
+        sourceType: 'module',
+        plugins: ['typescript', 'jsx'],
+      },
+    });
+  } catch {
+    return code;
+  }
+  if (!parsed) {
+    return code;
+  }
+  prefixTsAst(parsed, { prefixReturns });
+  const generated = babel.transformFromAstSync(parsed, code, {
+    filename,
+    configFile: false,
+    babelrc: false,
+    retainLines: true,
+    compact: false,
+  });
+  return generated?.code ?? code;
+};
+
 const prefixVueSource = (code) => {
   let cursor = 0;
   let result = '';
@@ -189,6 +285,17 @@ const prefixVueSource = (code) => {
       break;
     }
   }
+
+  // Классы, собранные в <script> (return 'bg-void-bg-3', computed).
+  result = result.replace(/<script(\b[^>]*)>([\s\S]*?)<\/script>/g, (full, attrs, scriptBody) => {
+    const lang = /lang\s*=\s*["']tsx?["']/.test(attrs) || /lang\s*=\s*["']js["']/.test(attrs);
+    if (!lang && !attrs.includes('setup')) {
+      // всё равно пробуем — script setup без lang
+    }
+    const next = prefixTsSource(scriptBody, 'script.ts', { prefixReturns: true });
+    return `<script${attrs}>${next}</script>`;
+  });
+
   return result;
 };
 
@@ -199,12 +306,16 @@ const walk = (dir) => {
       walk(full);
       continue;
     }
-    if (!entry.name.endsWith('.vue')) {
+    if (entry.name.endsWith('.vue')) {
+      const source = fs.readFileSync(full, 'utf8');
+      fs.writeFileSync(full, prefixVueSource(source));
       continue;
     }
-    const source = fs.readFileSync(full, 'utf8');
-    fs.writeFileSync(full, prefixVueSource(source));
+    if (entry.name.endsWith('.ts') || entry.name.endsWith('.tsx')) {
+      const source = fs.readFileSync(full, 'utf8');
+      fs.writeFileSync(full, prefixTsSource(source, entry.name));
+    }
   }
 };
 
-export { prefixVueSource, walk };
+export { prefixVueSource, prefixTsSource, walk };
