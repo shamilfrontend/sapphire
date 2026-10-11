@@ -231,19 +231,6 @@ const onSettingsKeyDown = (e: KeyboardEvent) => {
 
     <div class="relative z-10 flex items-center gap-0.5 shrink-0 pr-0.5">
       <button
-        type="button"
-        class="flex items-center justify-center size-7 rounded text-void-fg-4 hover:bg-void-bg-2-hover hover:text-void-fg-2"
-        @click="
-          onSelectThread?.();
-          chatThreadsService.openNewThread();
-        "
-        title="Новый чат"
-        data-tooltip-id="sapphire-tooltip"
-        data-tooltip-content="Новый чат"
-      >
-        <Plus class="size-4 stroke-[1.5]" />
-      </button>
-      <button
         v-if="historyVisible"
         type="button"
         :class="`
@@ -257,6 +244,19 @@ const onSettingsKeyDown = (e: KeyboardEvent) => {
         data-tooltip-content="История чатов"
       >
         <History class="size-4 stroke-[1.5]" />
+      </button>
+      <button
+        type="button"
+        class="flex items-center justify-center size-7 rounded text-void-fg-4 hover:bg-void-bg-2-hover hover:text-void-fg-2"
+        @click="
+          onSelectThread?.();
+          chatThreadsService.openNewThread();
+        "
+        title="Новый чат"
+        data-tooltip-id="sapphire-tooltip"
+        data-tooltip-content="Новый чат"
+      >
+        <Plus class="size-4 stroke-[1.5]" />
       </button>
     </div>
 

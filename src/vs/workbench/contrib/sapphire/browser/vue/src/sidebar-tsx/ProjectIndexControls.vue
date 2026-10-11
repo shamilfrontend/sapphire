@@ -95,12 +95,17 @@ const floating = ref<HTMLElement | null>(null);
 const { x, y, strategy, update } = useFloating(reference, floating, {
   open: () => open.value,
   placement: () => props.popoverPlacement,
-  middleware: [offset(8), flip(), shift({ padding: 8 })],
+  strategy: 'fixed',
+  transform: false,
+  middleware: [
+    offset(8),
+    flip({ boundary: document.body }),
+    shift({ boundary: document.body, padding: 8 }),
+  ],
   // не пересчитывать anchor при каждом тике индексации
   // иначе popover «прыгает» при смене currentPath
   whileElementsMounted: (referenceEl, floatingEl, onUpdate) =>
     autoUpdate(referenceEl, floatingEl, onUpdate, { elementResize: false }),
-  strategy: 'fixed',
 });
 
 const syncWorkspace = () => {
@@ -225,7 +230,7 @@ const errorPaths = computed(() =>
     <div
       v-if="open"
       ref="floating"
-      :style="{ position: strategy, top: y ?? 0, left: x ?? 0 }"
+      :style="{ position: strategy, top: `${y ?? 0}px`, left: `${x ?? 0}px` }"
       class="z-[10000] w-[340px] max-h-[420px] overflow-auto rounded-lg border border-void-border-2 bg-void-bg-1 shadow-lg p-3 text-left"
       @click.stop
     >

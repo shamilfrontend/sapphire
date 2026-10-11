@@ -22,15 +22,22 @@ const floating = ref<HTMLElement | null>(null);
 const { x, y, strategy } = useFloating(reference, floating, {
   open: () => open.value,
   placement: 'top-end',
+  strategy: 'fixed',
+  transform: false,
   middleware: [
     offset(8),
     flip({
+      boundary: document.body,
       padding: 8,
       fallbackPlacements: ['bottom-end', 'top-start', 'bottom-start'],
     }),
-    shift({ padding: 8 }),
+    shift({
+      boundary: document.body,
+      padding: 8,
+    }),
     size({
       padding: 8,
+      boundary: document.body,
       apply({ availableWidth, availableHeight, elements }) {
         Object.assign(elements.floating.style, {
           width: `${Math.min(280, availableWidth)}px`,
@@ -41,7 +48,6 @@ const { x, y, strategy } = useFloating(reference, floating, {
     }),
   ],
   whileElementsMounted: autoUpdate,
-  strategy: 'fixed',
 });
 
 watch(
@@ -131,8 +137,8 @@ const ringColorOf = (usage: ChatContextUsage | null) => {
       class="z-[100] rounded-lg border border-void-border-2 bg-void-bg-1 shadow-lg p-3 text-left"
       :style="{
         position: strategy,
-        top: y ?? 0,
-        left: x ?? 0,
+        top: `${y ?? 0}px`,
+        left: `${x ?? 0}px`,
       }"
       @click.stop
     >

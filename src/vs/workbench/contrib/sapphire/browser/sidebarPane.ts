@@ -119,7 +119,7 @@ const viewContainerRegistry = Registry.as<IViewContainersRegistry>(
 const container = viewContainerRegistry.registerViewContainer(
   {
     id: SAPPHIRE_VIEW_CONTAINER_ID,
-    title: nls.localize2('sapphireContainer', 'Sapphire'), // заголовок контейнера auxiliary bar
+    title: nls.localize2('sapphireContainer', ''), // без label в title bar auxiliary bar
     ctorDescriptor: new SyncDescriptor(ViewPaneContainer, [
       SAPPHIRE_VIEW_CONTAINER_ID,
       {
