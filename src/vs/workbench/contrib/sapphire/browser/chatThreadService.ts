@@ -76,6 +76,7 @@ import {
 } from '../../../../platform/notification/common/notification.js';
 import { truncate } from '../../../../base/common/strings.js';
 import { THREAD_STORAGE_KEY } from '../common/storageKeys.js';
+import { normalizeThreadsFromStorage } from '../common/normalizeChatThreads.js';
 import { IConvertToLLMMessageService } from './convertToLLMMessageService.js';
 import { IWorkspaceContextService } from '../../../../platform/workspace/common/workspace.js';
 import { IDirectoryStrService } from '../common/directoryStrService.js';
@@ -83,6 +84,7 @@ import { IFileService } from '../../../../platform/files/common/files.js';
 import { IOfficeExtractService } from '../common/officeExtractService.js';
 import { IMCPService } from '../common/mcpService.js';
 import { IAccessibilitySignalService } from '../../../../platform/accessibilitySignal/browser/accessibilitySignalService.js';
+import { IConfigurationService } from '../../../../platform/configuration/common/configuration.js';
 export interface IChatThreadService {
   readonly _serviceBrand: undefined;
 
@@ -315,6 +317,7 @@ class ChatThreadService extends Disposable implements IChatThreadService {
     @IMCPService readonly _mcpService: IMCPService,
     @IAccessibilitySignalService
     readonly _accessibilitySignalService: IAccessibilitySignalService,
+    @IConfigurationService readonly _configurationService: IConfigurationService,
     @IEditorService private readonly _editorService: IEditorService,
     @IHeuristicFileRetrieveService
     private readonly _heuristicFileRetrieveService: IHeuristicFileRetrieveService,
@@ -468,18 +471,9 @@ class ChatThreadService extends Disposable implements IChatThreadService {
     };
   }
 
-  /** Убрать устаревшие поля (например filesWithUserChanges Set, который JSON давал как {}). */
+  /** Убрать устаревшие поля и гарантировать messages[] / state после JSON hydrate. */
   private _normalizeThreadsFromStorage(threads: ChatThreads): ChatThreads {
-    const out: ChatThreads = {};
-    for (const id of Object.keys(threads)) {
-      const t = threads[id];
-      if (!t) continue;
-      const { filesWithUserChanges: _drop, ...rest } = t as ThreadType & {
-        filesWithUserChanges?: unknown;
-      };
-      out[id] = rest;
-    }
-    return out;
+    return normalizeThreadsFromStorage(threads) as ChatThreads;
   }
 
   /** Запись тредов в APPLICATION storage; эфемерные subagent-треды пропускаем. */
@@ -759,7 +753,7 @@ class ChatThreadService extends Disposable implements IChatThreadService {
 
     const instructions = userMessage;
     const userSelns: StagingSelectionItem[] = [
-      ...(_chatSelections ?? threadNow.state.stagingSelections),
+      ...(_chatSelections ?? threadNow.state?.stagingSelections ?? []),
     ];
     // Убираем старые heuristic-файлы — при re-edit/re-send подтянутся заново
     let currSelns: StagingSelectionItem[] = userSelns.filter(
@@ -789,7 +783,7 @@ class ChatThreadService extends Disposable implements IChatThreadService {
     try {
       // Пустой checkpoint перед первым user-сообщением — единая модель «checkpoint перед user».
       // Сбой здесь не должен оставлять preparing навечно (вне try раньше так и было).
-      if (threadNow.messages.length === 0) {
+      if ((threadNow.messages ?? []).length === 0) {
         chatTrace(threadId, 'prep.checkpoint');
         try {
           this._addUserCheckpoint({ threadId });

@@ -6,7 +6,7 @@ import { IsRunningType, ThreadType } from '../../../chatThreadService.js';
 
 export const threadTitle = (thread: ThreadType | undefined): string => {
   if (!thread) return 'Новый чат';
-  const firstUserMsg = thread.messages.find((msg) => msg.role === 'user');
+  const firstUserMsg = thread.messages?.find((msg) => msg.role === 'user');
   if (firstUserMsg && firstUserMsg.role === 'user' && firstUserMsg.displayContent?.trim()) {
     return firstUserMsg.displayContent.trim();
   }

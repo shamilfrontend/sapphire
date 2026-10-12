@@ -74,6 +74,12 @@ const progressFillStyle = (percent: number): CSSProperties => ({
   backgroundColor: 'var(--vscode-progressBar-background, var(--vscode-focusBorder, #0078d4))',
 });
 
+/** Заливка бара в триггере сайдбара — muted, как «Общий лог». */
+const triggerProgressFillStyle = (percent: number): CSSProperties => ({
+  width: `${percent}%`,
+  backgroundColor: 'var(--void-fg-3)',
+});
+
 function formatTime(ts: number | null | undefined): string {
   if (!ts) {
     return '—';
@@ -206,7 +212,7 @@ const errorPaths = computed(() =>
       type="button"
       ref="reference"
       :style="noDrag"
-      :class="`text-[11px] px-1.5 rounded hover:bg-void-bg-2 cursor-pointer w-[188px] shrink-0 text-left overflow-hidden ${
+      :class="`text-[10px] px-1.5 rounded hover:bg-void-bg-2 cursor-pointer w-[140px] shrink-0 text-left overflow-hidden ${
         compact ? 'py-0 leading-[13px] max-h-[26px]' : 'py-0.5'
       }`"
       :title="compact ? undefined : statusTitle"
@@ -219,18 +225,18 @@ const errorPaths = computed(() =>
         :class="`flex flex-col w-full min-w-0 ${compact ? 'gap-px' : 'gap-0.5'}`"
       >
         <div class="flex items-center justify-between gap-1 w-full min-w-0">
-          <span class="truncate text-void-fg-1">{{ paused ? 'Пауза' : 'Индексация' }}</span>
-          <span class="shrink-0 tabular-nums font-semibold text-void-fg-1">
+          <span class="truncate text-void-fg-3">{{ paused ? 'Пауза' : 'Индексация' }}</span>
+          <span class="shrink-0 tabular-nums text-void-fg-3">
             {{ overallPercent }}%
           </span>
         </div>
         <div
-          :class="`${compact ? 'h-0.5' : 'h-1'} w-full rounded-full overflow-hidden`"
+          class="h-0.5 w-full rounded-full overflow-hidden"
           :style="progressTrackStyle"
         >
           <div
             class="h-full rounded-full transition-[width] duration-150 ease-out"
-            :style="progressFillStyle(overallPercent)"
+            :style="triggerProgressFillStyle(overallPercent)"
           />
         </div>
       </div>

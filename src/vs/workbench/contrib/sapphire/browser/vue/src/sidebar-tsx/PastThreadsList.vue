@@ -58,11 +58,11 @@ const sortedThreadIds = computed(() => {
     .sort((threadId1, threadId2) =>
       (threads[threadId1]?.lastModified ?? 0) > (threads[threadId2]?.lastModified ?? 0) ? -1 : 1,
     )
-    .filter((threadId) => (threads[threadId]?.messages.length ?? 0) !== 0)
+    .filter((threadId) => (threads[threadId]?.messages?.length ?? 0) !== 0)
     .filter((threadId) => {
       if (!query.value) return true;
       const thread = threads[threadId];
-      const firstUser = thread?.messages.find((msg) => msg.role === 'user');
+      const firstUser = thread?.messages?.find((msg) => msg.role === 'user');
       const text = firstUser && firstUser.role === 'user' ? (firstUser.displayContent ?? '') : '';
       return text.toLowerCase().includes(query.value);
     });

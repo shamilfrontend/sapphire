@@ -328,7 +328,6 @@ const onEditSymbolClick = () => {
           :images="editImages"
           :setImages="setEditImages"
           :onPickFiles="onPickEditFiles"
-          :showProjectIndexStatus="false"
         >
           <input
             ref="editFileInputRef"

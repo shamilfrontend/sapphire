@@ -330,7 +330,7 @@ const providerSections = [
 
                   <!-- Звук уведомления чата -->
                   <ErrorBoundary>
-                    <div class="flex items-center gap-x-2">
+                    <div class="flex items-start gap-x-2">
                       <SapphireSwitch
                         size="xs"
                         :value="settingsState.globalSettings.playChatNotificationSound"
@@ -342,7 +342,9 @@ const providerSections = [
                         "
                       />
                       <span class="text-void-fg-3 text-xs pointer-events-none">
-                        Звуковой сигнал: окончание ответа и запрос подтверждения
+                        Звуковой сигнал: окончание ответа и запрос подтверждения.
+                        Нужна ненулевая громкость Accessibility → Signals
+                        (accessibility.signalOptions.volume).
                       </span>
                     </div>
                   </ErrorBoundary>

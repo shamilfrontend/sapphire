@@ -44,6 +44,7 @@ import ScrollToBottomContainer from './ScrollToBottomContainer.vue';
 import ChatBubble from './ChatBubble.vue';
 import CommandBarInChat from './CommandBarInChat.vue';
 import CopyChatLogButton from './CopyChatLogButton.vue';
+import ProjectIndexControls from './ProjectIndexControls.vue';
 import IconLoading from './IconLoading.vue';
 import ProseWrapper from './ProseWrapper.vue';
 import { PlanToolCard, EditToolSoFar } from './ChatToolCards.js';
@@ -479,7 +480,6 @@ const onComposerFileInput = async (e: Event) => {
                   :setImages="setStagingImagesAndPersist"
                   :onPickFiles="onPickComposerFiles"
                   :onClickAnywhere="() => textAreaRef.current?.focus()"
-                  :showProjectIndexStatus="variant === 'agents'"
                 >
                   <input
                     ref="imageFileInputRef"
@@ -553,7 +553,6 @@ const onComposerFileInput = async (e: Event) => {
                 :setImages="setStagingImagesAndPersist"
                 :onPickFiles="onPickComposerFiles"
                 :onClickAnywhere="() => textAreaRef.current?.focus()"
-                :showProjectIndexStatus="variant === 'agents'"
               >
                 <input
                   ref="imageFileInputRef"
@@ -724,7 +723,6 @@ const onComposerFileInput = async (e: Event) => {
                 :onPickFiles="onPickComposerFiles"
                 :onClickAnywhere="() => textAreaRef.current?.focus()"
                 :contextUsage="contextUsage"
-                :showProjectIndexStatus="variant === 'agents'"
               >
                 <input
                   ref="imageFileInputRef"
@@ -753,7 +751,8 @@ const onComposerFileInput = async (e: Event) => {
         </ErrorBoundary>
       </div>
     </div>
-    <div class="shrink-0 px-2 pb-1">
+    <div class="shrink-0 px-2 pb-1 flex items-center justify-between gap-2">
+      <ProjectIndexControls showStatusButton popoverPlacement="top-start" />
       <CopyChatLogButton />
     </div>
   </div>

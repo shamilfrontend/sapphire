@@ -2189,7 +2189,20 @@ ${planBody}`;
 
   _playChatSound(kind: 'done' | 'confirm') {
     if (!this._s._settingsService.state.globalSettings.playChatNotificationSound) return;
+    const volume = this._s._configurationService.getValue(
+      'accessibility.signalOptions.volume',
+    );
+    if (typeof volume === 'number' && volume <= 0) {
+      console.warn(
+        '[sapphire] Chat notification sound skipped: accessibility.signalOptions.volume is 0',
+      );
+      return;
+    }
     const sound = kind === 'confirm' ? Sound.warning : Sound.taskCompleted;
-    void this._s._accessibilitySignalService.playSound(sound, true, AcknowledgeDocCommentsToken);
+    void this._s._accessibilitySignalService
+      .playSound(sound, true, AcknowledgeDocCommentsToken)
+      .catch((err: unknown) => {
+        console.warn('[sapphire] Failed to play chat notification sound', err);
+      });
   }
 }

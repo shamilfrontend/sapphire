@@ -42,7 +42,7 @@ const onCopy = () => {
 </script>
 
 <template>
-  <div class="flex justify-end pt-1.5">
+  <div class="flex pt-1.5">
     <button
       type="button"
       class="px-2 py-0.5 text-xs text-void-fg-3 hover:text-void-fg-1 transition-colors cursor-pointer"

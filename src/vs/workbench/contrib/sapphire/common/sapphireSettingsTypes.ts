@@ -248,7 +248,8 @@ export const isProviderNameDisabled = (
   settingsState: SapphireSettingsState,
 ) => {
   // модели ещё не подтянулись или провайдер не настроен
-  if (settingsState.settingsOfProvider[providerName].models.length === 0) {
+  const models = settingsState.settingsOfProvider[providerName]?.models ?? [];
+  if (models.length === 0) {
     return 'providerNotAutoDetected' as const;
   }
   return false;
@@ -267,15 +268,15 @@ export const isFeatureNameDisabled = (
   }
 
   // есть модели для включения
-  const canTurnOnAModel = !!providerNames.find(
-    (providerName) =>
-      settingsState.settingsOfProvider[providerName].models.filter((m) => m.isHidden).length !== 0,
-  );
+  const canTurnOnAModel = !!providerNames.find((providerName) => {
+    const models = settingsState.settingsOfProvider[providerName]?.models ?? [];
+    return models.filter((m) => m.isHidden).length !== 0;
+  });
   if (canTurnOnAModel) return 'needToEnableModel';
 
   // провайдер есть — добавить модель
   const anyFilledIn = !!providerNames.find(
-    (providerName) => settingsState.settingsOfProvider[providerName]._didFillInProviderSettings,
+    (providerName) => settingsState.settingsOfProvider[providerName]?._didFillInProviderSettings,
   );
   if (anyFilledIn) return 'addModel';
 

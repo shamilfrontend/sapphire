@@ -34,7 +34,8 @@ const onClick = () => {
     threadId: props.threadId,
     messageIdx: props.messageIdx,
     jumpToUserModified:
-      props.messageIdx === (chatThreadService.state.allThreads[props.threadId]?.messages.length ?? 0) - 1,
+      props.messageIdx ===
+        (chatThreadService.state.allThreads[props.threadId]?.messages?.length ?? 0) - 1,
   });
 };
 </script>

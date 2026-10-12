@@ -32,7 +32,6 @@ import './convertToLLMMessageWorkbenchContrib.js';
 
 // гибридный индекс проекта (.sapphire/index) — до tools/heuristic
 import './projectIndexService.js';
-import './projectIndexTitlebarContribution.js';
 
 // инструменты агента
 import './toolsService.js';

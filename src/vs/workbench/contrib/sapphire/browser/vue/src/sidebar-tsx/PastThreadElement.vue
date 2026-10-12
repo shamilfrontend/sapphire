@@ -46,9 +46,10 @@ const formatDate = (date: Date) => {
 
 const firstMsg = computed(() => {
   let message = '';
-  const firstUserMsgIdx = props.pastThread.messages.findIndex((msg) => msg.role === 'user');
+  const messages = props.pastThread.messages ?? [];
+  const firstUserMsgIdx = messages.findIndex((msg) => msg.role === 'user');
   if (firstUserMsgIdx !== -1) {
-    const firsUsertMsgObj = props.pastThread.messages[firstUserMsgIdx];
+    const firsUsertMsgObj = messages[firstUserMsgIdx];
     message = (firsUsertMsgObj.role === 'user' && firsUsertMsgObj.displayContent) || '';
   } else {
     message = '""';
@@ -58,8 +59,9 @@ const firstMsg = computed(() => {
 
 const numMessages = computed(
   () =>
-    props.pastThread.messages.filter((msg) => msg.role === 'assistant' || msg.role === 'user')
-      .length,
+    (props.pastThread.messages ?? []).filter(
+      (msg) => msg.role === 'assistant' || msg.role === 'user',
+    ).length,
 );
 
 const showSpinner = computed(() => {

@@ -33,7 +33,7 @@ const titleOf = (count: number) => (count === 1 ? '1 в очереди' : `${cou
 
 <template>
   <div
-    v-if="queue.length"
+    v-if="queue?.length"
     class="mb-2 rounded-xl border border-void-border-3 bg-void-bg-1 overflow-hidden"
   >
     <button

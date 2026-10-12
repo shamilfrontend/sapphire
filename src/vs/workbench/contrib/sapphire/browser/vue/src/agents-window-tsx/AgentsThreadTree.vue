@@ -94,7 +94,7 @@ const grouped = computed(() => {
 
   for (const thread of Object.values(allThreads)) {
     if (!thread) continue;
-    if (thread.messages.length === 0 && thread.id !== currentThreadId) continue;
+    if ((thread.messages?.length ?? 0) === 0 && thread.id !== currentThreadId) continue;
     const titleHit = threadTitle(thread).toLowerCase().includes(q);
     if (q && !titleHit && !folderNameHit(thread.folderId)) continue;
     if (thread.pinned) {

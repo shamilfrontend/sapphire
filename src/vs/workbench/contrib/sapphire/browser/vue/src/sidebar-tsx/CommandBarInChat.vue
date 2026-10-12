@@ -16,7 +16,7 @@ import { countDiffLineStats, filesCountLabel } from './sidebarChatShared.js';
 
 const review = useAgentsReview();
 const commandBar = useCommandBarState();
-const sortedCommandBarURIs = computed(() => commandBar.value.sortedURIs);
+const sortedCommandBarURIs = computed(() => commandBar.value.sortedURIs ?? []);
 const commandBarStateOfURI = computed(() => commandBar.value.stateOfURI);
 const numFilesChanged = computed(() => sortedCommandBarURIs.value.length);
 

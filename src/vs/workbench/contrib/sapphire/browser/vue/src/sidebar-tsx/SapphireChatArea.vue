@@ -19,7 +19,6 @@ import type { ChatContextUsage } from '../../../convertToLLMMessageService.js';
 import IconX from './IconX.vue';
 import SelectedFiles from './SelectedFiles.vue';
 import SelectedImages from './SelectedImages.vue';
-import ProjectIndexControls from './ProjectIndexControls.vue';
 import { accentOfChatMode } from './ChatComposer.js';
 import ReasoningOptionSlider from './ReasoningOptionSlider.vue';
 import ChatModeDropdown from './ChatModeDropdown.vue';
@@ -48,11 +47,6 @@ const props = withDefaults(
     featureName: FeatureName;
     /** Индикатор заполнения контекстного окна (только Chat). */
     contextUsage?: ChatContextUsage | null;
-    /**
-     * Статус индекса в футере композера.
-     * В IDE (`layoutMode === 'ide'`) статус только в titlebar — здесь не показываем.
-     */
-    showProjectIndexStatus?: boolean;
   }>(),
   {
     isStreaming: false,
@@ -60,7 +54,6 @@ const props = withDefaults(
     className: '',
     showModelDropdown: true,
     showSelections: false,
-    showProjectIndexStatus: true,
   },
 );
 
@@ -136,7 +129,7 @@ onUnmounted(() => toolbarObserver?.disconnect());
       </div>
     </div>
 
-    <!-- Нижняя панель: модель, индекс, отправка -->
+    <!-- Нижняя панель: модель, отправка -->
     <div ref="toolbarRef" class="flex flex-row flex-nowrap items-center gap-1 mt-1 min-w-0">
       <div v-if="showModelDropdown" class="flex flex-col gap-y-1 min-w-0 flex-1">
         <ReasoningOptionSlider :featureName="featureName" />
@@ -157,10 +150,6 @@ onUnmounted(() => toolbarObserver?.disconnect());
         <ContextUsageIndicator
           v-if="featureName === 'Chat' && contextUsage !== undefined"
           :usage="contextUsage ?? null"
-        />
-        <ProjectIndexControls
-          v-if="featureName === 'Chat'"
-          :showStatusButton="settingsState.globalSettings.layoutMode !== 'ide' && showProjectIndexStatus"
         />
         <button
           v-if="onPickFiles"

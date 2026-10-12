@@ -16,7 +16,6 @@ export default defineConfig({
     './src2/agents-window-tsx/index.ts',
     './src2/quick-edit-tsx/index.ts',
     './src2/plan-editor-tsx/index.ts',
-    './src2/project-index-titlebar-tsx/index.ts',
     './src2/diff/index.ts',
   ],
   esbuildPlugins: [vue()],
