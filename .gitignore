@@ -47,5 +47,4 @@ dist
 docs/node_modules/
 docs/.vitepress/dist/
 docs/.vitepress/cache/
-.sapphire/
 .sapphire/index/

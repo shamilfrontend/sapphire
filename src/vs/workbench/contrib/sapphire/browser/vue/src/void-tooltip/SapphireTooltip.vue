@@ -183,6 +183,21 @@ const tooltipCss = `
   padding-top: 8px;
   padding-bottom: 8px;
 }
+#sapphire-tooltip-thread {
+  background-color: var(--vscode-editorHoverWidget-background);
+  color: var(--vscode-editorHoverWidget-foreground);
+  border: 1px solid var(--vscode-editorHoverWidget-border);
+  box-shadow: 0 2px 8px var(--vscode-widget-shadow);
+  font-size: 12px;
+  line-height: 16px;
+  padding: 4px 8px;
+  border-radius: 6px;
+  z-index: 999999;
+  max-width: 320px;
+  white-space: normal;
+  word-wrap: break-word;
+  opacity: 1;
+}
 `;
 
 let styleEl: HTMLStyleElement | undefined;

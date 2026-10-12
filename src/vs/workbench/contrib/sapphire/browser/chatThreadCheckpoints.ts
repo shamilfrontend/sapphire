@@ -40,7 +40,8 @@ export class ChatThreadCheckpoints {
       },
     };
     this._s._storeAllThreads(newThreads);
-    this._s._setState({ allThreads: newThreads }); // текущий тред изменился (добавили сообщение)
+    // Без remount mountedInfo — правка сообщения не должна пересоздавать whenMounted.
+    this._s._setState({ allThreads: newThreads }, true);
   }
 
   _getCheckpointInfo = (

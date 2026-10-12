@@ -5,6 +5,9 @@
 
 import type { SapphireFileSnapshot } from './editCodeServiceTypes.js';
 
+/** Потолок текста baseline в checkpoint — полный файл не нужен для undo, раздувает stringify. */
+export const MANUAL_EDIT_BASELINE_MAX_CHARS = 100_000;
+
 /** Текст до первой ручной правки; последующие нажатия не перезаписывают его. */
 export function rememberFirstBefore(
   store: { has(key: string): boolean; set(key: string, value: string): unknown },
@@ -14,6 +17,13 @@ export function rememberFirstBefore(
   if (!store.has(fsPath)) {
     store.set(fsPath, beforeEntireFileCode);
   }
+}
+
+function capBaselineText(text: string): string {
+  if (text.length <= MANUAL_EDIT_BASELINE_MAX_CHARS) {
+    return text;
+  }
+  return text.slice(0, MANUAL_EDIT_BASELINE_MAX_CHARS);
 }
 
 /**
@@ -29,7 +39,7 @@ export function manualEditBaselinesForCheckpoint(
     if (fsPath in alreadyInHistory) continue;
     out[fsPath] = {
       snapshottedDiffAreaOfId: {},
-      entireFileCode: beforeEntireFileCode,
+      entireFileCode: capBaselineText(beforeEntireFileCode),
     };
   }
   return out;

@@ -6,6 +6,7 @@
 import assert from 'assert';
 import { ensureNoDisposablesAreLeakedInTestSuite } from '../../../../../base/test/common/utils.js';
 import {
+  MANUAL_EDIT_BASELINE_MAX_CHARS,
   manualEditBaselinesForCheckpoint,
   rememberFirstBefore,
 } from '../../common/manualEditCheckpoint.js';
@@ -45,5 +46,14 @@ suite('manualEditCheckpoint', () => {
     assert.strictEqual(baselines['/proj/already.ts'], undefined);
     assert.strictEqual(baselines['/proj/fresh.ts'].entireFileCode, 'fresh before\n');
     assert.deepStrictEqual(baselines['/proj/fresh.ts'].snapshottedDiffAreaOfId, {});
+  });
+
+  test('baseline text longer than the cap is truncated', () => {
+    const huge = 'x'.repeat(MANUAL_EDIT_BASELINE_MAX_CHARS + 500);
+    const baselines = manualEditBaselinesForCheckpoint([['/proj/big.ts', huge]], {});
+    assert.strictEqual(
+      baselines['/proj/big.ts'].entireFileCode.length,
+      MANUAL_EDIT_BASELINE_MAX_CHARS,
+    );
   });
 });

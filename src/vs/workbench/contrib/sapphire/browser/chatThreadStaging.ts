@@ -66,7 +66,8 @@ export class ChatThreadStaging {
       },
     };
     this._s._storeAllThreads(newThreads);
-    this._s._setState({ allThreads: newThreads }); // текущий тред изменился (добавлено сообщение)
+    // doNotRefreshMountInfo: иначе каждый пузырь пересоздаёт whenMounted и remount композера.
+    this._s._setState({ allThreads: newThreads }, true);
   }
 
   /**
@@ -109,7 +110,8 @@ export class ChatThreadStaging {
       },
     };
     this._s._storeAllThreads(newThreads);
-    this._s._setState({ allThreads: newThreads });
+    // Без remount mountedInfo — compaction не должен пересоздавать whenMounted.
+    this._s._setState({ allThreads: newThreads }, true);
   }
 
   // индекс фокуса на сообщении (undefined, если ничего не выбрано)

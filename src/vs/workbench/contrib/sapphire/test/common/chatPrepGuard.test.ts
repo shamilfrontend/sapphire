@@ -199,10 +199,12 @@ suite('chatSendTrace', () => {
 
   test('format includes events and omits nothing when empty', () => {
     _resetChatSendTraceForTests();
+    assert.ok(formatChatSendTrace().startsWith('Sapphire chat send trace:'));
     assert.ok(formatChatSendTrace().includes('пусто'));
     chatTrace('thread-abcdef1234567890', 'submit.send', 'chars=12');
     chatTrace('thread-abcdef1234567890', 'stream', 'none -> preparing');
     const text = formatChatSendTrace();
+    assert.ok(text.startsWith('Sapphire chat send trace ('));
     assert.ok(text.includes('submit.send chars=12'));
     assert.ok(text.includes('none -> preparing'));
     assert.ok(text.includes('[34567890]'));

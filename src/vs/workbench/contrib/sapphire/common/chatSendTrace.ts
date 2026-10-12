@@ -1,5 +1,5 @@
 /*--------------------------------------------------------------------------------------
- *  PPR Code — кольцевой лог отправки чата (диагностика зависания нового чата).
+ *  Sapphire — кольцевой лог отправки чата (диагностика зависания нового чата).
  *  Без текста сообщений: только шаги, состояния и длины.
  *--------------------------------------------------------------------------------------*/
 
@@ -38,13 +38,13 @@ export function chatTrace(threadId: string | undefined, event: string, detail?: 
 
 export function formatChatSendTrace(): string {
   if (!entries.length) {
-    return 'PPR chat send trace: (пусто — отправок ещё не было)';
+    return 'Sapphire chat send trace: (пусто — отправок ещё не было)';
   }
   const lines = entries.map((e) => {
     const sec = (e.dtMs / 1000).toFixed(2).padStart(7, ' ');
     return `+${sec}s [${e.thread}] ${e.event}${e.detail ? ` ${e.detail}` : ''}`;
   });
-  return [`PPR chat send trace (${entries.length})`, ...lines].join('\n');
+  return [`Sapphire chat send trace (${entries.length})`, ...lines].join('\n');
 }
 
 /** Только для тестов. */

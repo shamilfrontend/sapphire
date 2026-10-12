@@ -493,7 +493,17 @@ class ChatThreadService extends Disposable implements IChatThreadService {
       if (this._ephemeralThreadIds.has(id)) {
         continue;
       }
-      allThreads[id] = threads[id];
+      const thread = threads[id];
+      if (!thread) {
+        continue;
+      }
+      // mountedInfo — promise/resolver; в storage не нужен и ломает JSON.stringify.
+      if (thread.state.mountedInfo) {
+        const { mountedInfo: _drop, ...restState } = thread.state;
+        allThreads[id] = { ...thread, state: restState };
+      } else {
+        allThreads[id] = thread;
+      }
     }
     const payload: PersistedThreadsState = {
       allThreads,
@@ -747,11 +757,6 @@ class ChatThreadService extends Disposable implements IChatThreadService {
       return;
     }
 
-    // Пустой checkpoint перед первым user-сообщением — единая модель «checkpoint перед user»
-    if (threadNow.messages.length === 0) {
-      this._addUserCheckpoint({ threadId });
-    }
-
     const instructions = userMessage;
     const userSelns: StagingSelectionItem[] = [
       ...(_chatSelections ?? threadNow.state.stagingSelections),
@@ -761,35 +766,16 @@ class ChatThreadService extends Disposable implements IChatThreadService {
       (s) => !(s.type === 'File' && s.fromHeuristic),
     );
 
-    // Optimistic bubble сразу — уходим с landing до merge/heuristic/office/Jira
-    this._addMessageToThread(threadId, {
-      role: 'user',
-      content: instructions,
-      displayContent: instructions,
-      selections: currSelns,
-      ...(images?.length ? { images } : {}),
-      state: defaultMessageState,
-    });
-    const userMessageIdx = (this.state.allThreads[threadId]?.messages.length ?? 1) - 1;
-
-    this._omitAutoActiveFileFsPathOfThread[threadId] = undefined;
-    delete this._omitHeuristicFsPathsOfThread[threadId];
-
-    this._setThreadState(threadId, {
-      currCheckpointIdx: null,
-      pendingToolCalls: undefined,
-    });
-
-    this.state.allThreads[threadId]?.state.mountedInfo?.whenMounted.then((m) => {
-      m.scrollToBottom();
-    });
+    let userMessageIdx = -1;
+    let agentStarted = false;
+    let prepError: { message: string; fullError: Error | null } | undefined;
 
     const patchUserMessage = (
       content: string,
       displayContent: string,
       selections?: StagingSelectionItem[],
     ) => {
-      if (!isPrepActive()) return;
+      if (!isPrepActive() || userMessageIdx < 0) return;
       const msg = this.state.allThreads[threadId]?.messages[userMessageIdx];
       if (!msg || msg.role !== 'user') return;
       this._editMessageInThread(threadId, userMessageIdx, {
@@ -800,9 +786,50 @@ class ChatThreadService extends Disposable implements IChatThreadService {
       });
     };
 
-    let agentStarted = false;
-    let prepError: { message: string; fullError: Error | null } | undefined;
     try {
+      // Пустой checkpoint перед первым user-сообщением — единая модель «checkpoint перед user».
+      // Сбой здесь не должен оставлять preparing навечно (вне try раньше так и было).
+      if (threadNow.messages.length === 0) {
+        chatTrace(threadId, 'prep.checkpoint');
+        try {
+          this._addUserCheckpoint({ threadId });
+        } catch (e) {
+          chatTrace(
+            threadId,
+            'prep.checkpoint.error',
+            e instanceof Error ? e.message.slice(0, 120) : 'unknown',
+          );
+        }
+      }
+
+      // Optimistic bubble сразу — уходим с landing до merge/heuristic/office
+      chatTrace(threadId, 'prep.bubble');
+      this._addMessageToThread(threadId, {
+        role: 'user',
+        content: instructions,
+        displayContent: instructions,
+        selections: currSelns,
+        ...(images?.length ? { images } : {}),
+        state: defaultMessageState,
+      });
+      userMessageIdx = (this.state.allThreads[threadId]?.messages.length ?? 1) - 1;
+
+      this._omitAutoActiveFileFsPathOfThread[threadId] = undefined;
+      delete this._omitHeuristicFsPathsOfThread[threadId];
+
+      this._setThreadState(
+        threadId,
+        {
+          currCheckpointIdx: null,
+          pendingToolCalls: undefined,
+        },
+        true,
+      );
+
+      this.state.allThreads[threadId]?.state.mountedInfo?.whenMounted.then((m) => {
+        m.scrollToBottom();
+      });
+
       // Local prep (active file / heuristic / office) — короткий wall-clock; на timeout cancel CTS и fail-open.
       const runLocalPrep = async (): Promise<{
         selns: StagingSelectionItem[];
