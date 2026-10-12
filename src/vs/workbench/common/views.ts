@@ -121,6 +121,12 @@ export interface IViewContainerDescriptor {
   readonly hideIfEmpty?: boolean;
 
   /**
+   * When false, a newly registered view container is not pinned in the activity bar
+   * until the user pins it. Defaults to pinned.
+   */
+  readonly pinnedByDefault?: boolean;
+
+  /**
    * Id of the extension that contributed the view container
    */
   readonly extensionId?: ExtensionIdentifier;

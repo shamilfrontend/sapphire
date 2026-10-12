@@ -110,6 +110,68 @@ export interface IPaneCompositeBarOptions {
   readonly colors: (theme: IColorTheme) => ICompositeBarColors;
 }
 
+/** Must match `ActivitybarPart.pinnedViewContainersKey`. */
+const ACTIVITY_BAR_PINNED_VIEW_CONTAINERS_KEY = 'workbench.activity.pinnedViewlets2';
+const UNPIN_DEFAULT_VIEW_CONTAINERS_MIGRATION_KEY = 'sapphire.unpinDefaultViewContainers.v1';
+const UNPIN_DEFAULT_VIEW_CONTAINER_IDS = new Set(['workbench.view.debug', 'workbench.view.remote']);
+
+function migrateUnpinDefaultViewContainers(
+  storageService: IStorageService,
+  pinnedViewContainersKey: string,
+): void {
+  if (
+    storageService.getBoolean(
+      UNPIN_DEFAULT_VIEW_CONTAINERS_MIGRATION_KEY,
+      StorageScope.PROFILE,
+      false,
+    )
+  ) {
+    return;
+  }
+
+  const stored = storageService.get(pinnedViewContainersKey, StorageScope.PROFILE, '[]');
+  try {
+    const pinnedViewContainers: unknown = JSON.parse(stored);
+    if (Array.isArray(pinnedViewContainers)) {
+      let changed = false;
+      for (const viewContainer of pinnedViewContainers) {
+        if (!isPinnedViewContainerState(viewContainer)) {
+          continue;
+        }
+        if (UNPIN_DEFAULT_VIEW_CONTAINER_IDS.has(viewContainer.id) && viewContainer.pinned) {
+          viewContainer.pinned = false;
+          changed = true;
+        }
+      }
+      if (changed) {
+        storageService.store(
+          pinnedViewContainersKey,
+          JSON.stringify(pinnedViewContainers),
+          StorageScope.PROFILE,
+          StorageTarget.USER,
+        );
+      }
+    }
+  } catch {
+    // Leave malformed activity bar state untouched.
+  }
+
+  storageService.store(
+    UNPIN_DEFAULT_VIEW_CONTAINERS_MIGRATION_KEY,
+    true,
+    StorageScope.PROFILE,
+    StorageTarget.USER,
+  );
+}
+
+function isPinnedViewContainerState(value: unknown): value is { id: string; pinned: boolean } {
+  if (!value || typeof value !== 'object') {
+    return false;
+  }
+  const candidate = value as { id?: unknown; pinned?: unknown };
+  return typeof candidate.id === 'string' && typeof candidate.pinned === 'boolean';
+}
+
 export class PaneCompositeBar extends Disposable {
   private readonly viewContainerDisposables = this._register(
     new DisposableMap<string, IDisposable>(),
@@ -146,6 +208,9 @@ export class PaneCompositeBar extends Disposable {
     @IWorkbenchLayoutService protected readonly layoutService: IWorkbenchLayoutService,
   ) {
     super();
+    if (options.pinnedViewContainersKey === ACTIVITY_BAR_PINNED_VIEW_CONTAINERS_KEY) {
+      migrateUnpinDefaultViewContainers(storageService, options.pinnedViewContainersKey);
+    }
     this.location =
       paneCompositePart.partId === Parts.PANEL_PART
         ? ViewContainerLocation.Panel
@@ -496,12 +561,16 @@ export class PaneCompositeBar extends Disposable {
     for (const viewContainer of viewContainers) {
       this.addComposite(viewContainer);
 
-      // Pin it by default if it is new
+      // Pin it by default if it is new, unless the container opts out
       const cachedViewContainer = this.cachedViewContainers.filter(
         ({ id }) => id === viewContainer.id,
       )[0];
       if (!cachedViewContainer) {
-        this.compositeBar.pin(viewContainer.id);
+        if (viewContainer.pinnedByDefault === false) {
+          this.compositeBar.unpin(viewContainer.id);
+        } else {
+          this.compositeBar.pin(viewContainer.id);
+        }
       }
 
       // Active
@@ -783,7 +852,7 @@ export class PaneCompositeBar extends Disposable {
                 ? viewContainer.title
                 : viewContainer.title.value,
             order: viewContainer.order,
-            pinned: true,
+            pinned: viewContainer.pinnedByDefault !== false,
             visible: !this.shouldBeHidden(viewContainer),
           });
         }
