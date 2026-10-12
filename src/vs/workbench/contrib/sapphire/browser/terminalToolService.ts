@@ -63,7 +63,7 @@ export const persistentTerminalNameOfId = (id: string) => {
   if (id === '1') return 'Sapphire Agent';
   return `Sapphire Agent (${id})`;
 };
-export const idOfPersistentTerminalName = (name: string) => {
+const idOfPersistentTerminalName = (name: string) => {
   if (name === 'Sapphire Agent') return '1';
 
   const match = name.match(/Sapphire Agent \((\d+)\)/);
@@ -89,7 +89,7 @@ const truncateTerminalResult = (result: string): string => {
   return `${result.slice(0, half)}\n...\n${result.slice(result.length - half)}`;
 };
 
-export class TerminalToolService extends Disposable implements ITerminalToolService {
+class TerminalToolService extends Disposable implements ITerminalToolService {
   readonly _serviceBrand: undefined;
 
   private persistentTerminalInstanceOfId: Record<string, ITerminalInstance> = {};

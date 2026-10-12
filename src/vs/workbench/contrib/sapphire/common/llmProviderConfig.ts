@@ -8,7 +8,7 @@ import type { ProviderName } from './sapphireSettingsTypes.js';
 /** Кабинет ключа и расхода DeepSeek. Чат ходит на api.deepseek.com, не на эту страницу. */
 export const DEEPSEEK_USAGE_URL = 'https://platform.deepseek.com/usage';
 
-export const DEEPSEEK_API_BASE = 'https://api.deepseek.com/v1';
+const DEEPSEEK_API_BASE = 'https://api.deepseek.com/v1';
 
 export const LLM_IDE_TITLE = 'Sapphire';
 

@@ -24,7 +24,7 @@ const PARALLEL_READ_ONLY_TOOLS = new Set<string>([
   'get_chat_history',
 ]);
 
-export function isParallelReadOnlyTool(name: string): boolean {
+function isParallelReadOnlyTool(name: string): boolean {
   return PARALLEL_READ_ONLY_TOOLS.has(name);
 }
 
@@ -44,7 +44,7 @@ export function omittedToolBodyPrompt(): string {
   return `If a tool result says the file body or listing was omitted, read that path again instead of relying on the summary.`;
 }
 
-export type ToolCallSegment<T> = { kind: 'parallel'; calls: T[] } | { kind: 'serial'; call: T };
+type ToolCallSegment<T> = { kind: 'parallel'; calls: T[] } | { kind: 'serial'; call: T };
 
 /**
  * Подряд идущие read-only (2+) → одна parallel-группа.

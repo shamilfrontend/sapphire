@@ -47,7 +47,7 @@ export function officeFileName(fsPath: string): string {
   return slash >= 0 ? norm.slice(slash + 1) : norm;
 }
 
-export function officeExtension(fsPath: string): string {
+function officeExtension(fsPath: string): string {
   const name = officeFileName(fsPath);
   const dot = name.lastIndexOf('.');
   if (dot < 0) {

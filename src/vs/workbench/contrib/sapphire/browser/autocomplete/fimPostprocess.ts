@@ -38,7 +38,7 @@ export const _ln = isWindows ? allLinebreakSymbols[0] : allLinebreakSymbols[1];
 - ключ кеша: до одного trailing \\n
 */
 
-export type AutocompletionPredictionType =
+type AutocompletionPredictionType =
   | 'single-line-fill-middle'
   | 'single-line-redo-suffix'
   // | 'multi-line-start-here'
@@ -441,7 +441,7 @@ export const toInlineCompletions = ({
   ];
 };
 
-export type PrefixAndSuffixInfo = {
+type PrefixAndSuffixInfo = {
   prefix: string;
   suffix: string;
   prefixLines: string[];

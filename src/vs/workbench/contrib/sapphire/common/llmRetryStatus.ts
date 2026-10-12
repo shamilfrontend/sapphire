@@ -9,7 +9,7 @@ export const PPR_LLM_STREAM_IDLE_MS = 90_000;
 /** Таймаут ожидания ответа на chat.completions.create до первого chunk (мс). */
 export const PPR_LLM_CONNECT_TIMEOUT_MS = 90_000;
 
-export type GatewayRetryStatusParams = {
+type GatewayRetryStatusParams = {
   /** Номер попытки с 1 (напр. 2 из 3). */
   attempt: number;
   maxAttempts: number;

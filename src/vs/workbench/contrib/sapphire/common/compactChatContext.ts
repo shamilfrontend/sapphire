@@ -12,7 +12,7 @@ export const COMPACT_TOOL_MAX_CHARS = 480;
  * Как у `trimMessagesToFreeTokens`: индекс 0 и последние 4 сообщения.
  * Они не трогаются — у последнего хода полный вывод tools.
  */
-export function isProtectedChatIndex(index: number, length: number): boolean {
+function isProtectedChatIndex(index: number, length: number): boolean {
   return index === 0 || index >= length - 1 - 3;
 }
 

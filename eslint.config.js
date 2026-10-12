@@ -1164,7 +1164,6 @@ export default tseslint.config(
             'vs/workbench/~',
             'vs/workbench/services/*/~',
             'vs/workbench/contrib/*/~',
-            'vs/workbench/contrib/terminal/terminalContribChatExports*',
             'vs/workbench/contrib/terminal/terminalContribExports*',
             'vscode-notebook-renderer', // Type only import
             '@vscode/tree-sitter-wasm', // type import
@@ -1261,11 +1260,6 @@ export default tseslint.config(
           target: 'src/vs/workbench/contrib/terminal/terminal.all.ts',
           layer: 'browser',
           restrictions: ['vs/workbench/contrib/**'],
-        },
-        {
-          target: 'src/vs/workbench/contrib/terminal/terminalContribChatExports.ts',
-          layer: 'browser',
-          restrictions: ['vs/workbench/contrib/terminalContrib/*/~'],
         },
         {
           target: 'src/vs/workbench/contrib/terminal/terminalContribExports.ts',

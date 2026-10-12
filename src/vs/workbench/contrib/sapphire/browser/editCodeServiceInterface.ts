@@ -9,7 +9,7 @@ import { ICodeEditor } from '../../../../editor/browser/editorBrowser.js';
 import { createDecorator } from '../../../../platform/instantiation/common/instantiation.js';
 import { Diff, DiffArea, SapphireFileSnapshot } from '../common/editCodeServiceTypes.js';
 
-export type StartBehavior = 'accept-conflicts' | 'reject-conflicts' | 'keep-conflicts';
+type StartBehavior = 'accept-conflicts' | 'reject-conflicts' | 'keep-conflicts';
 
 export type CallBeforeStartApplyingOpts =
   | {

@@ -28,7 +28,7 @@ export interface IConsistentItemService {
 export const IConsistentItemService =
   createDecorator<IConsistentItemService>('ConsistentItemService');
 
-export class ConsistentItemService extends Disposable implements IConsistentItemService {
+class ConsistentItemService extends Disposable implements IConsistentItemService {
   readonly _serviceBrand: undefined;
 
   // элементы по URI, независимо от того, какие редакторы сейчас открыты
@@ -189,7 +189,7 @@ export const IConsistentEditorItemService = createDecorator<IConsistentEditorIte
   'ConsistentEditorItemService',
 );
 
-export class ConsistentEditorItemService extends Disposable {
+class ConsistentEditorItemService extends Disposable {
   readonly _serviceBrand: undefined;
 
   /**

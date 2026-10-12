@@ -303,7 +303,7 @@ export const aiInstructionsFromUserRules = (rules: UserRule[]): string =>
 /** Старый id корпоративного FE-правила. При загрузке настроек выкидывается и больше не сеется. */
 export const LEGACY_FRONTEND_STACK_RULE_ID = 'ppr-default-frontend-stack';
 
-export const defaultUserRules: UserRule[] = [];
+const defaultUserRules: UserRule[] = [];
 
 export type UserSkill = {
   id: string;
@@ -445,7 +445,7 @@ export const mergeShippedUserSkills = (
 };
 
 /** Токены `/slug` в тексте сообщения (латиница, цифры, дефисы). */
-export const SLASH_SKILL_TOKEN_RE = /(?:^|[\s([{])\/([a-z][a-z0-9]*(?:-[a-z0-9]+)*)\b/gi;
+const SLASH_SKILL_TOKEN_RE = /(?:^|[\s([{])\/([a-z][a-z0-9]*(?:-[a-z0-9]+)*)\b/gi;
 
 export const parseSlashSkillSlugs = (text: string): string[] => {
   if (!text) return [];
@@ -487,7 +487,7 @@ export const resolveSkillContentsBySlugs = (skills: UserSkill[], slugs: string[]
   return parts.join('\n\n');
 };
 
-export const combineSkillInstructionParts = (...parts: Array<string | undefined | null>): string =>
+const combineSkillInstructionParts = (...parts: Array<string | undefined | null>): string =>
   parts
     .map((p) => (p ?? '').trim())
     .filter(Boolean)

@@ -15,7 +15,7 @@ import { mountSapphireTooltip } from './vue/out/void-tooltip/index.js';
 import { h, getActiveWindow } from '../../../../base/browser/dom.js';
 
 // Contribution: монтирует tooltip при старте workbench
-export class TooltipContribution extends Disposable implements IWorkbenchContribution {
+class TooltipContribution extends Disposable implements IWorkbenchContribution {
   static readonly ID = 'workbench.contrib.sapphireTooltip';
 
   constructor(@IInstantiationService private readonly instantiationService: IInstantiationService) {

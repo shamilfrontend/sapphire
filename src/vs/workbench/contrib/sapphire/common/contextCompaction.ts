@@ -6,7 +6,7 @@
 import { ChatMessage } from './chatThreadServiceTypes.js';
 
 /** Compaction, когда заполнение окна контекста ≥ этой доли. */
-export const CONTEXT_COMPACTION_THRESHOLD = 0.85;
+const CONTEXT_COMPACTION_THRESHOLD = 0.85;
 
 /** Сколько последних сообщений оставить (tail расширяют, чтобы не резать batch tools). */
 export const CONTEXT_COMPACTION_KEEP_RECENT = 8;
@@ -15,7 +15,7 @@ export const CONTEXT_COMPACTION_KEEP_RECENT = 8;
 export const CONTEXT_SUMMARY_LLM_PREFIX = '[CONTEXT SUMMARY]\n';
 
 /** Мин. LLM-relevant сообщений в prefix перед summarization. */
-export const CONTEXT_COMPACTION_MIN_PREFIX_MESSAGES = 2;
+const CONTEXT_COMPACTION_MIN_PREFIX_MESSAGES = 2;
 
 /** Лимит символов на строку transcript (чтобы запрос summary влез). */
 const TRANSCRIPT_LINE_MAX_CHARS = 1_200;
@@ -23,13 +23,13 @@ const TRANSCRIPT_LINE_MAX_CHARS = 1_200;
 /** Лимит всего transcript для summarizer. */
 const TRANSCRIPT_MAX_CHARS = 80_000;
 
-export type CompactionSplit = {
+type CompactionSplit = {
   prefix: ChatMessage[];
   tail: ChatMessage[];
   tailStartIndex: number;
 };
 
-export const isLlmRelevantChatMessage = (message: ChatMessage): boolean =>
+const isLlmRelevantChatMessage = (message: ChatMessage): boolean =>
   message.role === 'user' ||
   message.role === 'assistant' ||
   message.role === 'tool' ||

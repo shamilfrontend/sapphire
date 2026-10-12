@@ -20,7 +20,7 @@ export interface ISapphireUpdateService {
 export const ISapphireUpdateService = createDecorator<ISapphireUpdateService>('SapphireUpdateService');
 
 // реализация через IPC-канал
-export class SapphireUpdateService implements ISapphireUpdateService {
+class SapphireUpdateService implements ISapphireUpdateService {
   readonly _serviceBrand: undefined;
 
   private readonly sapphireUpdateService: ISapphireUpdateService;

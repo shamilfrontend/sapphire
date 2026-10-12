@@ -2,7 +2,7 @@
  * Типы MCP-сервиса для моста renderer ↔ main.
  */
 
-export interface MCPTool {
+interface MCPTool {
   /** Уникальное имя инструмента */
   name: string;
   /** Описание для пользователя и модели */
@@ -50,7 +50,7 @@ export interface MCPServerOfName {
   [serverName: string]: MCPServer;
 }
 
-export type MCPServerEvent = {
+type MCPServerEvent = {
   name: string;
   prevServer?: MCPServer;
   newServer?: MCPServer;

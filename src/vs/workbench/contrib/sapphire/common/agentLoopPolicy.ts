@@ -22,17 +22,17 @@ export const AGENT_LENGTH_CONTINUE_NUDGE =
   'Предыдущий ответ оборвался из‑за лимита длины (finish_reason=length). Продолжи с того же места: вызови инструмент (rewrite_file / edit_file / run_command), чтобы дописать файл. Не повторяй уже написанный черновик в чате.';
 
 /** Подряд идущие ходы без инструментов до паузы; на третьем — остановка. */
-export const MAX_CONSECUTIVE_EMPTY_TURNS = 3;
+const MAX_CONSECUTIVE_EMPTY_TURNS = 3;
 
 /** Подряд оборванных по length ходов до паузы; на четвёртом — остановка. */
-export const MAX_CONSECUTIVE_LENGTH_CONTINUES = 3;
+const MAX_CONSECUTIVE_LENGTH_CONTINUES = 3;
 
 /** Подряд ошибок инструментов (tool_error / invalid_params) до паузы прогона. */
 export const MAX_CONSECUTIVE_TOOL_ERRORS = 6;
 
-export type AgentLoopStopReason = 'stop_repeat' | 'stop_limit';
+type AgentLoopStopReason = 'stop_repeat' | 'stop_limit';
 
-export type LoopContinuationNudge = 'wrap_up' | 'continue_plan' | 'length_continue' | 'draft_plan';
+type LoopContinuationNudge = 'wrap_up' | 'continue_plan' | 'length_continue' | 'draft_plan';
 
 export type LoopContinuationPauseReason =
   | AgentLoopStopReason
@@ -57,12 +57,12 @@ export type LoopContinuation =
   | { action: 'await_user' }
   | { action: 'natural_end' };
 
-export type AgentToolBatchCall = {
+type AgentToolBatchCall = {
   name: string;
   rawParams?: { [key: string]: unknown } | undefined;
 };
 
-export type AgentToolBatchDecision = 'run' | AgentLoopStopReason;
+type AgentToolBatchDecision = 'run' | AgentLoopStopReason;
 
 function canonicalValue(value: unknown): string {
   if (value === undefined) {
@@ -316,7 +316,7 @@ export function updateConsecutiveToolErrors(
   return prev;
 }
 
-export type DecideLoopContinuationInput = {
+type DecideLoopContinuationInput = {
   /** false — ещё решаем, запускать ли батч; true — инструменты уже отработали. */
   toolsExecuted: boolean;
   hasToolCalls: boolean;

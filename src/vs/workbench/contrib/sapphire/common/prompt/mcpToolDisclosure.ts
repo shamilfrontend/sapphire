@@ -6,7 +6,7 @@
 import { removeMCPToolNamePrefix } from '../mcpServiceTypes.js';
 
 /** Поля инструмента для отложенной выдачи MCP-схем (полные объекты остаются generic). */
-export type McpDisclosureTool = {
+type McpDisclosureTool = {
   name: string;
   mcpServerName?: string;
 };
@@ -91,7 +91,7 @@ export const selectEnabledMcpTools = <T extends McpDisclosureTool>(
   return tools.filter((tool) => !!tool.mcpServerName && enabled.has(tool.mcpServerName));
 };
 
-export const mcpServerCatalog = (tools: readonly McpDisclosureTool[] | undefined): string => {
+const mcpServerCatalog = (tools: readonly McpDisclosureTool[] | undefined): string => {
   const namesByServer = new Map<string, string[]>();
   for (const tool of tools ?? []) {
     if (!tool.mcpServerName) continue;

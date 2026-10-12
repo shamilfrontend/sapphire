@@ -1,6 +1,6 @@
 # Changelog
 
-Продуктовые срезы PPR Code с форка. Формат — [Keep a Changelog](https://keepachangelog.com/ru/1.1.0/). Даты вместо semver: `voidVersion` в `product.json` — версия upstream Void, не продукта.
+Продуктовые срезы Sapphire с форка. Формат — [Keep a Changelog](https://keepachangelog.com/ru/1.1.0/). Даты вместо semver: `voidVersion` в `product.json` — версия upstream Void, не продукта.
 
 ## [Unreleased]
 
@@ -19,7 +19,7 @@
 - Соседние read-only tools из одного ответа модели выполняются параллельно; правки, терминал, MCP и планы остаются по одному
 - Откат checkpoint восстанавливает файл, который агент не менял, к тексту до первой ручной правки
 - Heuristic pre-retrieval: при отправке сообщения без достаточных `@` автоматически ищет до 3 файлов в workspace и кладёт в SELECTIONS (чип «Найдено», настройка `autoRetrieveRelevantFiles`; без embeddings / изменений шлюза)
-- Гибридный индекс проекта в `.ppr/index/`: фоновый разбор (код через DocumentSymbol, office/csv), LLM-purpose, tool `search_project_index`, статус и модалка в композере Агента, команда Reindex; схема пайплайна — [Индекс проекта](/architecture/project-index)
+- Гибридный индекс проекта в `.sapphire/index/`: фоновый разбор (код через DocumentSymbol, office/csv), LLM-purpose, tool `search_project_index`, статус и модалка в композере Агента, команда Reindex; схема пайплайна — [Индекс проекта](/architecture/project-index)
 
 ### Changed
 
@@ -109,12 +109,10 @@
 
 ### Added
 
-- Форк Sapphire → PPR Code, залоченный на `https://llm.transitcard.ru`
 - Plan-режим, вкладки чата, Mermaid; режим Gather убран
 - Privacy: без PostHog и GitHub updates; LLM только на корпоративный шлюз
 - Retry 408/429 с уважением `Retry-After`
 - Settings: вкладки Rules и Skills, team defaults
-- Брендинг PPR Code (переименование с PPR AI)
 
 ### Changed
 

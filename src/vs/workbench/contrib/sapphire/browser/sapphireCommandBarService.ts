@@ -74,7 +74,7 @@ export interface ISapphireCommandBarService {
 export const ISapphireCommandBarService =
   createDecorator<ISapphireCommandBarService>('SapphireCommandBarService');
 
-export type CommandBarStateType =
+type CommandBarStateType =
   | undefined
   | {
       sortedDiffZoneIds: string[]; // по номеру строки
@@ -91,7 +91,7 @@ const defaultState: NonNullable<CommandBarStateType> = {
   diffIdx: null,
 };
 
-export class SapphireCommandBarService extends Disposable implements ISapphireCommandBarService {
+class SapphireCommandBarService extends Disposable implements ISapphireCommandBarService {
   _serviceBrand: undefined;
 
   static readonly ID: 'sapphire.SapphireCommandBarService';

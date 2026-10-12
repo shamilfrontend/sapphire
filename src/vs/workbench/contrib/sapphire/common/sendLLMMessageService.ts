@@ -42,7 +42,7 @@ export interface ILLMMessageService {
 }
 
 // удобно держать рядом с llmMessageChannel.ts
-export class LLMMessageService extends Disposable implements ILLMMessageService {
+class LLMMessageService extends Disposable implements ILLMMessageService {
   readonly _serviceBrand: undefined;
 
   private readonly channel: IChannel; // LLMMessageChannel

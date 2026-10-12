@@ -86,9 +86,9 @@ import { mountPlanEditor } from './vue/out/plan-editor-tsx/index.js';
 
 type PlanEditorMode = 'preview' | 'markdown';
 
-export const PLAN_EDITOR_ID = 'ppr.planEditor';
-export const PLAN_EDITOR_INPUT_ID = 'workbench.editors.ppr.planEditorInput';
-export const PLAN_EDITOR_PANE_ID = 'workbench.editor.ppr.planEditor';
+const PLAN_EDITOR_ID = 'ppr.planEditor';
+const PLAN_EDITOR_INPUT_ID = 'workbench.editors.ppr.planEditorInput';
+const PLAN_EDITOR_PANE_ID = 'workbench.editor.ppr.planEditor';
 const PLAN_EDITOR_TOOLBAR_HEIGHT = 36;
 
 interface IPlanEditorViewState extends ICodeEditorViewState {
@@ -99,7 +99,7 @@ interface ISerializedPlanEditorInput {
   resourceJSON: UriComponents;
 }
 
-export class PlanEditorInput extends AbstractTextResourceEditorInput {
+class PlanEditorInput extends AbstractTextResourceEditorInput {
   static readonly ID = PLAN_EDITOR_INPUT_ID;
 
   override get typeId(): string {

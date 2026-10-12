@@ -3,7 +3,7 @@
  *  Licensed under the Apache License, Version 2.0. See LICENSE.txt for more information.
  *--------------------------------------------------------------------------------------*/
 
-export type ParsedWebHit = { title: string; snippet: string; url: string };
+type ParsedWebHit = { title: string; snippet: string; url: string };
 
 /** Декодирование HTML-сущностей в сниппетах DuckDuckGo HTML SERP. */
 const decodeEntities = (s: string): string =>

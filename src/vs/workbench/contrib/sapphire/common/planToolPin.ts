@@ -5,14 +5,14 @@
 
 import { ChatMessage, ToolMessage } from './chatThreadServiceTypes.js';
 
-export type ActivePlanPinState = {
+type ActivePlanPinState = {
   planUriFsPath: string;
   name: string;
   status: 'ready' | 'building' | 'built';
   progressLabel?: string;
 };
 
-export type PlanToolSuccessMessage =
+type PlanToolSuccessMessage =
   | ToolMessage<'create_plan'>
   | ToolMessage<'update_plan'>;
 

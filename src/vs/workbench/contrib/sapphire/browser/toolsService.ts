@@ -419,7 +419,7 @@ export interface IToolsService {
 
 export const IToolsService = createDecorator<IToolsService>('ToolsService');
 
-export class ToolsService implements IToolsService {
+class ToolsService implements IToolsService {
   readonly _serviceBrand: undefined;
 
   public validateParams: ValidateBuiltinParams;

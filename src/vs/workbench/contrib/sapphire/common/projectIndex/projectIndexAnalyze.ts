@@ -103,19 +103,19 @@ export function isSecretPath(relPath: string): boolean {
   return SECRET_PATH_RE.test(relPath.replace(/\\/g, '/'));
 }
 
-export function basenameOf(relPath: string): string {
+function basenameOf(relPath: string): string {
   const norm = relPath.replace(/\\/g, '/');
   const i = norm.lastIndexOf('/');
   return i >= 0 ? norm.slice(i + 1) : norm;
 }
 
-export function parentDirOf(relPath: string): string {
+function parentDirOf(relPath: string): string {
   const norm = relPath.replace(/\\/g, '/');
   const i = norm.lastIndexOf('/');
   return i >= 0 ? norm.slice(0, i) : '';
 }
 
-export function extOf(relPath: string): string {
+function extOf(relPath: string): string {
   const name = basenameOf(relPath);
   const dot = name.lastIndexOf('.');
   return dot >= 0 ? name.slice(dot + 1).toLowerCase() : '';
@@ -181,7 +181,7 @@ export function localRoleFromPath(relPath: string, symbolNames: string[] = []): 
 const IMPORT_RE =
   /(?:import\s+(?:[\s\S]*?\s+from\s+)?['"]([^'"]+)['"]|require\s*\(\s*['"]([^'"]+)['"]\s*\)|from\s+['"]([^'"]+)['"])/g;
 
-export function extractImportSpecs(source: string): string[] {
+function extractImportSpecs(source: string): string[] {
   const out: string[] = [];
   IMPORT_RE.lastIndex = 0;
   let m: RegExpExecArray | null;
@@ -194,7 +194,7 @@ export function extractImportSpecs(source: string): string[] {
   return out;
 }
 
-export function resolveRelativeImport(
+function resolveRelativeImport(
   fromRelPath: string,
   spec: string,
   existingPaths: Set<string>,
@@ -242,7 +242,7 @@ function normalizeRelPath(p: string): string {
 const EXPORT_NAME_RE =
   /(?:export\s+(?:async\s+)?(?:function|class|const|let|var|type|interface|enum)\s+)([A-Za-z_$][\w$]*)/g;
 
-export function extractExportNames(source: string): string[] {
+function extractExportNames(source: string): string[] {
   const names: string[] = [];
   EXPORT_NAME_RE.lastIndex = 0;
   let m: RegExpExecArray | null;

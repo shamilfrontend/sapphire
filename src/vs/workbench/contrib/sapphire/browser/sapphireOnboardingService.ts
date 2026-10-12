@@ -15,7 +15,7 @@ import { mountSapphireOnboarding } from './vue/out/void-onboarding/index.js';
 import { h, getActiveWindow } from '../../../../base/browser/dom.js';
 
 // Contribution: монтирует onboarding при старте workbench
-export class OnboardingContribution extends Disposable implements IWorkbenchContribution {
+class OnboardingContribution extends Disposable implements IWorkbenchContribution {
   static readonly ID = 'workbench.contrib.sapphireOnboarding';
 
   constructor(@IInstantiationService private readonly instantiationService: IInstantiationService) {

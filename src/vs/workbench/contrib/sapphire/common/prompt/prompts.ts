@@ -47,7 +47,7 @@ export const MAX_SUBAGENT_ABSOLUTE_TIME = 600; // секунды
 export const LINT_POLL_AFTER_EDIT_MS = 400;
 
 // Префикс/суффикс для FIM и apply (Ctrl+K)
-export const MAX_PREFIX_SUFFIX_CHARS = 20_000;
+const MAX_PREFIX_SUFFIX_CHARS = 20_000;
 
 export const ORIGINAL = `<<<<<<< ORIGINAL`;
 export const DIVIDER = `=======`;
@@ -168,7 +168,7 @@ const terminalDescHelper = `You can use this tool to run any command: sed, grep,
 const cwdHelper =
   'Optional. Absolute or workspace-relative path to an existing directory in which to run the command. Never put the command, flags, or file lists in cwd — only the directory. If unsure, omit cwd (defaults to the first workspace folder).';
 
-export type SnakeCase<S extends string> =
+type SnakeCase<S extends string> =
   // Акроним URI целиком
   S extends 'URI'
     ? 'uri'
@@ -180,7 +180,7 @@ export type SnakeCase<S extends string> =
         ? `${C extends Lowercase<C> ? C : `_${Lowercase<C>}`}${SnakeCase<Rest>}`
         : S;
 
-export type SnakeCaseKeys<T extends Record<string, any>> = {
+type SnakeCaseKeys<T extends Record<string, any>> = {
   [K in keyof T as SnakeCase<Extract<K, string>>]: T[K];
 };
 
@@ -585,7 +585,7 @@ export const isABuiltinToolName = (toolName: string): toolName is BuiltinToolNam
   return isAToolName;
 };
 
-export type AvailableToolsOptions = {
+type AvailableToolsOptions = {
   /** Agent/debug: update_plan только пока выполняется утверждённый план. */
   allowUpdatePlan?: boolean;
   /**
@@ -943,7 +943,7 @@ ${details.map((d, i) => `${i + 1}. ${d}`).join('\n\n')}`;
 // 		chat_systemMessage({ chatMode, workspaceFolders: [], openedURIs: [], activeURI: 'pee', persistentTerminalIDs: [], directoryStr: 'lol', }))
 // }
 
-export const DEFAULT_FILE_SIZE_LIMIT = 2_000_000;
+const DEFAULT_FILE_SIZE_LIMIT = 2_000_000;
 
 export const readFile = async (
   fileService: IFileService,

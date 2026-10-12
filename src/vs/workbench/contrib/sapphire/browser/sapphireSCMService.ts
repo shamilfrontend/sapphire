@@ -48,13 +48,13 @@ interface ModelOptions {
   overridesOfModel: OverridesOfModel;
 }
 
-export interface IGenerateCommitMessageService {
+interface IGenerateCommitMessageService {
   readonly _serviceBrand: undefined;
   generateCommitMessage(): Promise<void>;
   abort(): void;
 }
 
-export const IGenerateCommitMessageService = createDecorator<IGenerateCommitMessageService>(
+const IGenerateCommitMessageService = createDecorator<IGenerateCommitMessageService>(
   'sapphireGenerateCommitMessageService',
 );
 

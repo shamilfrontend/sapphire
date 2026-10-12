@@ -17,7 +17,7 @@ import {
 import { SAPPHIRE_MEMORIES_STORAGE_KEY } from './storageKeys.js';
 import { MemoryType } from './toolsServiceTypes.js';
 
-export type StoredMemory = {
+type StoredMemory = {
   type: MemoryType;
   key: string;
   value: string;

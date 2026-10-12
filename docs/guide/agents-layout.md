@@ -10,9 +10,6 @@
 ## Как переключить
 
 - **Settings → Интерфейс** — карточки выбора режима.
-
-![Settings → Интерфейс: выбор режима](./assets/agents-layout/settings-interface.png)
-
 - В **Режиме IDE** — кнопка **«Режим Агент»** справа в title bar (после онбординга).
 - Command Palette: действие **Режим Агент** (`sapphireAgentsWindow` / переключение `layoutMode`).
 

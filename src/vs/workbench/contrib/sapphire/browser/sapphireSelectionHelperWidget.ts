@@ -31,7 +31,7 @@ export type SapphireSelectionHelperProps = {
   rerenderKey: number; // 0/1 для принудительного rerender
 };
 
-export class SelectionHelperContribution
+class SelectionHelperContribution
   extends Disposable
   implements IEditorContribution, IOverlayWidget
 {

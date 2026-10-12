@@ -42,13 +42,13 @@ import {
   removeAllWhitespace,
 } from './autocomplete/fimPostprocess.js';
 
-export interface IAutocompleteService {
+interface IAutocompleteService {
   readonly _serviceBrand: undefined;
 }
 
-export const IAutocompleteService = createDecorator<IAutocompleteService>('AutocompleteService');
+const IAutocompleteService = createDecorator<IAutocompleteService>('AutocompleteService');
 
-export class AutocompleteService extends Disposable implements IAutocompleteService {
+class AutocompleteService extends Disposable implements IAutocompleteService {
   static readonly ID = 'sapphire.autocompleteService';
 
   _serviceBrand: undefined;

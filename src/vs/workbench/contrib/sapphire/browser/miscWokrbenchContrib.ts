@@ -13,7 +13,7 @@ import { timeout } from '../../../../base/common/async.js';
 import { getActiveWindow } from '../../../../base/browser/dom.js';
 
 // Разовые действия при старте workbench (layout)
-export class MiscWorkbenchContribs extends Disposable implements IWorkbenchContribution {
+class MiscWorkbenchContribs extends Disposable implements IWorkbenchContribution {
   static readonly ID = 'workbench.contrib.sapphireMiscWorkbenchContribs';
 
   constructor() {

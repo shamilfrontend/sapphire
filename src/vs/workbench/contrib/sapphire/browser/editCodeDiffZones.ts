@@ -29,7 +29,7 @@ import { AcceptRejectInlineWidget } from './acceptRejectInlineWidget.js';
 import { getLeadingWhitespacePx } from './editCodeText.js';
 import { QuickEditPropsType } from './quickEditActions.js';
 
-export interface EditCodeDiffZoneHost {
+interface EditCodeDiffZoneHost {
   diffAreasOfURI: Record<string, Set<string> | undefined>;
   diffAreaOfId: Record<string, DiffArea>;
   diffOfId: Record<string, Diff>;

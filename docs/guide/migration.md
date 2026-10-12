@@ -17,4 +17,4 @@
 
 ## Workspace-данные
 
-Индекс, планы и debug-лог лежат в `.sapphire/` в корне workspace. Если ещё нет `.sapphire`, при первом обращении IDE переименует `.llm-ide` или `.ppr` (в этом порядке). Правила и скиллы: `.rules` / `.skills`; если их нет, читаются legacy `.voidrules` / `.voidskills`.
+Индекс, планы и debug-лог лежат в `.sapphire/` в корне workspace. Если ещё нет `.sapphire`, при первом обращении IDE переименует `.llm-ide`. Правила и скиллы: `.rules` / `.skills`; если их нет, читаются legacy `.voidrules` / `.voidskills`.

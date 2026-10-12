@@ -11,9 +11,9 @@ import { StagingSelectionItem } from './chatThreadServiceTypes.js';
 export const HEURISTIC_RETRIEVE_TOP_N = 3;
 
 /** Мин. длина запроса (trim) перед эвристическим поиском. */
-export const HEURISTIC_MIN_QUERY_LENGTH = 8;
+const HEURISTIC_MIN_QUERY_LENGTH = 8;
 
-export type HeuristicQueryToken = {
+type HeuristicQueryToken = {
   text: string;
   kind: 'path' | 'identifier';
 };

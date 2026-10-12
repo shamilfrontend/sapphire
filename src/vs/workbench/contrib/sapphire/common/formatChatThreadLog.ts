@@ -8,7 +8,7 @@ import { ChatMessage } from './chatThreadServiceTypes.js';
 /** Лимит символов на один tool result / blob в экспортируемом логе. */
 export const CHAT_THREAD_LOG_RESULT_CAP = 50_000;
 
-export type FormatChatThreadLogOptions = {
+type FormatChatThreadLogOptions = {
   threadId?: string;
   createdAt?: string;
   /** Подмена «сейчас» в тестах. */

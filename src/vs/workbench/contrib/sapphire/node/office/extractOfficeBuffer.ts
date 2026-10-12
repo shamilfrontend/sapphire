@@ -19,7 +19,7 @@ const MAX_SHEET_COLS = 64;
 const BUILTIN_DATE_FMT = new Set([14, 15, 16, 17, 18, 19, 20, 21, 22, 45, 46, 47]);
 const BUILTIN_TIME_FMT = new Set([18, 19, 20, 21, 22, 45, 46, 47]);
 
-export type ExtractOfficeOptions = {
+type ExtractOfficeOptions = {
   charCap?: number;
 };
 

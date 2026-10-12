@@ -50,7 +50,7 @@ import {
 } from './systemCertificatesFetch.js';
 
 /** Ошибка таймаута до первого chunk стрима (create завис). */
-export class LLMConnectTimeoutError extends Error {
+class LLMConnectTimeoutError extends Error {
   override readonly name = 'LLMConnectTimeoutError';
   constructor() {
     super(LLM_ERROR_HINTS.connectTimeout);
@@ -117,7 +117,7 @@ type SendFIMParams_Internal = InternalCommonMessageParams & {
   messages: LLMFIMMessage;
   separateSystemMessage: string | undefined;
 };
-export type ListParams_Internal<ModelResponse> = ModelListParams<ModelResponse>;
+type ListParams_Internal<ModelResponse> = ModelListParams<ModelResponse>;
 
 const providerTitle = (providerName: ProviderName) => displayInfoOfProviderName(providerName).title;
 

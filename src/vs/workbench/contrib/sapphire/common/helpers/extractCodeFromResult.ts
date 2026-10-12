@@ -178,7 +178,7 @@ export type ExtractedSearchReplaceBlock = {
 const sapphireSubstr = (str: string, start: number, end: number) =>
   end < start ? '' : str.substring(start, end);
 
-export const endsWithAnyPrefixOf = (str: string, anyPrefix: string) => {
+const endsWithAnyPrefixOf = (str: string, anyPrefix: string) => {
   // перебор префиксов anyPrefix от длинного к короткому
   for (let i = anyPrefix.length; i >= 1; i--) {
     // i >= 1 — пустой префикс не проверяем

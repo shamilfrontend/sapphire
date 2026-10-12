@@ -7,7 +7,7 @@ import { PlanTodoItem, PlanTodoStatus } from '../toolsServiceTypes.js';
 import { WORKSPACE_DOT_DIR } from '../workspaceDotDir.js';
 
 export const PLAN_DIR_SEGMENTS = [WORKSPACE_DOT_DIR, 'plans'] as const;
-export const PLAN_FILE_SUFFIX = '.plan.md';
+const PLAN_FILE_SUFFIX = '.plan.md';
 
 export const isPlanFilePath = (path: string): boolean =>
   path.replace(/\\/g, '/').endsWith(PLAN_FILE_SUFFIX);

@@ -77,7 +77,7 @@ export type ParallelSubagentTask = {
   prompt: string;
 };
 
-export type ParallelSubagentResultItem = {
+type ParallelSubagentResultItem = {
   description: string;
   summary: string;
   completed: boolean;

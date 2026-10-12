@@ -15,7 +15,7 @@ export type SearchReplaceBlockInput = {
   final: string;
 };
 
-export type SearchReplaceReplacement = {
+type SearchReplaceReplacement = {
   /** 1-индексированная включительная строка в файле с нормализованными \\n. */
   startLine: number;
   /** 1-индексированная включительная строка. */
@@ -23,7 +23,7 @@ export type SearchReplaceReplacement = {
   final: string;
 };
 
-export type SearchReplaceMatchResult =
+type SearchReplaceMatchResult =
   { ok: true; replacements: SearchReplaceReplacement[] } | { ok: false; message: string };
 
 type LineRange = { startLine: number; endLine: number };

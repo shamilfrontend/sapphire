@@ -16,7 +16,7 @@ import { mountProjectIndexTitlebar } from './vue/out/project-index-titlebar-tsx/
 
 const HOST_CLASS = 'ppr-project-index-titlebar';
 
-export class ProjectIndexTitlebarContribution extends Disposable implements IWorkbenchContribution {
+class ProjectIndexTitlebarContribution extends Disposable implements IWorkbenchContribution {
   static readonly ID = 'workbench.contrib.sapphireProjectIndexTitlebar';
 
   private readonly _mount = this._register(new MutableDisposable());

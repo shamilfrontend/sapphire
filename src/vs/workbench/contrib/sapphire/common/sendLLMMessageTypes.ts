@@ -95,7 +95,7 @@ export type OnText = (p: {
   toolCalls?: RawToolCallObj[];
 }) => void;
 /** `choices[].finish_reason` шлюза в конце стрима (`stop`, `length`, `tool_calls`, …). */
-export type LLMFinishReason = string;
+type LLMFinishReason = string;
 
 export type OnFinalMessage = (p: {
   fullText: string;

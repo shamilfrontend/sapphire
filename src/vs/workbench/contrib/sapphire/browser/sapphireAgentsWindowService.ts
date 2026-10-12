@@ -21,7 +21,7 @@ import { ISapphireSettingsService } from '../common/sapphireSettingsService.js';
 import { LayoutMode } from '../common/sapphireSettingsTypes.js';
 import { mountAgentsWindow } from './vue/out/agents-window-tsx/index.js';
 
-export const SAPPHIRE_SET_LAYOUT_MODE_ACTION_ID = 'sapphire.setLayoutMode';
+const SAPPHIRE_SET_LAYOUT_MODE_ACTION_ID = 'sapphire.setLayoutMode';
 
 /** Класс `codicon-ppr-agents-window` в titlebar оформлен как pill в titlebarpart.css. */
 const agentsWindowIcon = registerIcon(
@@ -64,7 +64,7 @@ registerAction2(
   },
 );
 
-export class AgentsWindowContribution extends Disposable implements IWorkbenchContribution {
+class AgentsWindowContribution extends Disposable implements IWorkbenchContribution {
   static readonly ID = 'workbench.contrib.sapphireAgentsWindow';
 
   private _lastMode: LayoutMode | undefined;

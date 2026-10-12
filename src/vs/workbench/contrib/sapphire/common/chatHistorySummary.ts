@@ -6,15 +6,15 @@
 import { ChatMessage } from './chatThreadServiceTypes.js';
 import { URI } from '../../../../base/common/uri.js';
 
-export const CHAT_HISTORY_MAX_THREADS = 8;
-export const CHAT_HISTORY_MAX_CHARS = 10_000;
-export const CHAT_HISTORY_USER_QUERY_LIMIT = 3;
+const CHAT_HISTORY_MAX_THREADS = 8;
+const CHAT_HISTORY_MAX_CHARS = 10_000;
+const CHAT_HISTORY_USER_QUERY_LIMIT = 3;
 export const CHAT_HISTORY_USER_SNIPPET_CHARS = 200;
 export const CHAT_HISTORY_ASSISTANT_SNIPPET_CHARS = 300;
-export const CHAT_HISTORY_RECENT_ACTIONS = 12;
-export const CHAT_HISTORY_DETAIL_ACTIONS = 40;
+const CHAT_HISTORY_RECENT_ACTIONS = 12;
+const CHAT_HISTORY_DETAIL_ACTIONS = 40;
 
-export type ChatHistoryThreadLike = {
+type ChatHistoryThreadLike = {
   id: string;
   lastModified: string;
   messages: ChatMessage[];
@@ -27,7 +27,7 @@ export type ChatHistoryThreadLike = {
   };
 };
 
-export type ChatHistorySummaryInput = {
+type ChatHistorySummaryInput = {
   allThreads: { [id: string]: ChatHistoryThreadLike | undefined };
   currentThreadId: string;
   openThreadIds?: string[];

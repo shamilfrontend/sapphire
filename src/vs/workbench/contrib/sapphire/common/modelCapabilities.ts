@@ -122,7 +122,7 @@ export const defaultModelsOfProvider = {
 	liteLLM: [],
 } as const satisfies Record<ProviderName, readonly string[]>;
 
-export type SapphireStaticModelInfo = {
+type SapphireStaticModelInfo = {
 	contextWindow: number;
 	reservedOutputTokenSpace: number | null;
 

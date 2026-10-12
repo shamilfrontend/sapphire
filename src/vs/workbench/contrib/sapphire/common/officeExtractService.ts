@@ -29,7 +29,7 @@ export interface IOfficeExtractService {
 
 export const IOfficeExtractService = createDecorator<IOfficeExtractService>('officeExtractService');
 
-export class OfficeExtractService implements IOfficeExtractService {
+class OfficeExtractService implements IOfficeExtractService {
   readonly _serviceBrand: undefined;
 
   private readonly channel: IChannel;

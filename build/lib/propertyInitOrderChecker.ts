@@ -127,7 +127,6 @@ const ignored = new Set([
   'vs/workbench/services/extensionManagement/common/webExtensionManagementService.ts',
   'vs/workbench/contrib/welcomeDialog/browser/welcomeWidget.ts',
   'vs/editor/standalone/browser/quickInput/standaloneQuickInputService.ts',
-  'vs/editor/contrib/inlineCompletions/browser/view/inlineEdits/inlineEditsViews/inlineEditsWordInsertView.ts',
   'vs/platform/terminal/node/ptyService.ts',
   'vs/workbench/api/common/extHostLanguageFeatures.ts',
   'vs/workbench/api/common/extHostSearch.ts',

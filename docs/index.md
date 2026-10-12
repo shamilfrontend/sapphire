@@ -3,66 +3,76 @@ layout: home
 
 hero:
   name: Sapphire
-  text: IDE на базе VS Code с выбором моделей
-  tagline: 'OpenAI, Anthropic, Gemini, DeepSeek, Ollama и другие'
+  text: ИИ-редактор кода с открытым исходным кодом
+  image:
+    src: /logo.png
+    alt: Sapphire
   actions:
     - theme: brand
       text: Начать работу
       link: /guide/onboarding
-    - theme: alt
-      text: Приватность
-      link: /guide/privacy
-
-features:
-  - title: Без лишней телеметрии
-    details: 'Нет телеметрии PostHog и phone-home. LLM-запрос уходит только выбранному провайдеру.'
-  - title: Несколько провайдеров
-    details: 'Ключ хранится зашифрованно. DeepSeek, OpenAI, Anthropic, Gemini, локальные серверы и свой endpoint.'
-  - title: Agent, Plan, Tab, Ctrl+K
-    details: 'Cursor-like UX: агент с tools, планирование, автодополнение и inline-правки.'
-  - title: MCP и расширения — ваш выбор
-    details: 'Marketplace и MCP не цензурируем — на совести разработчика.'
 ---
 
-## Что это
+<div class="feature-showcase">
 
-**Sapphire** — IDE на базе форка [Void](https://github.com/voideditor/void). По возможностям близок к Cursor: агент, план, автодополнение и inline-правки. Модель выбирается в настройках. Подробнее — [Приватность](/guide/privacy).
+<h2>Возможности, которые вы ждёте от ИИ</h2>
 
-## С чего начать
+<div class="feature-grid">
 
-**Пользователь**
+<a class="feature-col" href="/guide/context#поиск-по-проекту">
+<h3>Agent loop</h3>
+<p>До трёх файлов по запросу (чип «Найдено»), затем модель сама ищет по индексу и коду.</p>
+<img class="feature-shot" src="/agent-loop.jpg" alt="Цикл агента: запрос, чип «Найдено» и поиск модели по индексу и коду" />
+</a>
 
-1. [Онбординг](/guide/onboarding) — провайдер и первый запуск
-2. [Режимы](/guide/modes) — Chat / Plan / Agent / Debug
-3. [Контекст](/guide/context) — `@`-упоминания и что видит модель
-4. [Приватность](/guide/privacy) — куда уходит код
+<a class="feature-col" href="/guide/chat">
+<h3>Чат</h3>
+<p>Агент, план и обычный диалог.</p>
+<img class="feature-shot" src="/chat.jpg" alt="Чат: вопрос, ответ модели и контрольная точка" />
+</a>
 
-**Разработчик**
+<a class="feature-col" href="/guide/modes#plan-→-build">
+<h3>Планирование</h3>
+<p>План в файле без правок кода, затем «Сделать по плану».</p>
+<img class="feature-shot" src="/planning.jpg" alt="Режим планирования: файл плана и кнопка «Сделать по плану»" />
+</a>
 
-1. [Структура кода](/architecture/layout) — процессы и слои
-2. [LLM pipeline](/architecture/llm-pipeline) — путь запроса к провайдеру
-3. [Карта ключевых файлов](/extending/key-files) — куда смотреть в коде
-4. [Dev setup](/contribute/dev-setup) — локальная сборка
+<a class="feature-col" href="/guide/context#индекс-проекта-sapphire-index">
+<h3>Индексация</h3>
+<p>Прогресс и состав индекса — в панели проекта.</p>
+<img class="feature-shot" src="/indexing.jpg" alt="Панель индекса проекта: прогресс разбора файлов, счётчики и статус" />
+</a>
 
-## Документация
+<a class="feature-col" href="/guide/agents-layout">
+<h3>Режим Агент</h3>
+<p>Чат на весь экран. Кнопка «Режим IDE» возвращает редактор.</p>
+<img class="feature-shot" src="/agents.jpg" alt="Режим Агент: чат на весь экран и кнопка «Режим IDE»" />
+</a>
 
-| Раздел | Для кого |
-| --- | --- |
-| [Changelog](/CHANGELOG) | Продуктовые срезы с форка |
-| [Руководство](/guide/onboarding) | Пользователи: чат, режимы, Tab, Ctrl+K, Apply, MCP |
-| [Модели и провайдеры](/intro/models) | Список моделей и провайдеры |
-| [Приватность](/guide/privacy) | Куда уходит запрос; расширения и MCP |
-| [Архитектура](/architecture/layout) | Разработчики: процессы, pipeline, DiffZone |
-| [Как улучшать](/extending/models) | Контрибьюторы: модели, tools, React, промпты |
-| [Контрибут](/contribute/dev-setup) | Локальная сборка и Developer Mode |
-| [Справка](/reference/tools) | Таблицы tools и action IDs |
+</div>
 
-## Быстрый старт документации
+<p class="feature-more">
+<a href="/guide/modes#debug">Отладка</a>
+<a href="/guide/tools">MCP</a>
+<a href="/guide/office">Офисные файлы</a>
+</p>
 
-```bash
-cd docs
-npm install
-npm run docs:dev
-```
+</div>
 
-Или из корня репозитория: `npm run docs:dev` (после `npm install` в `docs/`).
+## Любая модель, где угодно
+
+<p class="home-lead">Запрос уходит выбранному провайдеру напрямую. Ключ хранится зашифрованно. Подробнее — <a href="/intro/models">модели и провайдеры</a>.</p>
+
+<div class="home-cards home-cards--split">
+
+<div class="home-card">
+<h3>Локально</h3>
+<p>Ollama, vLLM, LM Studio и свой endpoint.</p>
+</div>
+
+<div class="home-card">
+<h3>В облаке</h3>
+<p>OpenAI, Anthropic, Gemini, DeepSeek, Groq, OpenRouter, xAI, Mistral.</p>
+</div>
+
+</div>

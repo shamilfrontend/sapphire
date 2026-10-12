@@ -181,7 +181,7 @@ registerAction2(
   },
 );
 
-export class SidebarStartContribution implements IWorkbenchContribution {
+class SidebarStartContribution implements IWorkbenchContribution {
   static readonly ID = 'workbench.contrib.startupVoidSidebar';
 
   constructor(@ICommandService private readonly commandService: ICommandService) {

@@ -59,7 +59,7 @@ export type ChatImageAttachment = {
 export const EMPTY_LLM_MESSAGE = '(empty message)';
 
 /** Убрать API-placeholder'ы — не хранить и не рендерить как текст ассистента. */
-export const normalizeAssistantDisplayContent = (content: string): string => {
+const normalizeAssistantDisplayContent = (content: string): string => {
   const trimmed = content.trim();
   if (!trimmed || trimmed === EMPTY_LLM_MESSAGE) {
     return '';

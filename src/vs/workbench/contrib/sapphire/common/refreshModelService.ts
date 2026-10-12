@@ -94,7 +94,7 @@ export interface IRefreshModelService {
 
 export const IRefreshModelService = createDecorator<IRefreshModelService>('RefreshModelService');
 
-export class RefreshModelService extends Disposable implements IRefreshModelService {
+class RefreshModelService extends Disposable implements IRefreshModelService {
   readonly _serviceBrand: undefined;
 
   private readonly _onDidChangeState = new Emitter<ProviderName>();

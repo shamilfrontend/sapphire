@@ -18,7 +18,7 @@ export type ProjectIndexFileKind =
   | 'pdf'
   | 'other';
 
-export type ProjectIndexLlmStatus = 'pending' | 'done' | 'failed' | 'skipped';
+type ProjectIndexLlmStatus = 'pending' | 'done' | 'failed' | 'skipped';
 
 export type ProjectIndexFileRecord = {
   path: string;
@@ -72,7 +72,7 @@ export type ProjectIndexManifest = {
   };
 };
 
-export type ProjectIndexPhase = 'idle' | 'scanning' | 'analyzing' | 'purpose' | 'error';
+type ProjectIndexPhase = 'idle' | 'scanning' | 'analyzing' | 'purpose' | 'error';
 
 export type ProjectIndexStatus = {
   phase: ProjectIndexPhase;

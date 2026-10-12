@@ -35,7 +35,7 @@ INVARIANT:
 A checkpoint appears before every LLM message, and before every user message (before user really means directly after LLM is done).
 */
 
-export type UserMessageType = ChatMessage & { role: 'user' };
+type UserMessageType = ChatMessage & { role: 'user' };
 export type UserMessageState = UserMessageType['state'];
 export const defaultMessageState: UserMessageState = {
   stagingSelections: [],
