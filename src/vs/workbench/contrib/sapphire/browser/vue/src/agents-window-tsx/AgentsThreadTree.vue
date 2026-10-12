@@ -624,7 +624,7 @@ const onDragEnd = () => {
 <template>
   <div
     class="flex flex-col gap-0.5 w-full text-void-fg-3 select-none min-h-[48px]"
-    :class="dropTarget?.kind === 'root' ? 'bg-[#00b0cc]/10 rounded' : ''"
+    :class="dropTarget?.kind === 'root' ? 'bg-[#0e639c]/10 rounded' : ''"
     @dragover="onRootDragOver"
     @drop="onRootDrop"
     @dragend="onDragEnd"

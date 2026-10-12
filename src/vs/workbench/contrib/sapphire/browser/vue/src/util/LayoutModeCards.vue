@@ -35,7 +35,7 @@ const emit = defineEmits<{
       type="button"
       :class="`text-left rounded-md border p-4 transition-colors ${
         value === card.id
-          ? 'border-[#00b0cc] bg-[#00b0cc]/10'
+          ? 'border-[#0e639c] bg-[#0e639c]/10'
           : 'border-void-border-2 bg-void-bg-2 hover:border-void-border-1'
       }`"
       @click="emit('change', card.id)"

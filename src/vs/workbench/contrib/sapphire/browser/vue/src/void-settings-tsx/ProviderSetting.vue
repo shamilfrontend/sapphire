@@ -140,7 +140,7 @@ const inputValue = computed(() => (saveOnButton ? draftValue.value : settingValu
               :class="
                 !isDirty
                   ? 'bg-void-bg-3 text-void-fg-3 cursor-not-allowed'
-                  : 'bg-[#00b0cc] text-white hover:bg-[#0097b2]'
+                  : 'bg-[#0e639c] text-white hover:bg-[#1177bb]'
               "
               :disabled="!isDirty"
               @click="handleSave"

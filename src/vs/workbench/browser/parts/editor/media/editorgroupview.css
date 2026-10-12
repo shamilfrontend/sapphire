@@ -72,10 +72,12 @@
   > .letterpress {
   width: 100%;
   max-height: 100%;
+  min-height: 120px;
+  flex-shrink: 0;
   aspect-ratio: 1/1;
   background-image: url('./sapphire_cube_noshadow.png'); /* PPR cube watermark */
   background-size: contain;
-  background-position-x: center;
+  background-position: center;
   background-repeat: no-repeat;
 }
 
@@ -202,7 +204,7 @@
   padding: 0 12px;
   border: none;
   border-radius: 999px;
-  background-color: #00b0cc;
+  background-color: #0e639c;
   color: #fff;
   font-size: 12px;
   font-weight: 500;
@@ -217,7 +219,7 @@
   > .editor-group-watermark
   > .shortcuts
   .sapphire-openfolder-button:hover {
-  background-color: #0097b2;
+  background-color: #1177bb;
 }
 
 .monaco-workbench

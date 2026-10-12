@@ -7,6 +7,7 @@ import fs from 'fs';
 import path from 'path';
 import codesign from 'electron-osx-sign';
 import { spawn } from '@malept/cross-spawn-promise';
+import { brandDarwinAppHelpers } from '../lib/electron.js';
 
 const root = path.dirname(path.dirname(__dirname));
 
@@ -139,6 +140,9 @@ async function main(buildDir?: string): Promise<void> {
       `${infoPlistPath}`,
     ]);
   }
+
+  // Ensure helper bundles are named Sapphire Helper* before identity signing.
+  brandDarwinAppHelpers(path.join(appRoot, appName), false);
 
   await codesign.signAsync(gpuHelperOpts);
   await codesign.signAsync(rendererHelperOpts);

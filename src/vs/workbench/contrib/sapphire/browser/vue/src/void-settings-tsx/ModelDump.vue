@@ -139,7 +139,7 @@ const hasOverrides = (providerName: ProviderName, modelName: string) =>
               <Asterisk
                 v-if="m.type === 'autodetected'"
                 :size="14"
-                class="inline-block align-text-top brightness-115 stroke-[2] text-[#00b0cc]"
+                class="inline-block align-text-top brightness-115 stroke-[2] text-[#0e639c]"
                 data-tooltip-id="sapphire-tooltip"
                 data-tooltip-place="right"
                 data-tooltip-content="Обнаружена автоматически"
@@ -147,7 +147,7 @@ const hasOverrides = (providerName: ProviderName, modelName: string) =>
               <Asterisk
                 v-else-if="m.type === 'custom'"
                 :size="14"
-                class="inline-block align-text-top brightness-115 stroke-[2] text-[#00b0cc]"
+                class="inline-block align-text-top brightness-115 stroke-[2] text-[#0e639c]"
                 data-tooltip-id="sapphire-tooltip"
                 data-tooltip-place="right"
                 data-tooltip-content="Пользовательская модель"

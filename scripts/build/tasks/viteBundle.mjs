@@ -230,6 +230,12 @@ async function restoreDesktopCssEntrypoints(outDir) {
   }
 }
 
+/**
+ * Vite emits absolute `url('/media/...')` for bundled assets. Under the
+ * `vscode-file://vscode-app` protocol those resolve outside `out/media/` and
+ * 404 (letterpress logo, icons, etc.). Rewrite to relative `./…` next to the
+ * CSS in `media/` — same fix previously applied only to codicon.ttf.
+ */
 async function normalizeDesktopCodiconFontUrls(outDir) {
   const mediaDir = path.join(outDir, 'media');
   if (!fs.existsSync(mediaDir)) {
@@ -240,12 +246,13 @@ async function normalizeDesktopCodiconFontUrls(outDir) {
     .filter((name) => name.endsWith('.css'))
     .map((name) => path.join(mediaDir, name));
 
-  const absoluteCodiconUrlPattern = /url\((['"]?)\/media\/codicon\.ttf(\?[^'")]+)?\1\)/g;
+  // Match url('/media/file.ext?query') and url(/media/file.ext)
+  const absoluteMediaUrlPattern = /url\((['"]?)\/media\/([^'")]+)\1\)/g;
   for (const cssFile of cssFiles) {
     const content = await fs.promises.readFile(cssFile, 'utf8');
     const patched = content.replace(
-      absoluteCodiconUrlPattern,
-      (_match, quote = '', query = '') => `url(${quote}./codicon.ttf${query}${quote})`,
+      absoluteMediaUrlPattern,
+      (_match, quote = '', assetPath = '') => `url(${quote}./${assetPath}${quote})`,
     );
     if (patched !== content) {
       await fs.promises.writeFile(cssFile, patched, 'utf8');

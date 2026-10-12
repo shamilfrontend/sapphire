@@ -204,7 +204,7 @@ export const buttonSeparator = registerColor(
 
 export const buttonBackground = registerColor(
   'button.background',
-  { dark: '#00B0CC', light: '#00B0CC', hcDark: null, hcLight: '#0F4A85' },
+  { dark: '#0E639C', light: '#0E639C', hcDark: null, hcLight: '#0F4A85' },
   nls.localize('buttonBackground', 'Button background color.'),
 );
 

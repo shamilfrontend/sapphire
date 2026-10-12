@@ -149,7 +149,7 @@ const selectedLabel = computed(() => (selectedUri.value ? getBasename(selectedUr
         </button>
         <button
           type="button"
-          class="px-2 py-0.5 text-xs rounded bg-[#00b0cc] text-white hover:bg-[#0097b2] shrink-0"
+          class="px-2 py-0.5 text-xs rounded bg-[#0e639c] text-white hover:bg-[#1177bb] shrink-0"
           @click="acceptOrRejectFile('accept')"
         >
           Оставить

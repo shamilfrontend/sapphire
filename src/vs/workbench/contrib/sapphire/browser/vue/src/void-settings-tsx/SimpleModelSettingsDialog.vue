@@ -254,7 +254,7 @@ const providerTitle = computed(() => displayInfoOfProviderName(providerName.valu
       <div class="flex justify-end gap-2 mt-4">
         <SapphireButtonBgDarken class="px-3 py-1" @click="onClose">Отмена</SapphireButtonBgDarken>
         <SapphireButtonBgDarken
-          class="px-3 py-1 bg-[#00b0cc] text-white hover:bg-[#0097b2]"
+          class="px-3 py-1 bg-[#0e639c] text-white hover:bg-[#1177bb]"
           @click="onSave"
         >
           Сохранить

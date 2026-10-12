@@ -76,11 +76,11 @@ const onDraftKeyDown = (event: KeyboardEvent) => {
       class="group flex items-center gap-1 pr-1 rounded text-sm cursor-pointer"
       :class="[
         editing ? 'min-h-7 py-0.5' : 'h-7',
-        isInside ? 'bg-[#00b0cc]/15 ring-1 ring-[#00b0cc]' : 'hover:bg-void-bg-2-hover',
+        isInside ? 'bg-[#0e639c]/15 ring-1 ring-[#0e639c]' : 'hover:bg-void-bg-2-hover',
       ]"
       :style="{
         paddingLeft: `${4 + depth * 14}px`,
-        boxShadow: isBefore ? 'inset 0 2px 0 #00b0cc' : undefined,
+        boxShadow: isBefore ? 'inset 0 2px 0 #0e639c' : undefined,
       }"
       @dragstart="onDragStart"
       @dragover="onDragOver"

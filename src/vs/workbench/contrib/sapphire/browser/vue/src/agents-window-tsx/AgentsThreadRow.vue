@@ -49,7 +49,7 @@ const onMenuClick = (event: MouseEvent) => {
     class="group flex items-center gap-1 h-7 pr-1 rounded text-sm cursor-pointer"
     :class="
       isCurrent
-        ? 'bg-[#00b0cc]/20 text-void-fg-1 font-medium shadow-[inset_2px_0_0_0_#00b0cc]'
+        ? 'bg-[#0e639c]/20 text-void-fg-1 font-medium shadow-[inset_2px_0_0_0_#0e639c]'
         : 'hover:bg-void-bg-2-hover text-void-fg-3'
     "
     :style="{ paddingLeft: `${8 + depth * 14}px` }"

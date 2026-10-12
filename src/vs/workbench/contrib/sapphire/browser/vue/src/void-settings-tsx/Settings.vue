@@ -104,10 +104,10 @@ const providerSections = [
             :class="
               agents
                 ? selectedSection === item.tab
-                  ? 'py-1.5 px-2 rounded-md text-left text-sm transition-colors bg-[#00b0cc]/20 text-void-fg-1 font-medium shadow-[inset_2px_0_0_0_#00b0cc]'
+                  ? 'py-1.5 px-2 rounded-md text-left text-sm transition-colors bg-[#0e639c]/20 text-void-fg-1 font-medium shadow-[inset_2px_0_0_0_#0e639c]'
                   : 'py-1.5 px-2 rounded-md text-left text-sm transition-colors text-void-fg-3 hover:bg-void-bg-2-hover hover:text-void-fg-1'
                 : selectedSection === item.tab
-                  ? 'py-2 px-4 rounded-md text-left transition-all duration-200 bg-[#00b0cc]/80 text-white font-medium shadow-sm'
+                  ? 'py-2 px-4 rounded-md text-left transition-all duration-200 bg-[#0e639c]/80 text-white font-medium shadow-sm'
                   : 'py-2 px-4 rounded-md text-left transition-all duration-200 bg-void-bg-2 hover:bg-void-bg-2/80 text-void-fg-1'
             "
             @click="selectedSection = item.tab"

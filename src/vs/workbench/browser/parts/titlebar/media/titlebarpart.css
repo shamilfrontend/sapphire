@@ -750,7 +750,7 @@
   margin-left: 8px;
   padding: 0 10px 0 12px !important;
   border-radius: 999px;
-  background-color: #00b0cc !important;
+  background-color: #0e639c !important;
   color: #fff !important;
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif !important;
   font-size: 12px !important;
@@ -767,7 +767,7 @@
   .monaco-action-bar
   .action-item
   .action-label.codicon-ppr-agents-window:hover {
-  background-color: #0097b2 !important;
+  background-color: #1177bb !important;
 }
 
 .monaco-workbench

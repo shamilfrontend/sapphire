@@ -41,6 +41,8 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.config = void 0;
+exports.brandDarwinAppHelpers = brandDarwinAppHelpers;
+const child_process_1 = require("child_process");
 const fs_1 = __importDefault(require("fs"));
 const path_1 = __importDefault(require("path"));
 const event_stream_1 = __importDefault(require("event-stream"));
@@ -248,6 +250,78 @@ function getElectron(arch) {
             .pipe(vinyl_fs_1.default.dest('.build/electron'));
     };
 }
+/**
+ * gulp-electron@1.36.0 renames helper .app folders but fails to patch Info.plist when
+ * the helper name contains parentheses (Renderer/GPU/Plugin). Activity Monitor then
+ * shows "Electron Helper (...)" instead of "Sapphire Helper (...)".
+ * Also covers packaged builds that still ship unrenamed Electron Helper bundles.
+ *
+ * @param appBundlePath Path to `Sapphire.app`
+ * @param adhocSign When true, ad-hoc codesign changed helpers (dev Electron). Set false
+ * when a real identity sign follows immediately (darwin/sign).
+ */
+function brandDarwinAppHelpers(appBundlePath, adhocSign = true) {
+    if (process.platform !== 'darwin') {
+        return;
+    }
+    const frameworksPath = path_1.default.join(appBundlePath, 'Contents', 'Frameworks');
+    if (!fs_1.default.existsSync(frameworksPath)) {
+        return;
+    }
+    const plist = require('plist');
+    const helperAppRe = new RegExp(`^(?:Electron|${escapeRegExp(product.nameShort)}) Helper( \\(\\w+\\))?\\.app$`);
+    for (const entry of fs_1.default.readdirSync(frameworksPath)) {
+        const match = helperAppRe.exec(entry);
+        if (!match) {
+            continue;
+        }
+        const suffix = match[1] ?? '';
+        const targetHelperName = `${product.nameShort} Helper${suffix}`;
+        const targetAppName = `${targetHelperName}.app`;
+        const idSuffix = suffix ? `.${suffix.slice(2, -1)}` : '';
+        const bundleId = `${product.darwinBundleIdentifier}.helper${idSuffix}`;
+        let changed = false;
+        let helperAppPath = path_1.default.join(frameworksPath, entry);
+        if (entry !== targetAppName) {
+            const renamedPath = path_1.default.join(frameworksPath, targetAppName);
+            fs_1.default.renameSync(helperAppPath, renamedPath);
+            helperAppPath = renamedPath;
+            changed = true;
+        }
+        const macOSPath = path_1.default.join(helperAppPath, 'Contents', 'MacOS');
+        if (fs_1.default.existsSync(macOSPath)) {
+            for (const binary of fs_1.default.readdirSync(macOSPath)) {
+                if (binary !== targetHelperName) {
+                    fs_1.default.renameSync(path_1.default.join(macOSPath, binary), path_1.default.join(macOSPath, targetHelperName));
+                    changed = true;
+                }
+            }
+        }
+        const infoPlistPath = path_1.default.join(helperAppPath, 'Contents', 'Info.plist');
+        const infoPlist = plist.parse(fs_1.default.readFileSync(infoPlistPath, 'utf8'));
+        const needsWrite = infoPlist['CFBundleName'] !== targetHelperName ||
+            infoPlist['CFBundleDisplayName'] !== targetHelperName ||
+            infoPlist['CFBundleExecutable'] !== targetHelperName ||
+            infoPlist['CFBundleIdentifier'] !== bundleId;
+        if (needsWrite) {
+            infoPlist['CFBundleName'] = targetHelperName;
+            infoPlist['CFBundleDisplayName'] = targetHelperName;
+            infoPlist['CFBundleExecutable'] = targetHelperName;
+            infoPlist['CFBundleIdentifier'] = bundleId;
+            fs_1.default.writeFileSync(infoPlistPath, plist.build(infoPlist));
+            changed = true;
+        }
+        if (changed && adhocSign) {
+            // Ad-hoc re-sign after plist/binary renames so macOS accepts the helper.
+            (0, child_process_1.execFileSync)('codesign', ['--force', '--sign', '-', helperAppPath], {
+                stdio: 'inherit',
+            });
+        }
+    }
+}
+function escapeRegExp(value) {
+    return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
 async function main(arch = process.arch) {
     const version = electronVersion;
     const electronPath = path_1.default.join(root, '.build', 'electron');
@@ -257,6 +331,7 @@ async function main(arch = process.arch) {
         await util.rimraf(electronPath)();
         await util.streamToPromise(getElectron(arch)());
     }
+    brandDarwinAppHelpers(path_1.default.join(electronPath, `${product.nameLong}.app`));
 }
 if (require.main === module) {
     main(process.argv[2]).catch(err => {

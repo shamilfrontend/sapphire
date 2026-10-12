@@ -3,6 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
+import { execFileSync } from 'child_process';
 import fs from 'fs';
 import path from 'path';
 import es from 'event-stream';
@@ -304,6 +305,99 @@ function getElectron(arch: string): () => NodeJS.ReadWriteStream {
   };
 }
 
+/**
+ * gulp-electron@1.36.0 renames helper .app folders but fails to patch Info.plist when
+ * the helper name contains parentheses (Renderer/GPU/Plugin). Activity Monitor then
+ * shows "Electron Helper (...)" instead of "Sapphire Helper (...)".
+ * Also covers packaged builds that still ship unrenamed Electron Helper bundles.
+ *
+ * @param appBundlePath Path to `Sapphire.app`
+ * @param adhocSign When true, ad-hoc codesign changed helpers (dev Electron). Set false
+ * when a real identity sign follows immediately (darwin/sign).
+ */
+export function brandDarwinAppHelpers(
+  appBundlePath: string,
+  adhocSign: boolean = true,
+): void {
+  if (process.platform !== 'darwin') {
+    return;
+  }
+
+  const frameworksPath = path.join(appBundlePath, 'Contents', 'Frameworks');
+  if (!fs.existsSync(frameworksPath)) {
+    return;
+  }
+
+  const plist = require('plist') as {
+    parse: (s: string) => Record<string, unknown>;
+    build: (obj: Record<string, unknown>) => string;
+  };
+
+  const helperAppRe = new RegExp(
+    `^(?:Electron|${escapeRegExp(product.nameShort)}) Helper( \\(\\w+\\))?\\.app$`,
+  );
+
+  for (const entry of fs.readdirSync(frameworksPath)) {
+    const match = helperAppRe.exec(entry);
+    if (!match) {
+      continue;
+    }
+
+    const suffix = match[1] ?? '';
+    const targetHelperName = `${product.nameShort} Helper${suffix}`;
+    const targetAppName = `${targetHelperName}.app`;
+    const idSuffix = suffix ? `.${suffix.slice(2, -1)}` : '';
+    const bundleId = `${product.darwinBundleIdentifier}.helper${idSuffix}`;
+
+    let changed = false;
+    let helperAppPath = path.join(frameworksPath, entry);
+    if (entry !== targetAppName) {
+      const renamedPath = path.join(frameworksPath, targetAppName);
+      fs.renameSync(helperAppPath, renamedPath);
+      helperAppPath = renamedPath;
+      changed = true;
+    }
+
+    const macOSPath = path.join(helperAppPath, 'Contents', 'MacOS');
+    if (fs.existsSync(macOSPath)) {
+      for (const binary of fs.readdirSync(macOSPath)) {
+        if (binary !== targetHelperName) {
+          fs.renameSync(path.join(macOSPath, binary), path.join(macOSPath, targetHelperName));
+          changed = true;
+        }
+      }
+    }
+
+    const infoPlistPath = path.join(helperAppPath, 'Contents', 'Info.plist');
+    const infoPlist = plist.parse(fs.readFileSync(infoPlistPath, 'utf8'));
+    const needsWrite =
+      infoPlist['CFBundleName'] !== targetHelperName ||
+      infoPlist['CFBundleDisplayName'] !== targetHelperName ||
+      infoPlist['CFBundleExecutable'] !== targetHelperName ||
+      infoPlist['CFBundleIdentifier'] !== bundleId;
+
+    if (needsWrite) {
+      infoPlist['CFBundleName'] = targetHelperName;
+      infoPlist['CFBundleDisplayName'] = targetHelperName;
+      infoPlist['CFBundleExecutable'] = targetHelperName;
+      infoPlist['CFBundleIdentifier'] = bundleId;
+      fs.writeFileSync(infoPlistPath, plist.build(infoPlist));
+      changed = true;
+    }
+
+    if (changed && adhocSign) {
+      // Ad-hoc re-sign after plist/binary renames so macOS accepts the helper.
+      execFileSync('codesign', ['--force', '--sign', '-', helperAppPath], {
+        stdio: 'inherit',
+      });
+    }
+  }
+}
+
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
 async function main(arch: string = process.arch): Promise<void> {
   const version = electronVersion;
   const electronPath = path.join(root, '.build', 'electron');
@@ -315,6 +409,8 @@ async function main(arch: string = process.arch): Promise<void> {
     await util.rimraf(electronPath)();
     await util.streamToPromise(getElectron(arch)());
   }
+
+  brandDarwinAppHelpers(path.join(electronPath, `${product.nameLong}.app`));
 }
 
 if (require.main === module) {

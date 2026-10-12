@@ -650,8 +650,8 @@ export const STATUS_BAR_NO_FOLDER_FOREGROUND = registerColor(
 export const STATUS_BAR_BACKGROUND = registerColor(
   'statusBar.background',
   {
-    dark: '#007ACC',
-    light: '#007ACC',
+    dark: '#0E639C',
+    light: '#0E639C',
     hcDark: null,
     hcLight: null,
   },
@@ -1007,8 +1007,8 @@ export const ACTIVITY_BAR_DRAG_AND_DROP_BORDER = registerColor(
 export const ACTIVITY_BAR_BADGE_BACKGROUND = registerColor(
   'activityBarBadge.background',
   {
-    dark: '#007ACC',
-    light: '#007ACC',
+    dark: '#0E639C',
+    light: '#0E639C',
     hcDark: '#000000',
     hcLight: '#0F4A85',
   },

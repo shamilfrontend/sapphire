@@ -7,8 +7,11 @@
  *   sapphire_icons/logo_cube_noshadow.png   — empty-editor watermark / UI
  *   sapphire_icons/slice_of_sapphire_00b0cc.png  — Dock / taskbar (preferred when present)
  *
+ * Watermark target strips the near-black squircle so only the crystal remains
+ * (Cursor-style letterpress on the empty editor).
+ *
  * Writes:
- *   src/.../sapphire_cube_noshadow.png (+ out/ copies)
+ *   src/.../sapphire_cube_noshadow.png (+ out/ copies) — transparent watermark
  *   resources/win32/logo_cube_noshadow.png
  *   src/.../sapphire-icon-sm.png
  *   src/.../code-icon.png
@@ -36,6 +39,40 @@ function requirePhotorealMark(preferred) {
     );
   }
   return mark;
+}
+
+/**
+ * Remove the dark squircle plate so the crystal sits on a transparent background
+ * for the empty-editor watermark (like Cursor's letterpress logo).
+ * Near-black opaque pixels (squircle fill) become fully transparent; the silver
+ * crystal facets are kept.
+ */
+async function makeTransparentWatermark(markPngPath) {
+  const { data, info } = await sharp(markPngPath)
+    .ensureAlpha()
+    .raw()
+    .toBuffer({ resolveWithObject: true });
+
+  const px = Buffer.from(data);
+  for (let i = 0; i < px.length; i += 4) {
+    const r = px[i];
+    const g = px[i + 1];
+    const b = px[i + 2];
+    const a = px[i + 3];
+    if (a < 10) {
+      continue;
+    }
+    // Squircle plate is ~RGB 0–75 (incl. soft edge); crystal facets start ~87+.
+    if (r + g + b < 220 && Math.abs(r - g) < 12 && Math.abs(g - b) < 12) {
+      px[i + 3] = 0;
+    }
+  }
+
+  return sharp(px, {
+    raw: { width: info.width, height: info.height, channels: 4 },
+  })
+    .png()
+    .toBuffer();
 }
 
 /**
@@ -340,48 +377,51 @@ async function main() {
     }
   }
 
-  const watermarkMark = requirePhotorealMark([
+  const watermarkSource = requirePhotorealMark([
     join(root, 'sapphire_icons/logo_cube_noshadow.png'),
     join(root, 'sapphire_icons/slice_of_sapphire_00b0cc.png'),
   ]);
-  console.log('watermark mark:', watermarkMark);
+  console.log('watermark source:', watermarkSource);
+
+  const watermarkPng = await makeTransparentWatermark(watermarkSource);
 
   const targets = [
     join(root, 'src/vs/workbench/browser/parts/editor/media/sapphire_cube_noshadow.png'),
     join(root, 'out/vs/workbench/browser/parts/editor/media/sapphire_cube_noshadow.png'),
     join(root, 'out/media/sapphire_cube_noshadow.png'),
+    join(root, 'out-vscode/media/sapphire_cube_noshadow.png'),
     join(root, 'resources/win32/logo_cube_noshadow.png'),
   ];
   for (const t of targets) {
     try {
       mkdirSync(dirname(t), { recursive: true });
-      copyFileSync(watermarkMark, t);
+      writeFileSync(t, watermarkPng);
       console.log('updated', t);
     } catch (e) {
       console.warn('skip', t, e.message);
     }
   }
 
-  // Packaged gulp app copies (empty-editor watermark) if present.
+  // Packaged darwin app copies (empty-editor watermark) if present.
   const packagedWatermarks = [
     join(
       root,
-      '../VSCode-darwin-arm64/PPR Code.app/Contents/Resources/app/out/vs/workbench/browser/parts/editor/media/sapphire_cube_noshadow.png',
+      '../VSCode-darwin-arm64/Sapphire.app/Contents/Resources/app/out/vs/workbench/browser/parts/editor/media/sapphire_cube_noshadow.png',
     ),
     join(
       root,
-      '../VSCode-darwin-arm64/PPR Code.app/Contents/Resources/app/out/media/sapphire_cube_noshadow.png',
+      '../VSCode-darwin-arm64/Sapphire.app/Contents/Resources/app/out/media/sapphire_cube_noshadow.png',
     ),
   ];
   for (const t of packagedWatermarks) {
     if (existsSync(dirname(t))) {
-      copyFileSync(watermarkMark, t);
+      writeFileSync(t, watermarkPng);
       console.log('updated', t);
     }
   }
 
   const sm = join(root, 'src/vs/workbench/browser/media/sapphire-icon-sm.png');
-  await sharp(watermarkMark).resize(128, 128).png().toFile(sm);
+  await sharp(watermarkSource).resize(128, 128).png().toFile(sm);
   console.log('updated', sm);
   try {
     copyFileSync(sm, join(root, 'out/vs/workbench/browser/media/sapphire-icon-sm.png'));
@@ -389,7 +429,7 @@ async function main() {
     /* out may be absent */
   }
 
-  await writeUiAndWebAssets(watermarkMark);
+  await writeUiAndWebAssets(watermarkSource);
 
   // Dock / taskbar: precomposed dark-squircle logo (resize as-is).
   const platformMark = requirePhotorealMark([

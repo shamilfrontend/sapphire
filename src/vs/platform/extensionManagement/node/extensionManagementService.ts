@@ -611,56 +611,9 @@ export class ExtensionManagementService
       this.environmentService.isBuilt &&
       !(isLinux && this.productService.quality === 'stable')
     ) {
-      try {
-        await this.extensionsDownloader.delete(location);
-      } catch (e) {
-        /* Ignore */
-        this.logService.warn(
-          `Error while deleting the downloaded file`,
-          location.toString(),
-          getErrorMessage(e),
-        );
-      }
-
-      if (!verificationStatus) {
-        throw new ExtensionManagementError(
-          nls.localize(
-            'signature verification not executed',
-            'Signature verification was not executed.',
-          ),
-          ExtensionManagementErrorCode.SignatureVerificationInternal,
-        );
-      }
-
-      switch (verificationStatus) {
-        case ExtensionSignatureVerificationCode.PackageIntegrityCheckFailed:
-        case ExtensionSignatureVerificationCode.SignatureIsInvalid:
-        case ExtensionSignatureVerificationCode.SignatureManifestIsInvalid:
-        case ExtensionSignatureVerificationCode.SignatureIntegrityCheckFailed:
-        case ExtensionSignatureVerificationCode.EntryIsMissing:
-        case ExtensionSignatureVerificationCode.EntryIsTampered:
-        case ExtensionSignatureVerificationCode.Untrusted:
-        case ExtensionSignatureVerificationCode.CertificateRevoked:
-        case ExtensionSignatureVerificationCode.SignatureIsNotValid:
-        case ExtensionSignatureVerificationCode.SignatureArchiveHasTooManyEntries:
-        case ExtensionSignatureVerificationCode.NotSigned:
-          throw new ExtensionManagementError(
-            nls.localize(
-              'signature verification failed',
-              "Signature verification failed with '{0}' error.",
-              verificationStatus,
-            ),
-            ExtensionManagementErrorCode.SignatureVerificationFailed,
-          );
-      }
-
-      throw new ExtensionManagementError(
-        nls.localize(
-          'signature verification failed',
-          "Signature verification failed with '{0}' error.",
-          verificationStatus,
-        ),
-        ExtensionManagementErrorCode.SignatureVerificationInternal,
+      // Sapphire: never block installs on signature verification failure.
+      this.logService.warn(
+        `Extension signature verification did not succeed for ${extension.identifier.id}: ${verificationStatus ?? 'not executed'}. Continuing install.`,
       );
     }
 

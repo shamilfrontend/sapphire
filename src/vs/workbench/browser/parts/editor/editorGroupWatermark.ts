@@ -136,13 +136,13 @@ export class EditorGroupWatermark extends Disposable {
     append(container, elements.root);
     this.shortcuts = elements.shortcuts; // shortcuts div is modified on render()
 
-    // void icon style
+    // Cursor-style letterpress: larger semi-transparent crystal watermark
     const updateTheme = () => {
       const theme = this.themeService.getColorTheme().type;
       const isDark = theme === ColorScheme.DARK || theme === ColorScheme.HIGH_CONTRAST_DARK;
-      elements.icon.style.maxWidth = '120px';
-      elements.icon.style.opacity = '50%';
-      elements.icon.style.filter = isDark ? '' : 'invert(1)'; // brightness(.5)
+      elements.icon.style.maxWidth = '180px';
+      elements.icon.style.opacity = isDark ? '0.7' : '0.65';
+      elements.icon.style.filter = isDark ? '' : 'invert(1)';
     };
     updateTheme();
     this._register(this.themeService.onDidColorThemeChange(updateTheme));

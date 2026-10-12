@@ -43,8 +43,8 @@
   --void-border-3: var(--vscode-commandCenter-inactiveBorder);
   --void-border-4: var(--vscode-editorGroup-border);
 
-  --void-ring-color: #00b0cc;
-  --void-link-color: #00b0cc;
+  --void-ring-color: #0e639c;
+  --void-link-color: #0e639c;
   --void-danger-muted: color-mix(in srgb, var(--void-danger) 12%, transparent);
   --void-danger-border: color-mix(in srgb, var(--void-danger) 35%, transparent);
 
@@ -78,8 +78,8 @@
     --void-border-3: #3a3a3a;
     --void-border-4: #242424;
 
-    --void-ring-color: #00b0cc;
-    --void-link-color: #00b0cc;
+    --void-ring-color: #0e639c;
+    --void-link-color: #0e639c;
   }
 
   /* scope-tailwind prefixes the `dark` class to `void-dark` */

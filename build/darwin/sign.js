@@ -11,6 +11,7 @@ const fs_1 = __importDefault(require("fs"));
 const path_1 = __importDefault(require("path"));
 const electron_osx_sign_1 = __importDefault(require("electron-osx-sign"));
 const cross_spawn_promise_1 = require("@malept/cross-spawn-promise");
+const electron_1 = require("../lib/electron");
 const root = path_1.default.dirname(path_1.default.dirname(__dirname));
 function getElectronVersion() {
     const npmrc = fs_1.default.readFileSync(path_1.default.join(root, '.npmrc'), 'utf8');
@@ -102,6 +103,8 @@ async function main(buildDir) {
             `${infoPlistPath}`
         ]);
     }
+    // Ensure helper bundles are named Sapphire Helper* before identity signing.
+    (0, electron_1.brandDarwinAppHelpers)(path_1.default.join(appRoot, appName), false);
     await electron_osx_sign_1.default.signAsync(gpuHelperOpts);
     await electron_osx_sign_1.default.signAsync(rendererHelperOpts);
     await electron_osx_sign_1.default.signAsync(pluginHelperOpts);

@@ -195,7 +195,7 @@ const toggleReview = () => {
       <button
         v-if="workspace.empty"
         type="button"
-        class="shrink-0 cursor-pointer rounded-full px-3 py-1 text-sm bg-[#00b0cc] text-white hover:bg-[#0097b2]"
+        class="shrink-0 cursor-pointer rounded-full px-3 py-1 text-sm bg-[#0e639c] text-white hover:bg-[#1177bb]"
         :style="noDrag"
         @click="openFolder"
       >
@@ -266,7 +266,7 @@ const toggleReview = () => {
           <button
             v-if="workspace.empty"
             type="button"
-            class="shrink-0 cursor-pointer rounded-full px-3 py-1 text-sm bg-[#00b0cc] text-white hover:bg-[#0097b2]"
+            class="shrink-0 cursor-pointer rounded-full px-3 py-1 text-sm bg-[#0e639c] text-white hover:bg-[#1177bb]"
             :style="noDrag"
             @click="openFolder"
           >
@@ -300,7 +300,7 @@ const toggleReview = () => {
           class="px-2.5 h-8 rounded-md text-sm"
           :class="
             showReview
-              ? 'bg-[#00b0cc]/20 text-void-fg-1 font-medium'
+              ? 'bg-[#0e639c]/20 text-void-fg-1 font-medium'
               : 'text-void-fg-3 hover:text-void-fg-1 hover:bg-void-bg-2'
           "
           @click="toggleReview"
@@ -314,7 +314,7 @@ const toggleReview = () => {
           class="w-8 h-8 flex items-center justify-center rounded-md"
           :class="
             settingsActive
-              ? 'text-void-fg-1 bg-[#00b0cc]/20'
+              ? 'text-void-fg-1 bg-[#0e639c]/20'
               : 'text-void-fg-3 hover:text-void-fg-1 hover:bg-void-bg-2'
           "
           @click="openSettingsTab"
@@ -323,7 +323,7 @@ const toggleReview = () => {
         </button>
         <button
           type="button"
-          class="px-3 py-1 rounded-full text-sm bg-[#00b0cc] text-white hover:bg-[#0097b2]"
+          class="px-3 py-1 rounded-full text-sm bg-[#0e639c] text-white hover:bg-[#1177bb]"
           @click="setIdeMode"
         >
           Режим IDE ↗
