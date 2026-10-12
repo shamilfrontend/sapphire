@@ -1,0 +1,59 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" fill="none">
+  <defs>
+    <linearGradient id="topFace" x1="512" y1="70" x2="512" y2="452" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#3FD4EA"/>
+      <stop offset="1" stop-color="#00B0CC"/>
+    </linearGradient>
+    <linearGradient id="leftFace" x1="182" y1="261" x2="512" y2="833" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#00B0CC"/>
+      <stop offset="1" stop-color="#006578"/>
+    </linearGradient>
+    <linearGradient id="rightFace" x1="842" y1="261" x2="512" y2="833" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#00A3BD"/>
+      <stop offset="1" stop-color="#004E5C"/>
+    </linearGradient>
+    <radialGradient id="core" cx="0.62" cy="0.42" r="0.28">
+      <stop offset="0" stop-color="#E8FCFF" stop-opacity="0.9"/>
+      <stop offset="0.45" stop-color="#00B0CC" stop-opacity="0.35"/>
+      <stop offset="1" stop-color="#00B0CC" stop-opacity="0"/>
+    </radialGradient>
+    <filter id="shadow" x="-50%" y="-80%" width="200%" height="260%">
+      <feGaussianBlur stdDeviation="10"/>
+    </filter>
+    <filter id="grain" x="0" y="0" width="100%" height="100%" color-interpolation-filters="sRGB">
+      <feTurbulence type="fractalNoise" baseFrequency="9" numOctaves="2" seed="4" result="noise"/>
+      <feColorMatrix in="noise" type="luminanceToAlpha" result="alpha"/>
+      <feComponentTransfer in="alpha" result="speck">
+        <feFuncA type="linear" slope="0.42" intercept="-0.08"/>
+      </feComponentTransfer>
+      <feFlood flood-color="#F4FDFF" result="light"/>
+      <feComposite in="light" in2="speck" operator="in" result="grit"/>
+      <feBlend in="grit" in2="SourceGraphic" mode="screen"/>
+    </filter>
+    <clipPath id="cube">
+      <polygon points="512,70 842,261 842,642 512,833 182,642 182,261"/>
+    </clipPath>
+  </defs>
+
+  <ellipse cx="512" cy="908" rx="286" ry="46" fill="#00B0CC" opacity="0.38" filter="url(#shadow)"/>
+
+  <g filter="url(#grain)" stroke-linejoin="round" stroke-linecap="round">
+    <polygon points="512,70 182,261 512,452 842,261" fill="url(#topFace)"/>
+    <polygon points="182,261 512,452 512,833 182,642" fill="url(#leftFace)"/>
+    <polygon points="842,261 512,452 512,833 842,642" fill="url(#rightFace)"/>
+    <ellipse cx="640" cy="390" rx="78" ry="46" fill="url(#core)"/>
+
+    <g fill="none" stroke="#00B0CC" stroke-width="2.25" vector-effect="non-scaling-stroke">
+      <polygon points="512,70 182,261 512,452 842,261"/>
+      <polyline points="182,261 182,642 512,833 842,642 842,261"/>
+      <line x1="512" y1="70" x2="512" y2="452"/>
+      <line x1="512" y1="452" x2="512" y2="833"/>
+    </g>
+    <g fill="none" stroke="#E7FBFF" stroke-width="1.15" vector-effect="non-scaling-stroke" opacity="0.9">
+      <polyline points="182,261 512,70 842,261"/>
+      <line x1="512" y1="70" x2="512" y2="452"/>
+      <line x1="182" y1="261" x2="512" y2="452"/>
+      <line x1="842" y1="261" x2="512" y2="452"/>
+    </g>
+  </g>
+</svg>

@@ -1,0 +1,807 @@
+/*---------------------------------------------------------------------------------------------
+ *  Copyright (c) Microsoft Corporation. All rights reserved.
+ *  Licensed under the MIT License. See License.txt in the project root for license information.
+ *--------------------------------------------------------------------------------------------*/
+
+/* Part Element */
+.monaco-workbench .part.titlebar {
+  display: flex;
+  flex-direction: row;
+}
+
+.monaco-workbench.mac .part.titlebar {
+  flex-direction: row-reverse;
+}
+
+/* Root Container */
+.monaco-workbench .part.titlebar > .titlebar-container {
+  box-sizing: border-box;
+  overflow: hidden;
+  flex-shrink: 1;
+  flex-grow: 1;
+  align-items: center;
+  justify-content: space-between;
+  user-select: none;
+  -webkit-user-select: none;
+  display: flex;
+  height: 100%;
+  width: 100%;
+}
+
+/* Account for zooming */
+.monaco-workbench .part.titlebar > .titlebar-container.counter-zoom {
+  zoom: calc(1 / var(--zoom-factor));
+}
+
+/* Platform specific root element */
+.monaco-workbench.mac .part.titlebar > .titlebar-container {
+  line-height: 22px;
+}
+
+.monaco-workbench.web .part.titlebar > .titlebar-container,
+.monaco-workbench.windows .part.titlebar > .titlebar-container,
+.monaco-workbench.linux .part.titlebar > .titlebar-container {
+  line-height: 22px;
+  justify-content: left;
+}
+
+.monaco-workbench.web.safari .part.titlebar,
+.monaco-workbench.web.safari .part.titlebar > .titlebar-container {
+  /* Must be scoped to safari due to #148851 */
+  /* Is required in safari due to #149476 */
+  overflow: visible;
+}
+
+/* Draggable region */
+.monaco-workbench .part.titlebar > .titlebar-container > .titlebar-drag-region {
+  top: 0;
+  left: 0;
+  display: block;
+  position: absolute;
+  width: 100%;
+  height: 100%;
+  -webkit-app-region: drag;
+}
+
+.monaco-workbench .part.titlebar > .titlebar-container > .titlebar-left,
+.monaco-workbench .part.titlebar > .titlebar-container > .titlebar-center,
+.monaco-workbench .part.titlebar > .titlebar-container > .titlebar-right {
+  display: flex;
+  height: 100%;
+  align-items: center;
+}
+
+.monaco-workbench .part.titlebar > .titlebar-container > .titlebar-left {
+  order: 0;
+  width: 20%;
+  flex-grow: 2;
+  justify-content: flex-start;
+}
+
+.monaco-workbench .part.titlebar > .titlebar-container > .titlebar-center {
+  order: 1;
+  width: 60%;
+  max-width: fit-content;
+  min-width: 0px;
+  margin: 0 10px;
+  /* flex-shrink: 10; */
+  justify-content: center;
+}
+
+.monaco-workbench .part.titlebar > .titlebar-container > .titlebar-right {
+  order: 2;
+  width: 20%;
+  min-width: min-content;
+  flex-grow: 2;
+  justify-content: flex-end;
+}
+
+/* Window title text */
+.monaco-workbench .part.titlebar > .titlebar-container > .titlebar-center > .window-title {
+  flex: 0 1 auto;
+  font-size: 12px;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+.monaco-workbench.web .part.titlebar > .titlebar-container > .titlebar-center > .window-title,
+.monaco-workbench.windows .part.titlebar > .titlebar-container > .titlebar-center > .window-title,
+.monaco-workbench.linux .part.titlebar > .titlebar-container > .titlebar-center > .window-title {
+  cursor: default;
+}
+
+.monaco-workbench.linux .part.titlebar > .titlebar-container > .titlebar-center > .window-title {
+  font-size: inherit;
+  /* see #55435 */
+}
+
+.monaco-workbench .part.titlebar > .titlebar-container .monaco-toolbar .actions-container {
+  gap: 4px;
+}
+
+/* Window Title Menu */
+.monaco-workbench
+  .part.titlebar
+  > .titlebar-container
+  > .titlebar-center
+  > .window-title
+  > .command-center {
+  z-index: 2500;
+  -webkit-app-region: no-drag;
+}
+
+.monaco-workbench
+  .part.titlebar
+  > .titlebar-container
+  > .titlebar-center
+  > .window-title
+  > .command-center.hide {
+  visibility: hidden;
+}
+
+.monaco-workbench
+  .part.titlebar
+  > .titlebar-container
+  > .titlebar-center
+  > .window-title
+  > .command-center
+  > .monaco-toolbar
+  > .monaco-action-bar
+  > .actions-container
+  > .action-item
+  > .action-label,
+.monaco-workbench
+  .part.titlebar
+  > .titlebar-container
+  > .titlebar-center
+  > .window-title
+  > .command-center
+  > .monaco-toolbar
+  > .monaco-action-bar
+  > .actions-container
+  > .action-item.monaco-dropdown-with-primary
+  .action-label {
+  color: var(--vscode-titleBar-activeForeground);
+}
+
+.monaco-workbench
+  .part.titlebar.inactive
+  > .titlebar-container
+  > .titlebar-center
+  > .window-title
+  > .command-center
+  > .monaco-toolbar
+  > .monaco-action-bar
+  > .actions-container
+  > .action-item
+  > .action-label,
+.monaco-workbench
+  .part.titlebar.inactive
+  > .titlebar-container
+  > .titlebar-center
+  > .window-title
+  > .command-center
+  > .monaco-toolbar
+  > .monaco-action-bar
+  > .actions-container
+  > .action-item.monaco-dropdown-with-primary
+  .action-label {
+  color: var(--vscode-titleBar-inactiveForeground);
+}
+
+.monaco-workbench
+  .part.titlebar
+  > .titlebar-container
+  > .titlebar-center
+  > .window-title
+  > .command-center
+  > .monaco-toolbar
+  > .monaco-action-bar
+  > .actions-container
+  > .action-item
+  > .action-label {
+  color: inherit;
+}
+
+.monaco-workbench
+  .part.titlebar
+  > .titlebar-container
+  > .titlebar-center
+  > .window-title
+  > .command-center
+  .action-item.command-center-center {
+  display: flex;
+  align-items: stretch;
+  color: var(--vscode-commandCenter-foreground);
+  background-color: var(--vscode-commandCenter-background);
+  border: 1px solid var(--vscode-commandCenter-border);
+  overflow: hidden;
+  margin: 0 6px;
+  border-top-left-radius: 6px;
+  border-bottom-left-radius: 6px;
+  border-top-right-radius: 6px;
+  border-bottom-right-radius: 6px;
+  height: 22px;
+  width: 38vw;
+  max-width: 600px;
+}
+
+.monaco-workbench
+  .part.titlebar
+  > .titlebar-container
+  > .titlebar-center
+  > .window-title
+  > .command-center
+  .action-item.command-center-center
+  .action-item.command-center-quick-pick {
+  display: flex;
+  justify-content: start;
+  overflow: hidden;
+  margin: auto;
+  max-width: 600px;
+}
+
+.monaco-workbench
+  .part.titlebar
+  > .titlebar-container
+  > .titlebar-center
+  > .window-title
+  > .command-center
+  .action-item.command-center-center
+  .action-item.command-center-quick-pick
+  .search-icon {
+  font-size: 14px;
+  opacity: 0.8;
+  margin: auto 3px;
+  color: var(--vscode-commandCenter-foreground);
+}
+
+.monaco-workbench
+  .part.titlebar.inactive
+  > .titlebar-container
+  > .titlebar-center
+  > .window-title
+  > .command-center
+  .action-item.command-center-center
+  .action-item.command-center-quick-pick
+  .search-icon {
+  color: var(--vscode-titleBar-inactiveForeground);
+}
+
+.monaco-workbench
+  .part.titlebar
+  > .titlebar-container
+  > .titlebar-center
+  > .window-title
+  > .command-center
+  .action-item.command-center-center
+  .action-item.command-center-quick-pick
+  .search-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.monaco-workbench
+  .part.titlebar
+  > .titlebar-container
+  > .titlebar-center
+  > .window-title
+  > .command-center
+  .action-item.command-center-center.multiple {
+  justify-content: flex-start;
+  padding: 0 12px;
+}
+
+.monaco-workbench
+  .part.titlebar
+  > .titlebar-container
+  > .titlebar-center
+  > .window-title
+  > .command-center
+  .action-item.command-center-center.multiple.active
+  .action-label {
+  background-color: inherit;
+}
+
+.monaco-workbench
+  .part.titlebar
+  > .titlebar-container
+  > .titlebar-center
+  > .window-title
+  > .command-center
+  .action-item.command-center-center:only-child {
+  margin-left: 0; /* no margin if there is only the command center, without nav buttons */
+}
+
+.monaco-workbench
+  .part.titlebar.inactive
+  > .titlebar-container
+  > .titlebar-center
+  > .window-title
+  > .command-center
+  .action-item.command-center-center {
+  color: var(--vscode-titleBar-inactiveForeground);
+  border-color: var(--vscode-commandCenter-inactiveBorder) !important;
+}
+
+.monaco-workbench
+  .part.titlebar
+  > .titlebar-container
+  > .titlebar-center
+  > .window-title
+  > .command-center
+  .action-item.command-center-center:hover {
+  color: var(--vscode-commandCenter-activeForeground);
+  background-color: var(--vscode-commandCenter-activeBackground);
+  border-color: var(--vscode-commandCenter-activeBorder);
+}
+
+/* Menubar */
+.monaco-workbench .part.titlebar > .titlebar-container > .titlebar-left > .menubar {
+  /* move menubar above drag region as negative z-index on drag region cause greyscale AA */
+  z-index: 2500;
+  min-width: 36px;
+  flex-wrap: nowrap;
+  order: 2;
+}
+
+.monaco-workbench.web .part.titlebar > .titlebar-container > .titlebar-left > .menubar {
+  margin-left: 4px;
+}
+
+.monaco-workbench
+  .part.titlebar
+  > .titlebar-container.counter-zoom
+  .menubar
+  .menubar-menu-button
+  > .menubar-menu-items-holder.monaco-menu-container,
+.monaco-workbench
+  .part.titlebar
+  > .titlebar-container.counter-zoom
+  .monaco-toolbar
+  .dropdown-action-container {
+  zoom: var(--zoom-factor); /* helps to position the menu properly when counter zooming */
+}
+
+/* Resizer */
+.monaco-workbench.windows .part.titlebar > .titlebar-container > .resizer,
+.monaco-workbench.linux .part.titlebar > .titlebar-container > .resizer {
+  -webkit-app-region: no-drag;
+  position: absolute;
+  top: 0;
+  width: 100%;
+  height: 4px;
+}
+
+.monaco-workbench.windows.fullscreen .part.titlebar > .titlebar-container > .resizer,
+.monaco-workbench.linux.fullscreen .part.titlebar > .titlebar-container > .resizer {
+  display: none;
+}
+
+/* App Icon */
+.monaco-workbench .part.titlebar > .titlebar-container > .titlebar-left > .window-appicon {
+  width: 35px;
+  height: 100%;
+  position: relative;
+  z-index: 2500;
+  flex-shrink: 0;
+  order: 1;
+}
+
+.monaco-workbench
+  .part.titlebar
+  > .titlebar-container
+  > .titlebar-left
+  > .window-appicon:not(.codicon) {
+  background-image: url('../../../media/code-icon.png');
+  background-repeat: no-repeat;
+  background-position: center center;
+  background-size: 16px;
+}
+
+.monaco-workbench .part.titlebar > .titlebar-container > .titlebar-left > .window-appicon.codicon {
+  line-height: 30px;
+}
+
+.monaco-workbench.fullscreen
+  .part.titlebar
+  > .titlebar-container
+  > .titlebar-left
+  > .window-appicon {
+  display: none;
+}
+
+/* Window Controls Container */
+.monaco-workbench .part.titlebar .window-controls-container {
+  display: flex;
+  flex-grow: 0;
+  flex-shrink: 0;
+  text-align: center;
+  z-index: 3000;
+  -webkit-app-region: no-drag;
+  width: 0px;
+  height: 100%;
+}
+
+.monaco-workbench.fullscreen .part.titlebar .window-controls-container {
+  display: none;
+  background-color: transparent;
+}
+
+/* Window Controls Container Web: Apply WCO environment variables (https://developer.mozilla.org/en-US/docs/Web/CSS/env#titlebar-area-x) */
+.monaco-workbench.web .part.titlebar .titlebar-right .window-controls-container {
+  width: calc(100vw - env(titlebar-area-width, 100vw) - env(titlebar-area-x, 0px));
+  height: env(titlebar-area-height, 35px);
+}
+
+.monaco-workbench.web .part.titlebar .titlebar-left .window-controls-container {
+  width: env(titlebar-area-x, 0px);
+  height: env(titlebar-area-height, 35px);
+}
+
+.monaco-workbench.web.mac .part.titlebar .titlebar-left .window-controls-container {
+  order: 0;
+}
+
+.monaco-workbench.web.mac .part.titlebar .titlebar-right .window-controls-container {
+  order: 1;
+}
+
+/* Window Controls Container Desktop: apply zoom friendly size */
+.monaco-workbench:not(.web):not(.mac) .part.titlebar .window-controls-container {
+  width: calc(138px / var(--zoom-factor, 1));
+}
+
+.monaco-workbench:not(.web):not(.mac)
+  .part.titlebar
+  .titlebar-container.counter-zoom
+  .window-controls-container {
+  width: 138px;
+}
+
+.monaco-workbench.linux:not(.web) .part.titlebar .window-controls-container.wco-enabled {
+  width: calc(100vw - env(titlebar-area-width, 100vw) - env(titlebar-area-x, 0px));
+}
+
+.monaco-workbench:not(.web):not(.mac)
+  .part.titlebar
+  .titlebar-container:not(.counter-zoom)
+  .window-controls-container
+  * {
+  zoom: calc(1 / var(--zoom-factor, 1));
+}
+
+.monaco-workbench:not(.web).mac .part.titlebar .window-controls-container {
+  width: 70px;
+}
+
+/* Window Control Icons */
+.monaco-workbench .part.titlebar .window-controls-container > .window-icon {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  height: 100%;
+  width: 46px;
+  font-size: 16px;
+  color: var(--vscode-titleBar-activeForeground);
+}
+
+.monaco-workbench .part.titlebar.inactive .window-controls-container > .window-icon {
+  color: var(--vscode-titleBar-inactiveForeground);
+}
+
+.monaco-workbench .part.titlebar .window-controls-container > .window-icon::before {
+  height: 16px;
+  line-height: 16px;
+}
+
+.monaco-workbench .part.titlebar .window-controls-container > .window-icon:hover {
+  background-color: rgba(255, 255, 255, 0.1);
+}
+
+.monaco-workbench .part.titlebar.light .window-controls-container > .window-icon:hover {
+  background-color: rgba(0, 0, 0, 0.1);
+}
+
+.monaco-workbench .part.titlebar .window-controls-container > .window-icon.window-close:hover {
+  background-color: rgba(232, 17, 35, 0.9);
+}
+
+.monaco-workbench .part.titlebar .window-controls-container .window-icon.window-close:hover {
+  color: white;
+}
+
+/* Action Tool Bar Controls */
+.monaco-workbench
+  .part.titlebar
+  > .titlebar-container
+  > .titlebar-right
+  > .action-toolbar-container {
+  display: none;
+  padding-right: 4px;
+  flex-grow: 0;
+  flex-shrink: 0;
+  text-align: center;
+  position: relative;
+  z-index: 2500;
+  -webkit-app-region: no-drag;
+  height: 100%;
+}
+
+.monaco-workbench
+  .part.titlebar
+  > .titlebar-container
+  > .titlebar-right
+  > .action-toolbar-container {
+  margin-left: auto;
+}
+
+.monaco-workbench.mac:not(.web)
+  .part.titlebar
+  > .titlebar-container
+  > .titlebar-right
+  > .action-toolbar-container {
+  right: 8px;
+}
+
+.monaco-workbench
+  .part.titlebar
+  > .titlebar-container
+  > .titlebar-right
+  > .action-toolbar-container:not(.has-no-actions) {
+  display: flex;
+  justify-content: center;
+}
+
+.monaco-workbench
+  .part.titlebar
+  > .titlebar-container
+  > .titlebar-right
+  > .action-toolbar-container
+  .codicon {
+  color: inherit;
+}
+
+.monaco-workbench
+  .part.titlebar
+  > .titlebar-container
+  > .titlebar-right
+  > .action-toolbar-container
+  .monaco-action-bar
+  .action-item {
+  display: flex;
+}
+
+.monaco-workbench
+  .part.titlebar
+  > .titlebar-container
+  > .titlebar-right
+  > .action-toolbar-container
+  .monaco-action-bar
+  .badge {
+  margin-left: 8px;
+  display: flex;
+  align-items: center;
+}
+
+.monaco-workbench
+  .part.titlebar
+  > .titlebar-container
+  > .titlebar-right
+  > .action-toolbar-container
+  .monaco-action-bar
+  .action-item.icon
+  .badge {
+  margin-left: 0px;
+}
+
+.monaco-workbench
+  .part.titlebar
+  > .titlebar-container
+  > .titlebar-right
+  > .action-toolbar-container
+  .monaco-action-bar
+  .badge
+  .badge-content {
+  padding: 3px 5px;
+  border-radius: 11px;
+  font-size: 9px;
+  min-width: 11px;
+  height: 16px;
+  line-height: 11px;
+  font-weight: normal;
+  text-align: center;
+  display: inline-block;
+  box-sizing: border-box;
+  position: relative;
+}
+
+.monaco-workbench
+  .part.titlebar
+  > .titlebar-container
+  > .titlebar-right
+  > .action-toolbar-container
+  .monaco-action-bar
+  .action-item.icon
+  .badge.compact {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  margin: auto;
+  left: 0;
+  overflow: hidden;
+  width: 100%;
+  height: 100%;
+  z-index: 2;
+}
+
+.monaco-workbench
+  .part.titlebar
+  > .titlebar-container
+  > .titlebar-right
+  > .action-toolbar-container
+  .monaco-action-bar
+  .action-item.icon
+  .badge.compact
+  .badge-content::before {
+  mask-size: 12px;
+  -webkit-mask-size: 12px;
+  top: 2px;
+}
+
+.monaco-workbench
+  .part.titlebar
+  > .titlebar-container
+  > .titlebar-right
+  > .action-toolbar-container
+  .monaco-action-bar
+  .action-item.icon
+  .badge.compact
+  .badge-content {
+  position: absolute;
+  top: 10px;
+  right: 0px;
+  font-size: 9px;
+  font-weight: 600;
+  min-width: 12px;
+  height: 12px;
+  line-height: 12px;
+  padding: 0 2px;
+  border-radius: 16px;
+  text-align: center;
+}
+
+/* PPR: filled titlebar toggle icons (Cursor-like active state via CSS mask) */
+.monaco-workbench
+  .part.titlebar
+  > .titlebar-container
+  > .titlebar-right
+  > .action-toolbar-container
+  .codicon-ppr-chat-filled::before,
+.monaco-workbench
+  .part.titlebar
+  > .titlebar-container
+  > .titlebar-right
+  > .action-toolbar-container
+  .codicon-ppr-terminal-filled::before,
+.monaco-workbench
+  .part.titlebar
+  > .titlebar-container
+  > .titlebar-right
+  > .action-toolbar-container
+  .codicon-ppr-settings-gear-filled::before {
+  content: '' !important;
+  display: inline-block;
+  width: 16px;
+  height: 16px;
+  background-color: currentColor;
+  -webkit-mask-repeat: no-repeat;
+  mask-repeat: no-repeat;
+  -webkit-mask-position: center;
+  mask-position: center;
+  -webkit-mask-size: contain;
+  mask-size: contain;
+}
+
+.monaco-workbench
+  .part.titlebar
+  > .titlebar-container
+  > .titlebar-right
+  > .action-toolbar-container
+  .codicon-ppr-chat-filled::before {
+  -webkit-mask-image: url('data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2016%2016%22%20fill%3D%22black%22%3E%3Cpath%20d%3D%22M3.5%202C2.11929%202%201%203.11929%201%204.5V9.5C1%2010.8807%202.11929%2012%203.5%2012H4V13.9422C4%2014.7842%204.99168%2015.2342%205.62533%2014.6797L8.68787%2012H12.5C13.8807%2012%2015%2010.8807%2015%209.5V4.5C15%203.11929%2013.8807%202%2012.5%202H3.5Z%22%2F%3E%3C%2Fsvg%3E');
+  mask-image: url('data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2016%2016%22%20fill%3D%22black%22%3E%3Cpath%20d%3D%22M3.5%202C2.11929%202%201%203.11929%201%204.5V9.5C1%2010.8807%202.11929%2012%203.5%2012H4V13.9422C4%2014.7842%204.99168%2015.2342%205.62533%2014.6797L8.68787%2012H12.5C13.8807%2012%2015%2010.8807%2015%209.5V4.5C15%203.11929%2013.8807%202%2012.5%202H3.5Z%22%2F%3E%3C%2Fsvg%3E');
+}
+
+.monaco-workbench
+  .part.titlebar
+  > .titlebar-container
+  > .titlebar-right
+  > .action-toolbar-container
+  .codicon-ppr-terminal-filled::before {
+  -webkit-mask-image: url('data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2016%2016%22%20fill%3D%22black%22%3E%3Cpath%20fill-rule%3D%22evenodd%22%20d%3D%22M1%202.5A1.5%201.5%200%200%201%202.5%201h11A1.5%201.5%200%200%201%2015%202.5v11a1.5%201.5%200%200%201-1.5%201.5h-11A1.5%201.5%200%200%201%201%2013.5v-11zM2.5%202h11a.5.5%200%200%201%20.5.5V10H2V2.5a.5.5%200%200%201%20.5-.5z%22%2F%3E%3Cpath%20d%3D%22M4.25%204.25%206.5%206.5%204.25%208.75l-.7-.7L5.1%206.5%203.55%204.95l.7-.7zm3.75%203.75h3.5v1H8v-1z%22%2F%3E%3C%2Fsvg%3E');
+  mask-image: url('data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2016%2016%22%20fill%3D%22black%22%3E%3Cpath%20fill-rule%3D%22evenodd%22%20d%3D%22M1%202.5A1.5%201.5%200%200%201%202.5%201h11A1.5%201.5%200%200%201%2015%202.5v11a1.5%201.5%200%200%201-1.5%201.5h-11A1.5%201.5%200%200%201%201%2013.5v-11zM2.5%202h11a.5.5%200%200%201%20.5.5V10H2V2.5a.5.5%200%200%201%20.5-.5z%22%2F%3E%3Cpath%20d%3D%22M4.25%204.25%206.5%206.5%204.25%208.75l-.7-.7L5.1%206.5%203.55%204.95l.7-.7zm3.75%203.75h3.5v1H8v-1z%22%2F%3E%3C%2Fsvg%3E');
+}
+
+.monaco-workbench
+  .part.titlebar
+  > .titlebar-container
+  > .titlebar-right
+  > .action-toolbar-container
+  .codicon-ppr-settings-gear-filled::before {
+  -webkit-mask-image: url('data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2016%2016%22%20fill%3D%22black%22%3E%3Cpath%20fill-rule%3D%22evenodd%22%20d%3D%22M6.9525%201c-.25688%200-.47196.19465-.49752.45025L6.26924%203.30766C5.73079%203.50634%205.23593%203.79505%204.80293%204.15552L3.09994%203.38698C2.8658%203.28131%202.58969%203.37025%202.46126%203.59272L1.41375%205.40705C1.28531%205.62951%201.34634%205.9131%201.55492%206.06304L3.07142%207.15318C3.02446%207.42843%203%207.71136%203%208s.02445.57142.07138.84661L1.55492%209.93673C1.34634%2010.0867%201.28531%2010.3703%201.41375%2010.5927L2.46126%2012.4071C2.58969%2012.6295%202.86581%2012.7185%203.09994%2012.6128L4.80275%2011.8443C5.23579%2012.2049%205.73071%2012.4936%206.26924%2012.6923L6.45498%2014.5498C6.48054%2014.8054%206.69562%2015%206.9525%2015h2.09501c.25688%200%20.47197-.1946.49753-.4502L9.73077%2012.6923C10.2692%2012.4937%2010.7641%2012.205%2011.1971%2011.8445L12.9001%2012.613C13.1342%2012.7187%2013.4103%2012.6297%2013.5387%2012.4073L14.5863%2010.5929C14.7147%2010.3705%2014.6537%2010.0869%2014.4451%209.93696L12.9286%208.84682C12.9755%208.57157%2013%208.28864%2013%208c0-.28857-.0244-.57142-.0714-.84661L14.4451%206.06327C14.6537%205.91334%2014.7147%205.62975%2014.5863%205.40728L13.5387%203.59295C13.4103%203.37049%2013.1342%203.28155%2012.9001%203.38721L11.1973%204.15568C10.7642%203.79513%2010.2693%203.50637%209.73077%203.30766L9.54503%201.45025C9.51947%201.19465%209.30438%201%209.04751%201H6.9525zM8%206a2%202%200%201%200%200%204%202%202%200%200%200%200-4z%22%2F%3E%3C%2Fsvg%3E');
+  mask-image: url('data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2016%2016%22%20fill%3D%22black%22%3E%3Cpath%20fill-rule%3D%22evenodd%22%20d%3D%22M6.9525%201c-.25688%200-.47196.19465-.49752.45025L6.26924%203.30766C5.73079%203.50634%205.23593%203.79505%204.80293%204.15552L3.09994%203.38698C2.8658%203.28131%202.58969%203.37025%202.46126%203.59272L1.41375%205.40705C1.28531%205.62951%201.34634%205.9131%201.55492%206.06304L3.07142%207.15318C3.02446%207.42843%203%207.71136%203%208s.02445.57142.07138.84661L1.55492%209.93673C1.34634%2010.0867%201.28531%2010.3703%201.41375%2010.5927L2.46126%2012.4071C2.58969%2012.6295%202.86581%2012.7185%203.09994%2012.6128L4.80275%2011.8443C5.23579%2012.2049%205.73071%2012.4936%206.26924%2012.6923L6.45498%2014.5498C6.48054%2014.8054%206.69562%2015%206.9525%2015h2.09501c.25688%200%20.47197-.1946.49753-.4502L9.73077%2012.6923C10.2692%2012.4937%2010.7641%2012.205%2011.1971%2011.8445L12.9001%2012.613C13.1342%2012.7187%2013.4103%2012.6297%2013.5387%2012.4073L14.5863%2010.5929C14.7147%2010.3705%2014.6537%2010.0869%2014.4451%209.93696L12.9286%208.84682C12.9755%208.57157%2013%208.28864%2013%208c0-.28857-.0244-.57142-.0714-.84661L14.4451%206.06327C14.6537%205.91334%2014.7147%205.62975%2014.5863%205.40728L13.5387%203.59295C13.4103%203.37049%2013.1342%203.28155%2012.9001%203.38721L11.1973%204.15568C10.7642%203.79513%2010.2693%203.50637%209.73077%203.30766L9.54503%201.45025C9.51947%201.19465%209.30438%201%209.04751%201H6.9525zM8%206a2%202%200%201%200%200%204%202%202%200%200%200%200-4z%22%2F%3E%3C%2Fsvg%3E');
+}
+
+/* PPR: Cursor-like "Режим Агент" pill in the titlebar (label + arrow, not a bare codicon). */
+.monaco-workbench
+  .part.titlebar
+  > .titlebar-container
+  > .titlebar-right
+  > .action-toolbar-container
+  .monaco-action-bar
+  .action-item
+  .action-label.codicon-ppr-agents-window {
+  width: auto !important;
+  height: 22px !important;
+  margin-left: 8px;
+  padding: 0 10px 0 12px !important;
+  border-radius: 999px;
+  background-color: #0e639c !important;
+  color: #fff !important;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif !important;
+  font-size: 12px !important;
+  font-weight: 500;
+  line-height: 22px !important;
+  gap: 6px;
+}
+
+.monaco-workbench
+  .part.titlebar
+  > .titlebar-container
+  > .titlebar-right
+  > .action-toolbar-container
+  .monaco-action-bar
+  .action-item
+  .action-label.codicon-ppr-agents-window:hover {
+  background-color: #1177bb !important;
+}
+
+.monaco-workbench
+  .part.titlebar
+  > .titlebar-container
+  > .titlebar-right
+  > .action-toolbar-container
+  .monaco-action-bar
+  .action-item
+  .action-label.codicon-ppr-agents-window::before {
+  content: 'Режим Агент' !important;
+  font-family: inherit !important;
+  font-size: 12px !important;
+  font-weight: 500;
+  width: auto !important;
+  height: auto !important;
+  line-height: 22px !important;
+  background: none !important;
+  -webkit-mask-image: none !important;
+  mask-image: none !important;
+}
+
+.monaco-workbench
+  .part.titlebar
+  > .titlebar-container
+  > .titlebar-right
+  > .action-toolbar-container
+  .monaco-action-bar
+  .action-item
+  .action-label.codicon-ppr-agents-window::after {
+  content: '↗';
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 22px;
+  color: #fff;
+}

@@ -1,0 +1,558 @@
+/*---------------------------------------------------------------------------------------------
+ *  Copyright (c) Microsoft Corporation. All rights reserved.
+ *  Licensed under the MIT License. See License.txt in the project root for license information.
+ *--------------------------------------------------------------------------------------------*/
+
+/* Container */
+
+.monaco-workbench .part.editor > .content .editor-group-container {
+  height: 100%;
+}
+
+.monaco-workbench .part.editor > .content .editor-group-container.empty {
+  opacity: 0.5; /* dimmed to indicate inactive state */
+}
+
+.monaco-workbench .part.editor > .content .editor-group-container.empty.active,
+.monaco-workbench .part.editor > .content .editor-group-container.empty.dragged-over {
+  opacity: 1; /* indicate active/dragged-over group through undimmed state */
+}
+
+.monaco-workbench .part.editor > .content:not(.empty) .editor-group-container.empty.active:focus {
+  outline-offset: -2px;
+  outline: 1px solid var(--vscode-editorGroup-focusedEmptyBorder);
+}
+
+.monaco-workbench .part.editor > .content.empty .editor-group-container.empty.active:focus {
+  outline: none; /* never show outline for empty group if it is the last */
+}
+
+/* Watermark & shortcuts */
+
+.monaco-workbench .part.editor > .content .editor-group-container > .editor-group-watermark {
+  display: flex;
+  height: 100%;
+  max-width: 480px;
+  width: 100%;
+  margin: auto;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+}
+
+.monaco-workbench
+  .part.editor
+  > .content
+  .editor-group-container:not(.empty)
+  > .editor-group-watermark {
+  display: none;
+}
+
+.monaco-workbench
+  .part.editor
+  > .content:not(.empty)
+  .editor-group-container.empty
+  > .editor-group-watermark,
+.monaco-workbench
+  .part.editor
+  > .content.auxiliary
+  .editor-group-container.empty
+  > .editor-group-watermark {
+  max-width: 200px;
+  height: calc(100% - 70px);
+}
+
+/* light */
+.sapphire-icon,
+.monaco-workbench
+  .part.editor
+  > .content
+  .editor-group-container
+  > .editor-group-watermark
+  > .letterpress {
+  width: 100%;
+  max-height: 100%;
+  min-height: 120px;
+  flex-shrink: 0;
+  aspect-ratio: 1/1;
+  background-image: url('./sapphire_cube_noshadow.png'); /* PPR cube watermark */
+  background-size: contain;
+  background-position: center;
+  background-repeat: no-repeat;
+}
+
+.sapphire-icon,
+.monaco-workbench.vs-dark
+  .part.editor
+  > .content
+  .editor-group-container
+  .editor-group-watermark
+  > .letterpress {
+  background-image: url('./sapphire_cube_noshadow.png'); /* PPR cube watermark */
+}
+
+.sapphire-icon,
+.monaco-workbench.hc-light
+  .part.editor
+  > .content
+  .editor-group-container
+  .editor-group-watermark
+  > .letterpress {
+  background-image: url('./sapphire_cube_noshadow.png'); /* PPR cube watermark */
+}
+
+.sapphire-icon,
+.monaco-workbench.hc-black
+  .part.editor
+  > .content
+  .editor-group-container
+  .editor-group-watermark
+  > .letterpress {
+  background-image: url('./sapphire_cube_noshadow.png'); /* PPR cube watermark */
+}
+
+.monaco-workbench
+  .part.editor
+  > .content:not(.empty)
+  .editor-group-container
+  > .editor-group-watermark
+  > .shortcuts,
+.monaco-workbench
+  .part.editor
+  > .content.auxiliary
+  .editor-group-container
+  > .editor-group-watermark
+  > .shortcuts,
+.monaco-workbench
+  .part.editor
+  > .content
+  .editor-group-container.max-height-360px
+  > .editor-group-watermark
+  > .shortcuts {
+  display: none;
+}
+
+.monaco-workbench
+  .part.editor
+  > .content
+  .editor-group-container
+  > .editor-group-watermark
+  > .shortcuts {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.monaco-workbench
+  .part.editor
+  > .content
+  .editor-group-container
+  > .editor-group-watermark
+  > .shortcuts
+  > .watermark-box {
+  display: inline-table;
+  border-collapse: separate;
+  border-spacing: 24px 8px;
+}
+
+.monaco-workbench
+  .part.editor
+  > .content
+  .editor-group-container
+  > .editor-group-watermark
+  > .shortcuts
+  > .watermark-box:empty,
+.monaco-workbench
+  .part.editor
+  > .content
+  .editor-group-container
+  > .editor-group-watermark
+  > .shortcuts
+  > .sapphire-empty-actions:empty,
+.monaco-workbench
+  .part.editor
+  > .content
+  .editor-group-container
+  > .editor-group-watermark
+  > .shortcuts
+  > .sapphire-recent-list:empty {
+  display: none;
+}
+
+.monaco-workbench
+  .part.editor
+  > .content
+  .editor-group-container
+  > .editor-group-watermark
+  > .shortcuts
+  .sapphire-empty-actions {
+  display: flex;
+  justify-content: center;
+  margin-bottom: 16px;
+}
+
+.monaco-workbench
+  .part.editor
+  > .content
+  .editor-group-container
+  > .editor-group-watermark
+  > .shortcuts
+  .sapphire-openfolder-button {
+  display: block;
+  height: 22px;
+  padding: 0 12px;
+  border: none;
+  border-radius: 999px;
+  background-color: #0e639c;
+  color: #fff;
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 22px;
+  cursor: pointer;
+}
+
+.monaco-workbench
+  .part.editor
+  > .content
+  .editor-group-container
+  > .editor-group-watermark
+  > .shortcuts
+  .sapphire-openfolder-button:hover {
+  background-color: #1177bb;
+}
+
+.monaco-workbench
+  .part.editor
+  > .content
+  .editor-group-container
+  > .editor-group-watermark
+  > .shortcuts
+  .sapphire-recent-list {
+  width: max-content;
+  max-width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.monaco-workbench
+  .part.editor
+  > .content
+  .editor-group-container
+  > .editor-group-watermark
+  > .shortcuts
+  .sapphire-recent-item {
+  display: grid;
+  grid-template-columns: max-content minmax(0, max-content) auto;
+  align-items: center;
+  column-gap: 12px;
+  padding: 6px 8px;
+  border-radius: 6px;
+  cursor: pointer;
+  color: var(--vscode-editor-foreground);
+  transition: background-color 120ms ease;
+}
+
+.monaco-workbench
+  .part.editor
+  > .content
+  .editor-group-container
+  > .editor-group-watermark
+  > .shortcuts
+  .sapphire-recent-item:hover,
+.monaco-workbench
+  .part.editor
+  > .content
+  .editor-group-container
+  > .editor-group-watermark
+  > .shortcuts
+  .sapphire-recent-item:focus-within {
+  background: color-mix(in srgb, var(--vscode-editor-foreground) 6%, transparent);
+}
+
+.monaco-workbench
+  .part.editor
+  > .content
+  .editor-group-container
+  > .editor-group-watermark
+  > .shortcuts
+  .sapphire-recent-name,
+.monaco-workbench
+  .part.editor
+  > .content
+  .editor-group-container
+  > .editor-group-watermark
+  > .shortcuts
+  .sapphire-recent-path {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+  max-width: 220px;
+}
+
+.monaco-workbench
+  .part.editor
+  > .content
+  .editor-group-container
+  > .editor-group-watermark
+  > .shortcuts
+  .sapphire-recent-path {
+  color: var(--vscode-editorWatermark-foreground);
+}
+
+.monaco-workbench
+  .part.editor
+  > .content
+  .editor-group-container
+  > .editor-group-watermark
+  > .shortcuts
+  .sapphire-recent-remove {
+  appearance: none;
+  justify-self: end;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 22px;
+  height: 22px;
+  padding: 0 6px;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--vscode-editorWatermark-foreground);
+  opacity: 0;
+  cursor: pointer;
+  font-size: 11px;
+  line-height: 16px;
+  transition:
+    opacity 120ms ease,
+    background-color 120ms ease,
+    color 120ms ease;
+}
+
+.monaco-workbench
+  .part.editor
+  > .content
+  .editor-group-container
+  > .editor-group-watermark
+  > .shortcuts
+  .sapphire-recent-item:hover
+  .sapphire-recent-remove,
+.monaco-workbench
+  .part.editor
+  > .content
+  .editor-group-container
+  > .editor-group-watermark
+  > .shortcuts
+  .sapphire-recent-item:focus-within
+  .sapphire-recent-remove,
+.monaco-workbench
+  .part.editor
+  > .content
+  .editor-group-container
+  > .editor-group-watermark
+  > .shortcuts
+  .sapphire-recent-item.confirming
+  .sapphire-recent-remove {
+  opacity: 1;
+}
+
+.monaco-workbench
+  .part.editor
+  > .content
+  .editor-group-container
+  > .editor-group-watermark
+  > .shortcuts
+  .sapphire-recent-remove:hover {
+  background: color-mix(in srgb, var(--vscode-editor-foreground) 10%, transparent);
+  color: var(--vscode-editor-foreground);
+}
+
+.monaco-workbench
+  .part.editor
+  > .content
+  .editor-group-container
+  > .editor-group-watermark
+  > .shortcuts
+  .sapphire-recent-remove.confirming {
+  width: auto;
+  height: auto;
+  min-height: 22px;
+  white-space: nowrap;
+  color: var(--vscode-errorForeground);
+}
+
+.monaco-workbench
+  .part.editor
+  > .content
+  .editor-group-container
+  > .editor-group-watermark
+  > .shortcuts
+  .sapphire-recent-remove.confirming:hover {
+  background: color-mix(in srgb, var(--vscode-errorForeground) 12%, transparent);
+  color: var(--vscode-errorForeground);
+}
+
+.monaco-workbench
+  .part.editor
+  > .content
+  .editor-group-container
+  > .editor-group-watermark
+  > .shortcuts
+  dl {
+  display: table-row;
+  opacity: 0.8;
+  cursor: pointer;
+  color: var(--vscode-editorWatermark-foreground);
+}
+
+.monaco-workbench
+  .part.editor
+  > .content
+  .editor-group-container
+  > .editor-group-watermark
+  > .shortcuts
+  dl:hover {
+  opacity: 1;
+}
+
+.monaco-workbench
+  .part.editor
+  > .content
+  .editor-group-container
+  > .editor-group-watermark
+  > .shortcuts
+  dt {
+  text-align: left;
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+}
+
+.monaco-workbench
+  .part.editor
+  > .content
+  .editor-group-container
+  > .editor-group-watermark
+  > .shortcuts
+  dd {
+  text-align: left;
+}
+
+.monaco-workbench
+  .part.editor
+  > .content
+  .editor-group-container
+  > .editor-group-watermark
+  > .shortcuts
+  dt,
+.monaco-workbench
+  .part.editor
+  > .content
+  .editor-group-container
+  > .editor-group-watermark
+  > .shortcuts
+  dd {
+  display: table-cell;
+  vertical-align: middle;
+}
+
+/* Title */
+
+.monaco-workbench .part.editor > .content .editor-group-container > .title {
+  position: relative;
+  box-sizing: border-box;
+  overflow: hidden;
+}
+
+.monaco-workbench .part.editor > .content .editor-group-container > .title:not(.tabs) {
+  display: flex; /* when tabs are not shown, use flex layout */
+  flex-wrap: nowrap;
+}
+
+.monaco-workbench
+  .part.editor
+  > .content
+  .editor-group-container
+  > .title.title-border-bottom::after {
+  content: '';
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  z-index: 9;
+  pointer-events: none;
+  background-color: var(--title-border-bottom-color);
+  width: 100%;
+  height: 1px;
+}
+
+.monaco-workbench .part.editor > .content .editor-group-container.empty > .title {
+  display: none;
+}
+
+/* Toolbar */
+
+.monaco-workbench
+  .part.editor
+  > .content
+  .editor-group-container
+  > .editor-group-container-toolbar {
+  display: none;
+  height: 35px;
+}
+
+.monaco-workbench
+  .part.editor
+  > .content
+  .editor-group-container.empty.locked
+  > .editor-group-container-toolbar,
+.monaco-workbench
+  .part.editor
+  > .content:not(.empty)
+  .editor-group-container.empty
+  > .editor-group-container-toolbar,
+.monaco-workbench
+  .part.editor
+  > .content.auxiliary
+  .editor-group-container.empty
+  > .editor-group-container-toolbar {
+  display: block; /* show toolbar when more than one editor group or always when auxiliary or locked */
+}
+
+.monaco-workbench
+  .part.editor
+  > .content
+  .editor-group-container
+  > .editor-group-container-toolbar
+  .actions-container {
+  justify-content: flex-end;
+}
+
+.monaco-workbench
+  .part.editor
+  > .content
+  .editor-group-container
+  > .editor-group-container-toolbar
+  .action-item {
+  margin-right: 4px;
+}
+
+/* Editor */
+
+.monaco-workbench .part.editor > .content .editor-group-container.empty > .editor-container {
+  display: none;
+}
+
+.monaco-workbench
+  .part.editor
+  > .content
+  .editor-group-container
+  > .editor-container
+  > .editor-instance {
+  height: 100%;
+}
+
+.monaco-workbench .part.editor > .content .grid-view-container {
+  width: 100%;
+  height: 100%;
+}

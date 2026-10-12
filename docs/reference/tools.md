@@ -1,0 +1,55 @@
+# Builtin tools
+
+Определения: `common/prompt/prompts.ts`. Исполнение: `browser/toolsService.ts`. Набор по режиму — `availableTools()`.
+
+**Chat (normal)** — builtin tools не передаются модели.
+
+**Debug** использует тот же набор, что **Agent** (`isAgentLike`).
+
+| Tool | Plan | Agent / Debug | Approval | Назначение |
+| --- | :-: | :-: | --- | --- |
+| `read_file` | ✓ | ✓ | — | Содержимое файла (office → извлечённый текст) |
+| `ls_dir` | ✓ | ✓ | — | Список файлов/папок |
+| `get_dir_tree` | ✓ | ✓ | — | Дерево каталога |
+| `search_pathnames_only` | ✓ | ✓ | — | Поиск по именам файлов |
+| `search_project_index` | ✓ | ✓ | — | Поиск по `.sapphire/index` (purpose, теги, символы) |
+| `search_for_files` | ✓ | ✓ | — | Пути файлов по содержимому |
+| `search_in_file` | ✓ | ✓ | — | Строки внутри файла |
+| `grep_search` | ✓ | ✓ | — | Совпадения по workspace (path + строка) |
+| `glob_files` | ✓ | ✓ | — | Файлы по glob |
+| `get_diagnostics` | ✓ | ✓ | — | Diagnostics workspace или файла |
+| `read_lint_errors` | ✓ | ✓ | — | Lint одного файла |
+| `go_to_definition` | ✓ | ✓ | — | Definition через language service |
+| `find_references` | ✓ | ✓ | — | References (до 30) |
+| `search_symbols` | ✓ | ✓ | — | Символы по имени (outline / workspace) |
+| `get_chat_history` | ✓ | ✓ | — | Сжатая история других вкладок чата |
+| `create_plan` | ✓ | ✗ | — | Создать `.sapphire/plans/*.plan.md` |
+| `update_plan` | ✓ | \* | — | Обновить план / todos |
+| `rename_symbol` | ✗ | ✓ | edits | Rename через LSP |
+| `create_file_or_folder` | ✗ | ✓ | edits | Создать файл или папку |
+| `delete_file_or_folder` | ✗ | ✓ | edits | Удалить файл или папку |
+| `edit_file` | ✗ | ✓ | edits | SEARCH/REPLACE |
+| `rewrite_file` | ✗ | ✓ | edits | Полная перезапись / создание с содержимым |
+| `run_command` | ✗ | ✓ | terminal | Команда в терминале |
+| `run_persistent_command` | ✗ | ✓ | terminal | Команда в persistent terminal |
+| `open_persistent_terminal` | ✗ | ✓ | terminal | Открыть persistent terminal |
+| `kill_persistent_terminal` | ✗ | ✓ | terminal | Закрыть persistent terminal |
+| `web_search` | ✗ | ✓ | — | Поиск в публичном интернете (agent-only) |
+| `browse_url` | ✗ | ✓ | — | Текст публичной http(s)-страницы (agent-only) |
+| `save_memory` | ✗ | ✓ | — | Долгий факт в workspace memory (agent-only) |
+| `run_subagent` | ✗ | ✓ | — | Дочерний агент со своим tool loop (agent-only) |
+| `run_parallel_subagents` | ✗ | ✓ | — | До 4 read-only subagents параллельно (agent-only) |
+| `enable_mcp_server` | ✗ | \*\* | — | Включить MCP-сервер в треде (deferred) |
+| MCP tools | ✗ | \*\* | MCP | Tools включённых серверов |
+
+\* **`update_plan` в Agent/Debug** — только пока выполняется утверждённый план (`allowUpdatePlan`, статус `building`). В Plan доступен всегда.
+
+\*\* **`enable_mcp_server` и MCP tools** — только в Agent/Debug при online MCP. Сначала каталог + `enable_mcp_server`; полные схемы tools сервера — после enable в треде.
+
+## Заметки
+
+- `read_file` / `search_in_file` для `.xlsx` / `.xlsm`, `.docx`, `.pptx`, `.pdf` — извлечённый текст; файл > 25 МБ не разбирается. См. [Офисные файлы](/guide/office), [архитектура](/architecture/office-extract).
+- `search_project_index` — локальный индекс (token-score). См. [Индекс проекта](/architecture/project-index).
+- Планы: `.sapphire/plans/*.plan.md` (YAML frontmatter + markdown, опционально Mermaid).
+- `web_search` / `browse_url` идут в публичную сеть, не на LLM-шлюз. См. [Приватность](/guide/privacy).
+- Параллельные subagents — только read-only набор; `run_subagent` у дочернего агента недоступен (без вложенности).

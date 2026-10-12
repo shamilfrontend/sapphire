@@ -1,0 +1,141 @@
+/*--------------------------------------------------------------------------------------
+ *  Copyright 2025 Glass Devtools, Inc. All rights reserved.
+ *  Licensed under the Apache License, Version 2.0. See LICENSE.txt for more information.
+ *--------------------------------------------------------------------------------------*/
+
+.monaco-editor .sapphire-sweepIdxBG {
+  background-color: var(--vscode-void-sweepIdxBG);
+}
+
+.sapphire-sweepBG {
+  background-color: var(--vscode-void-sweepBG);
+}
+
+.sapphire-highlightBG {
+  background-color: var(--vscode-void-highlightBG);
+}
+
+.sapphire-greenBG {
+  background-color: var(--vscode-void-greenBG);
+}
+
+.sapphire-redBG {
+  background-color: var(--vscode-void-redBG);
+}
+
+/* styles for all containers used by void */
+.sapphire-scope {
+  --scrollbar-vertical-width: 8px;
+  --scrollbar-horizontal-height: 6px;
+}
+
+/* Target both void-scope and all its descendants with scrollbars */
+.sapphire-scope,
+.sapphire-scope * {
+  scrollbar-width: thin !important;
+  scrollbar-color: var(--void-bg-1) var(--void-bg-3) !important;
+  /* For Firefox */
+}
+
+.sapphire-scope::-webkit-scrollbar,
+.sapphire-scope *::-webkit-scrollbar {
+  width: var(--scrollbar-vertical-width) !important;
+  height: var(--scrollbar-horizontal-height) !important;
+  background-color: var(--void-bg-3) !important;
+}
+
+.sapphire-scope::-webkit-scrollbar-thumb,
+.sapphire-scope *::-webkit-scrollbar-thumb {
+  background-color: var(--void-bg-1) !important;
+  border-radius: 4px !important;
+  border: none !important;
+  -webkit-box-shadow: none !important;
+  box-shadow: none !important;
+}
+
+.sapphire-scope::-webkit-scrollbar-thumb:hover,
+.sapphire-scope *::-webkit-scrollbar-thumb:hover {
+  background-color: var(--void-bg-1) !important;
+  filter: brightness(1.1) !important;
+}
+
+.sapphire-scope::-webkit-scrollbar-thumb:active,
+.sapphire-scope *::-webkit-scrollbar-thumb:active {
+  background-color: var(--void-bg-1) !important;
+  filter: brightness(1.2) !important;
+}
+
+.sapphire-scope::-webkit-scrollbar-track,
+.sapphire-scope *::-webkit-scrollbar-track {
+  background-color: var(--void-bg-3) !important;
+  border: none !important;
+}
+
+.sapphire-scope::-webkit-scrollbar-corner,
+.sapphire-scope *::-webkit-scrollbar-corner {
+  background-color: var(--void-bg-3) !important;
+}
+
+.ppr-plan-editor {
+  position: relative;
+  height: 100%;
+  width: 100%;
+}
+
+.ppr-plan-editor-monaco {
+  position: absolute;
+  top: 36px;
+  left: 0;
+  right: 0;
+  bottom: 0;
+}
+
+.ppr-plan-editor-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 10;
+}
+
+.ppr-plan-editor-mode-preview .ppr-plan-editor-monaco {
+  pointer-events: none;
+  visibility: hidden;
+}
+
+.ppr-plan-editor-mode-preview .ppr-plan-editor-overlay {
+  pointer-events: auto;
+  user-select: text;
+  -webkit-user-select: text;
+}
+
+.ppr-plan-editor-mode-markdown .ppr-plan-editor-overlay {
+  pointer-events: none;
+}
+
+/* Скрыть весь title Auxiliary Bar (label + крестик Hide Side Bar); вкладки — в Vue. */
+.monaco-workbench .part.auxiliarybar > .title {
+  display: none !important;
+}
+
+.monaco-workbench
+  .part.titlebar
+  > .titlebar-container
+  > .titlebar-left
+  > .ppr-project-index-titlebar {
+  position: relative;
+  z-index: 2500;
+  -webkit-app-region: no-drag;
+  pointer-events: auto;
+  height: 100%;
+  max-height: 100%;
+  overflow: hidden;
+  transform: translateZ(0);
+}
+
+.monaco-workbench
+  .part.titlebar
+  > .titlebar-container
+  > .titlebar-left
+  > .ppr-project-index-titlebar
+  * {
+  -webkit-app-region: no-drag;
+}

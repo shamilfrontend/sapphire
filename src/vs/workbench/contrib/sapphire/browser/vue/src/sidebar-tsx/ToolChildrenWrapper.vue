@@ -1,0 +1,16 @@
+<script setup lang="ts">
+/*--------------------------------------------------------------------------------------
+ *  Copyright 2025 Glass Devtools, Inc. All rights reserved.
+ *  Licensed under the Apache License, Version 2.0. See LICENSE.txt for more information.
+ *--------------------------------------------------------------------------------------*/
+
+/** Обёртки разметки для строк и тел карточек инструментов в чате. */
+</script>
+
+<template>
+  <div class="cursor-default select-none">
+    <div class="px-2 min-w-full overflow-hidden">
+      <slot />
+    </div>
+  </div>
+</template>
