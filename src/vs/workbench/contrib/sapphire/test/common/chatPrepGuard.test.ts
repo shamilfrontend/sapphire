@@ -160,7 +160,8 @@ suite('chatSubmitEnqueueGuard', () => {
   const shouldEnqueue = (
     reactIsRunning: unknown,
     serviceIsRunning: string | undefined,
-  ): boolean => !!(reactIsRunning && canEnqueueFollowUp(serviceIsRunning));
+    interrupt?: unknown,
+  ): boolean => !!(reactIsRunning && canEnqueueFollowUp(serviceIsRunning, interrupt));
 
   test('preparing never enqueues (start addUserMessage instead)', () => {
     assert.strictEqual(canEnqueueFollowUp('preparing'), false);
@@ -176,8 +177,15 @@ suite('chatSubmitEnqueueGuard', () => {
 
   test('live agent → enqueue', () => {
     assert.strictEqual(shouldEnqueue('idle', 'idle'), true);
+    assert.strictEqual(canEnqueueFollowUp('idle', Promise.resolve(() => {})), true);
     assert.strictEqual(shouldEnqueue('LLM', 'LLM'), true);
     assert.strictEqual(shouldEnqueue('tool', 'tool'), true);
+  });
+
+  test('idle after committed turn (not_needed) does not enqueue', () => {
+    assert.strictEqual(canEnqueueFollowUp('idle', 'not_needed'), false);
+    assert.strictEqual(shouldEnqueue('idle', 'idle', 'not_needed'), false);
+    assert.strictEqual(canEnqueueFollowUp('LLM', 'not_needed'), true);
   });
 
   test('neither running → do not enqueue', () => {
@@ -198,6 +206,16 @@ suite('chatSendTrace', () => {
     assert.ok(text.includes('submit.send chars=12'));
     assert.ok(text.includes('none -> preparing'));
     assert.ok(text.includes('[34567890]'));
+    _resetChatSendTraceForTests();
+  });
+
+  test('format includes events from every thread', () => {
+    _resetChatSendTraceForTests();
+    chatTrace('thread-aaaaaaa11111111', 'thread.open');
+    chatTrace('thread-bbbbbbb22222222', 'submit.send', 'chars=4');
+    const text = formatChatSendTrace();
+    assert.ok(text.includes('[11111111] thread.open'));
+    assert.ok(text.includes('[22222222] submit.send chars=4'));
     _resetChatSendTraceForTests();
   });
 });

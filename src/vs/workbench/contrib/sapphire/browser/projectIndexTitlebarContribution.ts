@@ -67,7 +67,12 @@ class ProjectIndexTitlebarContribution extends Disposable implements IWorkbenchC
     host.style.alignItems = 'center';
     host.style.flexShrink = '0';
     host.style.minWidth = '188px';
+    host.style.height = '100%';
+    host.style.maxHeight = '100%';
+    host.style.overflow = 'hidden';
     host.style.marginLeft = '4px';
+    // Свой слой: drag-region шапки иначе двоит глифы при частом обновлении процента.
+    host.style.transform = 'translateZ(0)';
     // Выше .titlebar-drag-region; no-drag как у menubar / toolbar.
     host.style.position = 'relative';
     host.style.zIndex = '2500';

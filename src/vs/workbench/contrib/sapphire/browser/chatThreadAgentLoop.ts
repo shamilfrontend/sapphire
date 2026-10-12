@@ -2181,6 +2181,8 @@ ${planBody}`;
       if (shouldClearStuckStreamOnStaleEpoch(running)) {
         chatTrace(threadId, 'agent.finally-clear-stale', String(running));
         this._clearStuckAgentStreamState(threadId);
+        // Очередь, поставленная в залипший idle, иначе не всплывёт: цикл уже мёртв.
+        void this._s._flushMessageQueue(threadId);
       }
     }
   }

@@ -2,8 +2,18 @@
  *  PPR Code — guards for chat stream / enqueue (без DOM, для unit-тестов).
  *--------------------------------------------------------------------------------------*/
 
-/** Состояния isRunning, при которых follow-up уходит в очередь. */
-export function canEnqueueFollowUp(isRunning: string | undefined): boolean {
+/**
+ * Состояния isRunning, при которых follow-up уходит в очередь.
+ * `idle` + `interrupt: 'not_needed'` — ход уже записан в ленту, цикл доживает:
+ * это не живой агент, сообщение надо слать сразу, иначе очередь никто не разберёт.
+ */
+export function canEnqueueFollowUp(
+  isRunning: string | undefined,
+  interrupt?: unknown,
+): boolean {
+  if (isRunning === 'idle' && interrupt === 'not_needed') {
+    return false;
+  }
   return isRunning === 'LLM' || isRunning === 'tool' || isRunning === 'idle';
 }
 

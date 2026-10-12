@@ -125,6 +125,10 @@
   z-index: 2500;
   -webkit-app-region: no-drag;
   pointer-events: auto;
+  height: 100%;
+  max-height: 100%;
+  overflow: hidden;
+  transform: translateZ(0);
 }
 
 .monaco-workbench

@@ -249,6 +249,7 @@ const onSettingsKeyDown = (e: KeyboardEvent) => {
         title="История чатов"
         data-tooltip-id="sapphire-tooltip"
         data-tooltip-content="История чатов"
+        data-tooltip-place="bottom"
       >
         <History class="size-4 stroke-[1.5]" />
       </button>
@@ -262,6 +263,7 @@ const onSettingsKeyDown = (e: KeyboardEvent) => {
         title="Новый чат"
         data-tooltip-id="sapphire-tooltip"
         data-tooltip-content="Новый чат"
+        data-tooltip-place="bottom"
       >
         <Plus class="size-4 stroke-[1.5]" />
       </button>

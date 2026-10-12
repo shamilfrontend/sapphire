@@ -72,6 +72,7 @@ const position = async () => {
     getBoundingClientRect: () => anchor!.getBoundingClientRect(),
   };
   const { x, y, strategy } = await computePosition(virtual, floating, {
+    strategy: 'fixed',
     placement: placementOf(anchor),
     middleware: [offset(6), flip(), shift({ padding: 8 })],
   });

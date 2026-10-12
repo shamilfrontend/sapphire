@@ -4,25 +4,12 @@ import { createRequire } from 'node:module';
 
 import { repoRoot } from '../constants.mjs';
 import { copyPatterns, ensureDir, rimraf } from '../fileUtils.mjs';
+import { downloadAndExtractElectron } from './electronArtifact.mjs';
 
 const require = createRequire(import.meta.url);
-const electron = require('@vscode/gulp-electron');
-const { config } = require(path.join(repoRoot, 'build', 'lib', 'electron.js'));
 const { getProductionDependencies } = require(path.join(repoRoot, 'build', 'lib', 'dependencies.js'));
 
 const excludedCheckList = ['d3dcompiler_47.dll'];
-
-function streamToPromise(stream) {
-  return new Promise((resolve, reject) => {
-    stream.on('end', resolve);
-    stream.on('finish', resolve);
-    stream.on('error', reject);
-  });
-}
-
-function normalizeArch(arch) {
-  return arch === 'armhf' ? 'arm' : arch;
-}
 
 function getDestinationPaths(platform, arch) {
   const suffix = `${platform}${arch ? `-${arch}` : ''}`;
@@ -33,29 +20,13 @@ function getDestinationPaths(platform, arch) {
 }
 
 async function downloadElectron(dest, platform, arch, extra = {}) {
-  let lastError;
-  for (let attempt = 1; attempt <= 3; attempt += 1) {
-    try {
-      await streamToPromise(
-        electron.dest(dest, {
-          ...config,
-          platform,
-          arch: normalizeArch(arch),
-          ...extra,
-        }),
-      );
-      return;
-    } catch (error) {
-      lastError = error;
-      if (attempt === 3) {
-        break;
-      }
-      console.warn(
-        `[build] electron download failed for ${platform}-${arch} (attempt ${attempt}/3), retrying...`,
-      );
-    }
-  }
-  throw lastError;
+  const artifactSuffix = extra.pdbs ? 'pdb' : extra.symbols ? 'symbols' : undefined;
+  await downloadAndExtractElectron({
+    destinationRoot: dest,
+    platform,
+    arch,
+    artifactSuffix,
+  });
 }
 
 function getProductionDependencySources() {

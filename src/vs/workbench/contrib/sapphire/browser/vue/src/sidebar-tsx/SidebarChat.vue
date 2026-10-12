@@ -245,13 +245,15 @@ const onSubmit = async (_forceSubmit?: string) => {
   if (isRunning.value) {
     // Follow-up в очередь только при живом агенте (LLM/tool/idle).
     // preparing / stale React — обычный send, иначе мёртвая очередь без bubble.
-    const serviceRunning = chatThreadsService.streamState[threadId]?.isRunning;
+    const stream = chatThreadsService.streamState[threadId];
+    const serviceRunning = stream?.isRunning;
+    const serviceInterrupt = stream && 'interrupt' in stream ? stream.interrupt : undefined;
     chatTrace(
       threadId,
       'submit',
       `react=${isRunning.value} service=${serviceRunning ?? 'none'} chars=${userMessage.length}`,
     );
-    if (canEnqueueFollowUp(serviceRunning)) {
+    if (canEnqueueFollowUp(serviceRunning, serviceInterrupt)) {
       chatTrace(threadId, 'submit.enqueue', `service=${serviceRunning}`);
       chatThreadsService.enqueueUserMessage({
         threadId,
@@ -437,11 +439,11 @@ const onComposerFileInput = async (e: Event) => {
 
 <template>
   <!-- remount при смене треда -->
-  <div :key="threadId" class="contents">
+  <div :key="threadId" class="relative flex h-full min-h-0 w-full flex-col">
     <div
       v-if="isLandingPage && variant === 'agents'"
       ref="sidebarRef"
-      class="relative w-full h-full flex items-center justify-center px-6"
+      class="relative flex min-h-0 w-full flex-1 items-center justify-center px-6"
       @dragenter="chatDropZone.onDragEnter"
       @dragover="chatDropZone.onDragOver"
       @dragleave="chatDropZone.onDragLeave"
@@ -525,13 +527,14 @@ const onComposerFileInput = async (e: Event) => {
     <div
       v-else-if="isLandingPage"
       ref="sidebarRef"
-      class="relative w-full h-full max-h-full flex flex-col overflow-auto px-4"
+      class="relative flex min-h-0 w-full flex-1 flex-col px-4"
       @dragenter="chatDropZone.onDragEnter"
       @dragover="chatDropZone.onDragOver"
       @dragleave="chatDropZone.onDragLeave"
       @drop="chatDropZone.onDrop"
     >
       <ChatDropOverlay :visible="dragOver" />
+      <div class="min-h-0 flex-1 overflow-auto">
       <ErrorBoundary>
         <div>
           <div class="pt-3">
@@ -601,12 +604,13 @@ const onComposerFileInput = async (e: Event) => {
           </div>
         </div>
       </ErrorBoundary>
+      </div>
     </div>
 
     <div
       v-else
       ref="sidebarRef"
-      class="relative w-full h-full flex flex-col overflow-hidden"
+      class="relative flex min-h-0 w-full flex-1 flex-col overflow-hidden"
       @dragenter="chatDropZone.onDragEnter"
       @dragover="chatDropZone.onDragOver"
       @dragleave="chatDropZone.onDragLeave"
@@ -745,10 +749,12 @@ const onComposerFileInput = async (e: Event) => {
                 />
               </SapphireChatArea>
             </div>
-            <CopyChatLogButton />
           </div>
         </ErrorBoundary>
       </div>
+    </div>
+    <div class="shrink-0 px-2 pb-1">
+      <CopyChatLogButton />
     </div>
   </div>
 </template>

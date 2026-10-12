@@ -11,6 +11,7 @@ import {
   reorderFolderAmongSiblings,
 } from '../common/chatFolders.js';
 import { buildChatHistorySummary } from '../common/chatHistorySummary.js';
+import { chatTrace } from '../common/chatSendTrace.js';
 import { ChatThreadCollaboratorHost, ChatThreads, ThreadType } from './chatThreadTypes.js';
 
 export const newThreadObject = (): ThreadType => {
@@ -113,6 +114,7 @@ export class ChatThreadLibrary {
       currentThreadId: newThread.id,
       openThreadIds: nextOpen,
     });
+    chatTrace(newThread.id, 'thread.open');
   }
 
   deleteThread(threadId: string): void {

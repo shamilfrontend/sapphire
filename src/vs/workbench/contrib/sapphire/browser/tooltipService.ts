@@ -33,6 +33,11 @@ class TooltipContribution extends Disposable implements IWorkbenchContribution {
     if (workbench) {
       // Контейнер tooltip через h()
       const tooltipContainer = h('div.sapphire-tooltip-container').root;
+      // Выше titlebar (z-index ~3000): иначе «Новый чат» уходит под pill «Режим Агент».
+      tooltipContainer.style.position = 'fixed';
+      tooltipContainer.style.inset = '0';
+      tooltipContainer.style.zIndex = '100000';
+      tooltipContainer.style.pointerEvents = 'none';
       workbench.appendChild(tooltipContainer);
 
       // Монтируем React

@@ -42,10 +42,12 @@ export class ChatThreadQueue {
       this._s._messageQueues[opts.threadId] ?? (this._s._messageQueues[opts.threadId] = []);
     queue.push(item);
     this._notifyMessageQueue(opts.threadId);
-    const running = this._s.streamState[opts.threadId]?.isRunning;
+    const stream = this._s.streamState[opts.threadId];
+    const running = stream?.isRunning;
+    const interrupt = stream && 'interrupt' in stream ? stream.interrupt : undefined;
     chatTrace(opts.threadId, 'enqueue', `chars=${opts.text.length} q=${queue.length} running=${running ?? 'none'}`);
     // Мёртвая очередь: нет живого агента — сразу flush, иначе сообщение пропадает.
-    if (!canEnqueueFollowUp(running)) {
+    if (!canEnqueueFollowUp(running, interrupt)) {
       chatTrace(opts.threadId, 'enqueue.flush-now', `running=${running ?? 'none'}`);
       void this._flushMessageQueue(opts.threadId);
     }
@@ -103,9 +105,11 @@ export class ChatThreadQueue {
       chatTrace(threadId, 'flush.skip', 'already-flushing');
       return;
     }
-    const running = this._s.streamState[threadId]?.isRunning;
-    // preparing / awaiting_user / undefined — можно стартовать; LLM/tool/idle агента — ждём
-    if (canEnqueueFollowUp(running)) {
+    const stream = this._s.streamState[threadId];
+    const running = stream?.isRunning;
+    const interrupt = stream && 'interrupt' in stream ? stream.interrupt : undefined;
+    // preparing / awaiting_user / undefined / idle+not_needed — можно стартовать; LLM/tool/живой idle — ждём
+    if (canEnqueueFollowUp(running, interrupt)) {
       chatTrace(threadId, 'flush.skip', `running=${running}`);
       return;
     }

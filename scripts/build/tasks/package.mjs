@@ -5,11 +5,10 @@ import { execFileSync } from 'node:child_process';
 
 import { buildRoot, getVersion, product, repoRoot, rootPackageJson } from '../constants.mjs';
 import { copyPatterns, ensureDir, rimraf, writeText } from '../fileUtils.mjs';
+import { downloadAndExtractElectron } from './electronArtifact.mjs';
 import { getNodeOutputDir, getRemoteNodeVersion } from './nodeBinary.mjs';
 
 const require = createRequire(import.meta.url);
-const electron = require('@vscode/gulp-electron');
-const { config } = require(path.join(repoRoot, 'build', 'lib', 'electron.js'));
 const { getProductionDependencies } = require(path.join(repoRoot, 'build', 'lib', 'dependencies.js'));
 
 function packageVersion() {
@@ -54,18 +53,6 @@ async function copyOutFolder(sourceRoot, destinationRoot) {
     destinationRoot,
     mapPath: (relativePath) => relativePath.replace(new RegExp(`^${sourceRoot}`), 'out'),
   });
-}
-
-function streamToPromise(stream) {
-  return new Promise((resolve, reject) => {
-    stream.on('end', resolve);
-    stream.on('finish', resolve);
-    stream.on('error', reject);
-  });
-}
-
-function normalizeArch(arch) {
-  return arch === 'armhf' ? 'arm' : arch;
 }
 
 function isUiExtensionManifest(manifest) {
@@ -325,29 +312,7 @@ async function applyCurrentTimestamps(rootPath) {
 }
 
 async function downloadDesktopRuntime(destinationRoot, platform, arch) {
-  let lastError;
-  for (let attempt = 1; attempt <= 3; attempt += 1) {
-    try {
-      await streamToPromise(
-        electron.dest(destinationRoot, {
-          ...config,
-          platform,
-          arch: normalizeArch(arch),
-          ffmpegChromium: false,
-        }),
-      );
-      return;
-    } catch (error) {
-      lastError = error;
-      if (attempt === 3) {
-        break;
-      }
-      console.warn(
-        `[build] desktop runtime download failed for ${platform}-${arch} (attempt ${attempt}/3), retrying...`,
-      );
-    }
-  }
-  throw lastError;
+  await downloadAndExtractElectron({ destinationRoot, platform, arch });
 }
 
 async function copyProductionDependenciesToApp(appRoot) {

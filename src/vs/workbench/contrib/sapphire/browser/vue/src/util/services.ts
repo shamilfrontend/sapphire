@@ -334,6 +334,8 @@ export const useChatThreadsStreamState = (threadId: MaybeRefOrGetter<string>) =>
     (id) => {
       s.value = chatThreadsStreamState[id];
     },
+    // До обработчиков клика: «+» не должен оставить isRunning предыдущего чата.
+    { flush: 'sync' },
   );
   const listener = (threadId_: string) => {
     const id = toValue(threadId);

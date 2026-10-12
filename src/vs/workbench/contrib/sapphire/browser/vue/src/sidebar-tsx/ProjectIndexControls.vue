@@ -16,11 +16,14 @@ const props = withDefaults(
     showStatusButton?: boolean;
     className?: string;
     popoverPlacement?: Placement;
+    /** Узкая полоса в titlebar (35px): без нативного title и без вылезания за хост. */
+    compact?: boolean;
   }>(),
   {
     showStatusButton: true,
     className: '',
     popoverPlacement: 'top-end',
+    compact: false,
   },
 );
 
@@ -203,20 +206,28 @@ const errorPaths = computed(() =>
       type="button"
       ref="reference"
       :style="noDrag"
-      class="text-[11px] px-1.5 py-0.5 rounded hover:bg-void-bg-2 cursor-pointer w-[188px] shrink-0 text-left"
-      :title="statusTitle"
+      :class="`text-[11px] px-1.5 rounded hover:bg-void-bg-2 cursor-pointer w-[188px] shrink-0 text-left overflow-hidden ${
+        compact ? 'py-0 leading-[13px] max-h-[26px]' : 'py-0.5'
+      }`"
+      :title="compact ? undefined : statusTitle"
       :aria-expanded="open"
       :aria-label="statusTitle"
       @click.stop="open = !open"
     >
-      <div v-if="indexing || paused" class="flex flex-col gap-0.5 w-full min-w-0">
+      <div
+        v-if="indexing || paused"
+        :class="`flex flex-col w-full min-w-0 ${compact ? 'gap-px' : 'gap-0.5'}`"
+      >
         <div class="flex items-center justify-between gap-1 w-full min-w-0">
           <span class="truncate text-void-fg-1">{{ paused ? 'Пауза' : 'Индексация' }}</span>
           <span class="shrink-0 tabular-nums font-semibold text-void-fg-1">
             {{ overallPercent }}%
           </span>
         </div>
-        <div class="h-1 w-full rounded-full overflow-hidden" :style="progressTrackStyle">
+        <div
+          :class="`${compact ? 'h-0.5' : 'h-1'} w-full rounded-full overflow-hidden`"
+          :style="progressTrackStyle"
+        >
           <div
             class="h-full rounded-full transition-[width] duration-150 ease-out"
             :style="progressFillStyle(overallPercent)"

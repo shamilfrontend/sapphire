@@ -6,23 +6,23 @@
 
 import { onWatcherCleanup, ref, watch } from 'vue';
 import { useAccessor } from '../util/services.js';
-import { formatChatThreadLog } from '../../../../common/formatChatThreadLog.js';
 import { formatChatSendTrace } from '../../../../common/chatSendTrace.js';
 import { COPY_CHAT_LOG_FEEDBACK_MS } from './sidebarChatShared.js';
 
+const LABEL = 'Общий лог';
+
 const accessor = useAccessor();
 const clipboardService = accessor.get('IClipboardService');
-const chatThreadsService = accessor.get('IChatThreadService');
-const label = ref('Скопировать лог');
+const label = ref(LABEL);
 
 watch(
   label,
   (next) => {
-    if (next === 'Скопировать лог') {
+    if (next === LABEL) {
       return;
     }
     const timer = setTimeout(() => {
-      label.value = 'Скопировать лог';
+      label.value = LABEL;
     }, COPY_CHAT_LOG_FEEDBACK_MS);
     onWatcherCleanup(() => clearTimeout(timer));
   },
@@ -30,15 +30,8 @@ watch(
 );
 
 const onCopy = () => {
-  const thread = chatThreadsService.getCurrentThread();
-  const sendTrace = formatChatSendTrace();
-  const threadLog = formatChatThreadLog(thread.messages, {
-    threadId: thread.id,
-    createdAt: thread.createdAt,
-  });
-  const text = `${sendTrace}\n\n---\n\n${threadLog}`;
   void clipboardService
-    .writeText(text)
+    .writeText(formatChatSendTrace())
     .then(() => {
       label.value = 'Скопировано';
     })
@@ -53,7 +46,7 @@ const onCopy = () => {
     <button
       type="button"
       class="px-2 py-0.5 text-xs text-void-fg-3 hover:text-void-fg-1 transition-colors cursor-pointer"
-      title="Скопировать лог отправки и историю чата (для диагностики зависания)"
+      title="Скопировать журнал шагов всех чатов сессии (для диагностики зависания)"
       @click="onCopy"
     >
       {{ label }}

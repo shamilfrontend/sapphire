@@ -13,7 +13,11 @@ const noDrag = { WebkitAppRegion: 'no-drag' };
 </script>
 
 <template>
-  <div class="@@void-scope flex items-center h-full px-1 text-void-fg-3" :class="{ dark: isDark }" :style="noDrag">
-    <ProjectIndexControls :showStatusButton="true" popoverPlacement="bottom-start" />
+  <div
+    class="@@void-scope flex items-center h-full max-h-full overflow-hidden px-1 text-void-fg-3"
+    :class="{ dark: isDark }"
+    :style="noDrag"
+  >
+    <ProjectIndexControls :showStatusButton="true" popoverPlacement="bottom-start" compact />
   </div>
 </template>
