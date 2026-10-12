@@ -120,10 +120,17 @@ const composerInitValue = ref<string | null>(currentThread.value.state.draftText
 const imageFileInputRef = ref<HTMLInputElement | null>(null);
 const supportsVision = useChatSupportsVision();
 
-// восстановить черновик при смене треда (вместо wipe)
+// сохранить черновик уходящего треда, затем восстановить черновик нового
 watch(
   threadIdForDraft,
-  (threadId) => {
+  (threadId, prevThreadId) => {
+    if (prevThreadId) {
+      const leavingText = textAreaRef.current?.value ?? draftText.value;
+      chatThreadsService.setComposerDraft(prevThreadId, {
+        draftText: leavingText,
+        stagingImages: stagingImages.value,
+      });
+    }
     const state = chatThreadsService.state.allThreads[threadId]?.state;
     const text = state?.draftText ?? '';
     const images = state?.stagingImages ?? [];

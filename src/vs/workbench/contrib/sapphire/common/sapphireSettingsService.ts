@@ -234,13 +234,15 @@ const _validatedModelState = (
     };
   }
 
-  // optionsOfModel — только PPR-провайдеры
+  // optionsOfModel — только настроенные и включённые провайдеры
   let newModelOptions: ModelOption[] = [];
   const seenModelKeys = new Set<string>();
   for (const providerName of providerNames) {
     const providerTitle = providerName; // намеренно без displayInfo — короткое имя
-    if (!newSettingsOfProvider[providerName]._didFillInProviderSettings) continue; // провайдер выключен — без options
-    for (const { modelName, isHidden } of newSettingsOfProvider[providerName].models) {
+    const settingsAtProvider = newSettingsOfProvider[providerName];
+    if (!settingsAtProvider._didFillInProviderSettings) continue; // не настроен — без options
+    if (settingsAtProvider.isEnabled === false) continue; // пользователь выключил — без options
+    for (const { modelName, isHidden } of settingsAtProvider.models) {
       if (isHidden) continue;
       const key = `${providerName}:${modelName}`;
       if (seenModelKeys.has(key)) continue;
@@ -400,7 +402,7 @@ class SapphireSettingsService extends Disposable implements ISapphireSettingsSer
       if (readS.globalSettings.projectIndexIncludeOffice === undefined)
         readS.globalSettings.projectIndexIncludeOffice = true;
       if (readS.globalSettings.projectIndexLlmPurpose === undefined)
-        readS.globalSettings.projectIndexLlmPurpose = true;
+        readS.globalSettings.projectIndexLlmPurpose = false;
 
       // layoutShell: unknown → IDE
       if (readS.globalSettings.layoutMode !== 'ide' && readS.globalSettings.layoutMode !== 'agents')
@@ -465,10 +467,14 @@ class SapphireSettingsService extends Disposable implements ISapphireSettingsSer
       // только известные провайдеры
       const prunedSettingsOfProvider = {} as typeof readS.settingsOfProvider;
       for (const providerName of providerNames) {
-        prunedSettingsOfProvider[providerName] = {
+        const merged = {
           ...defaultSettingsOfProvider[providerName],
           ...readS.settingsOfProvider[providerName],
         } as any;
+        if (merged.isEnabled === undefined) {
+          merged.isEnabled = true;
+        }
+        prunedSettingsOfProvider[providerName] = merged;
       }
       // убрать overrides удалённых провайдеров
       const prunedOverrides = {} as typeof readS.overridesOfModel;

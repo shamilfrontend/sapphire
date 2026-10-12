@@ -91,6 +91,7 @@ const disabledText = computed(() => {
   if (emptyMessage && emptyMessage.priority === 'always') return emptyMessage.message;
   if (disabled === 'needToEnableModel') return 'Включите модель';
   if (disabled === 'addModel') return 'Нет доступных моделей';
+  if (disabled === 'providerDisabled') return 'Включите провайдер';
   if (disabled === 'addProvider' || disabled === 'providerNotAutoDetected') return 'Нужен провайдер';
   return 'Нужен провайдер';
 });

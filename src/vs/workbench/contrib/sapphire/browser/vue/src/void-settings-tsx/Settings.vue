@@ -442,7 +442,7 @@ const providerSections = [
                     <div class="flex items-start gap-x-2">
                       <SapphireSwitch
                         size="xs"
-                        :value="settingsState.globalSettings.projectIndexLlmPurpose !== false"
+                        :value="settingsState.globalSettings.projectIndexLlmPurpose === true"
                         @change="
                           sapphireSettingsService.setGlobalSetting('projectIndexLlmPurpose', $event)
                         "
@@ -450,7 +450,8 @@ const providerSections = [
                       <div class="flex flex-col gap-0.5 pointer-events-none">
                         <span class="text-void-fg-3 text-xs">LLM-описания файлов (purpose)</span>
                         <span class="text-void-fg-3 text-[11px] opacity-80 leading-snug">
-                          Фоном через модель SCM пишет короткое «зачем файл» и теги.
+                          Не запускаются автоматически. Разрешает ручной запуск из окна индекса
+                          (модель SCM: короткое «зачем файл» и теги).
                         </span>
                       </div>
                     </div>

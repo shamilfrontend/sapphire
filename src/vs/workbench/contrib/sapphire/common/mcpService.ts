@@ -55,14 +55,11 @@ export interface IMCPService {
 export const IMCPService = createDecorator<IMCPService>('mcpConfigService');
 
 const MCP_CONFIG_FILE_NAME = 'mcp.json';
-const FIGMA_DESKTOP_MCP_SERVER_NAME = 'figma-desktop';
-const FIGMA_DESKTOP_MCP_SERVER: MCPConfigFileEntryJSON = {
-  url: 'http://127.0.0.1:3845/mcp',
-};
+// Раньше этот сервер дописывался в mcp.json при старте. Снимаем только эту запись.
+const BUNDLED_FIGMA_DESKTOP_MCP_SERVER_NAME = 'figma-desktop';
+const BUNDLED_FIGMA_DESKTOP_MCP_URL = 'http://127.0.0.1:3845/mcp';
 const MCP_CONFIG_SAMPLE = {
-  mcpServers: {
-    [FIGMA_DESKTOP_MCP_SERVER_NAME]: FIGMA_DESKTOP_MCP_SERVER,
-  },
+  mcpServers: {},
 };
 const MCP_CONFIG_SAMPLE_STRING = JSON.stringify(MCP_CONFIG_SAMPLE, null, 2);
 
@@ -124,7 +121,7 @@ class MCPService extends Disposable implements IMCPService {
         await this._createMCPConfigFile(mcpConfigUri);
         console.log('MCP Config file created:', mcpConfigUri.toString());
       }
-      await this._ensureDefaultMCPServers(mcpConfigUri);
+      await this._removeBundledFigmaMCPServer(mcpConfigUri);
       await this._addMCPConfigFileWatcher();
       await this._refreshMCPServers();
     } catch (error) {
@@ -171,8 +168,8 @@ class MCPService extends Disposable implements IMCPService {
     await this.fileService.writeFile(mcpConfigUri, buffer);
   }
 
-  // Добавить дефолтные серверы, не перезаписывая записи пользователя
-  private async _ensureDefaultMCPServers(mcpConfigUri: URI): Promise<void> {
+  // Убрать figma-desktop, который раньше ставился сам. Свою запись с тем же именем не трогаем.
+  private async _removeBundledFigmaMCPServer(mcpConfigUri: URI): Promise<void> {
     try {
       const fileContent = await this.fileService.readFile(mcpConfigUri);
       const contentString = fileContent.value.toString();
@@ -180,16 +177,23 @@ class MCPService extends Disposable implements IMCPService {
       if (!configFileJson.mcpServers || typeof configFileJson.mcpServers !== 'object') {
         return;
       }
-      if (FIGMA_DESKTOP_MCP_SERVER_NAME in configFileJson.mcpServers) {
+      const entry = configFileJson.mcpServers[BUNDLED_FIGMA_DESKTOP_MCP_SERVER_NAME];
+      if (!entry || !this._isBundledFigmaDesktopServer(entry)) {
         return;
       }
-      configFileJson.mcpServers[FIGMA_DESKTOP_MCP_SERVER_NAME] = FIGMA_DESKTOP_MCP_SERVER;
+      delete configFileJson.mcpServers[BUNDLED_FIGMA_DESKTOP_MCP_SERVER_NAME];
       const buffer = VSBuffer.fromString(JSON.stringify(configFileJson, null, 2));
       await this.fileService.writeFile(mcpConfigUri, buffer);
-      console.log('Added default MCP server:', FIGMA_DESKTOP_MCP_SERVER_NAME);
     } catch (error) {
-      console.error('Error ensuring default MCP servers:', error);
+      console.error('Error removing bundled Figma MCP server:', error);
     }
+  }
+
+  private _isBundledFigmaDesktopServer(entry: MCPConfigFileEntryJSON): boolean {
+    return (
+      Object.keys(entry).length === 1 &&
+      entry.url === BUNDLED_FIGMA_DESKTOP_MCP_URL
+    );
   }
 
   private async _addMCPConfigFileWatcher(): Promise<void> {

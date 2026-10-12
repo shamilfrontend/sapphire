@@ -72,7 +72,10 @@ import {
   IProjectIndexService,
 } from '../../../projectIndexService.js';
 import type { ProjectIndexStatus } from '../../../../common/projectIndex/projectIndexTypes.js';
-import { EMPTY_PROJECT_INDEX_STATUS } from '../../../../common/projectIndex/projectIndexTypes.js';
+import {
+  EMPTY_PROJECT_INDEX_STATUS,
+  emptyProjectIndexSteps,
+} from '../../../../common/projectIndex/projectIndexTypes.js';
 
 // Глобальные снимки state обновляются синхронно с VS Code-сервисами; Vue подписывается через listeners.
 
@@ -94,7 +97,10 @@ const refreshModelProviderListeners: Set<
 let colorThemeState: ColorScheme;
 const colorThemeStateListeners: Set<(s: ColorScheme) => void> = new Set();
 
-let projectIndexStatus: ProjectIndexStatus = { ...EMPTY_PROJECT_INDEX_STATUS };
+let projectIndexStatus: ProjectIndexStatus = {
+  ...EMPTY_PROJECT_INDEX_STATUS,
+  steps: emptyProjectIndexSteps(),
+};
 const projectIndexStatusListeners: Set<(s: ProjectIndexStatus) => void> = new Set();
 
 const ctrlKZoneStreamingStateListeners: Set<(diffareaid: number, s: boolean) => void> = new Set();

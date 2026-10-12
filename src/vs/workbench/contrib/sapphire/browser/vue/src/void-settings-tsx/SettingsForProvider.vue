@@ -11,7 +11,8 @@ import {
   displayInfoOfProviderName,
   isProviderNameDisabled,
 } from '../../../../common/sapphireSettingsTypes.js';
-import { useSettingsState } from '../util/services.js';
+import SapphireSwitch from '../util/SapphireSwitch.vue';
+import { useAccessor, useSettingsState } from '../util/services.js';
 import WarningBox from './WarningBox.vue';
 import ProviderSetting from './ProviderSetting.vue';
 
@@ -21,6 +22,8 @@ const props = defineProps<{
   showProviderSuggestions: boolean;
 }>();
 
+const accessor = useAccessor();
+const sapphireSettingsService = accessor.get('ISapphireSettingsService');
 const sapphireSettingsState = useSettingsState();
 
 const needsModel = computed(
@@ -32,12 +35,29 @@ const needsModel = computed(
 const settingNames = computed(() => customSettingNamesOfProvider(props.providerName));
 
 const providerInfo = computed(() => displayInfoOfProviderName(props.providerName));
+
+const isEnabled = computed(
+  () => sapphireSettingsState.value.settingsOfProvider[props.providerName]?.isEnabled !== false,
+);
+
+const onToggleEnabled = (value: boolean) => {
+  void sapphireSettingsService.setSettingOfProvider(props.providerName, 'isEnabled', value);
+};
 </script>
 
 <template>
   <div>
-    <div class="flex items-center w-full gap-4">
+    <div class="flex items-center justify-between w-full gap-4">
       <h3 v-if="showProviderTitle" class="text-xl truncate">{{ providerInfo.title }}</h3>
+      <SapphireSwitch
+        v-if="showProviderTitle"
+        :value="isEnabled"
+        size="sm"
+        data-tooltip-id="sapphire-tooltip"
+        data-tooltip-place="left"
+        :data-tooltip-content="isEnabled ? 'Провайдер включён' : 'Провайдер выключен'"
+        @change="onToggleEnabled"
+      />
     </div>
     <div
       v-if="showProviderTitle && (providerInfo.desc || providerInfo.usageUrl)"
@@ -55,7 +75,7 @@ const providerInfo = computed(() => displayInfoOfProviderName(props.providerName
       </a>
     </div>
 
-    <div>
+    <div :class="isEnabled ? '' : 'opacity-60'">
       <!-- Настройки провайдера кроме списка моделей (например apiKey) -->
       <ProviderSetting
         v-for="settingName in settingNames"

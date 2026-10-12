@@ -45,6 +45,7 @@ import {
   GatewayChatMessage,
   RawToolParamsObj,
 } from '../common/sendLLMMessageTypes.js';
+import { isAttachableActiveFileUri } from '../common/activeFileAttach.js';
 import { ISapphireSettingsService } from '../common/sapphireSettingsService.js';
 import {
   ChatMode,
@@ -499,9 +500,12 @@ class ConvertToLLMMessageService extends Disposable implements IConvertToLLMMess
     const openedURIs =
       this.modelService
         .getModels()
-        .filter((m) => m.isAttachedToEditor())
+        .filter((m) => m.isAttachedToEditor() && isAttachableActiveFileUri(m.uri))
         .map((m) => m.uri.fsPath) || [];
-    const activeURI = this.editorService.activeEditor?.resource?.fsPath;
+    const activeResource = this.editorService.activeEditor?.resource;
+    const activeURI = isAttachableActiveFileUri(activeResource)
+      ? activeResource.fsPath
+      : undefined;
 
     const directoryStr = await this.directoryStrService.getAllDirectoriesStr({
       cutOffMessage:

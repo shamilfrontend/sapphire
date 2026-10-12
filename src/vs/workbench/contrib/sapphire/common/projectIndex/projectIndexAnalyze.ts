@@ -18,6 +18,7 @@ const SKIP_DIR_NAMES = new Set([
   'dist',
   'out',
   'build',
+  '.build',
   '.next',
   'coverage',
   WORKSPACE_DOT_DIR,
@@ -73,6 +74,7 @@ const BINARY_EXTS = new Set([
   'jpeg',
   'gif',
   'webp',
+  'svg',
   'ico',
   'mp4',
   'mp3',
@@ -154,6 +156,76 @@ export function shouldSkipPath(relPath: string): boolean {
     return true;
   }
   return kindFromPath(norm) === null;
+}
+
+/** Достаёт первый JSON-объект из ответа LLM (игнорирует хвост после `}`). */
+export function parsePurposeLlmJson(fullText: string): {
+  purpose?: string;
+  tags?: string[];
+  when_useful?: string;
+} {
+  const start = fullText.indexOf('{');
+  if (start < 0) {
+    throw new Error('No JSON in purpose response');
+  }
+  let depth = 0;
+  let inString = false;
+  let escape = false;
+  for (let i = start; i < fullText.length; i++) {
+    const ch = fullText[i];
+    if (inString) {
+      if (escape) {
+        escape = false;
+        continue;
+      }
+      if (ch === '\\') {
+        escape = true;
+        continue;
+      }
+      if (ch === '"') {
+        inString = false;
+      }
+      continue;
+    }
+    if (ch === '"') {
+      inString = true;
+      continue;
+    }
+    if (ch === '{') {
+      depth++;
+    } else if (ch === '}') {
+      depth--;
+      if (depth === 0) {
+        return JSON.parse(fullText.slice(start, i + 1)) as {
+          purpose?: string;
+          tags?: string[];
+          when_useful?: string;
+        };
+      }
+    }
+  }
+  throw new Error('No JSON in purpose response');
+}
+
+export function formatProjectIndexError(err: unknown): string {
+  if (err instanceof Error) {
+    return err.message;
+  }
+  if (typeof err === 'string') {
+    return err;
+  }
+  if (err && typeof err === 'object') {
+    const msg = (err as { message?: unknown }).message;
+    if (typeof msg === 'string' && msg.trim()) {
+      return msg;
+    }
+    try {
+      return JSON.stringify(err);
+    } catch {
+      // fall through
+    }
+  }
+  return 'Unknown error';
 }
 
 /** Простой отпечаток содержимого (не криптографический) для инвалидации кэша файла. */

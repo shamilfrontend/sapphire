@@ -7,9 +7,13 @@
 import { computed, onMounted, onUnmounted, onWatcherCleanup, ref, watch, type CSSProperties } from 'vue';
 import { autoUpdate, flip, offset, shift, useFloating, type Placement } from '@floating-ui/vue';
 import { Pause, Play, RefreshCw } from 'lucide-vue-next';
-import { useAccessor, useProjectIndexStatus } from '../util/services.js';
+import { useAccessor, useProjectIndexStatus, useSettingsState } from '../util/services.js';
 import { PPR_REINDEX_WORKSPACE_COMMAND_ID } from '../../../projectIndexService.js';
-import type { ProjectIndexStatus } from '../../../../common/projectIndex/projectIndexTypes.js';
+import type {
+  ProjectIndexStatus,
+  ProjectIndexStepProgress,
+} from '../../../../common/projectIndex/projectIndexTypes.js';
+import { emptyProjectIndexSteps } from '../../../../common/projectIndex/projectIndexTypes.js';
 
 const props = withDefaults(
   defineProps<{
@@ -33,8 +37,12 @@ const noDrag = { WebkitAppRegion: 'no-drag' } as CSSProperties;
 const STATUS_LABEL_INDEXED = 'Проект проиндексирован';
 const STATUS_LABEL_NOT_INDEXED = 'Проект не проиндексирован';
 
-function isIndexingPhase(phase: ProjectIndexStatus['phase']): boolean {
-  return phase === 'scanning' || phase === 'analyzing' || phase === 'purpose';
+function isLocalIndexingPhase(phase: ProjectIndexStatus['phase']): boolean {
+  return phase === 'scanning' || phase === 'analyzing';
+}
+
+function isBusyPhase(phase: ProjectIndexStatus['phase']): boolean {
+  return isLocalIndexingPhase(phase) || phase === 'purpose';
 }
 
 function phaseLabel(phase: ProjectIndexStatus['phase']): string {
@@ -51,8 +59,13 @@ function phaseLabel(phase: ProjectIndexStatus['phase']): string {
 }
 
 function labelForStatus(status: ProjectIndexStatus): string {
-  if (isIndexingPhase(status.phase)) {
+  if (isBusyPhase(status.phase)) {
     const pct = Math.max(0, Math.min(100, status.percent));
+    if (status.phase === 'purpose') {
+      const step = status.steps?.purpose;
+      const purposePct = step ? Math.max(0, Math.min(100, step.percent)) : pct;
+      return 'Purpose ' + purposePct + '%';
+    }
     return 'Индексация ' + pct + '%';
   }
   if (status.isPaused) {
@@ -91,11 +104,26 @@ function formatTime(ts: number | null | undefined): string {
   }
 }
 
+function stepStateLabel(state: ProjectIndexStepProgress['state']): string {
+  switch (state) {
+    case 'active':
+      return 'сейчас';
+    case 'done':
+      return 'готово';
+    case 'error':
+      return 'ошибка';
+    default:
+      return 'ожидает';
+  }
+}
+
 const accessor = useAccessor();
 const commandService = accessor.get('ICommandService');
 const projectIndexService = accessor.get('IProjectIndexService');
+const sapphireSettingsService = accessor.get('ISapphireSettingsService');
 const workspaceService = accessor.get('IWorkspaceContextService');
 const status = useProjectIndexStatus();
+const settingsState = useSettingsState();
 const open = ref(false);
 const hasWorkspace = ref((workspaceService.getWorkspace().folders ?? []).length > 0);
 
@@ -163,27 +191,50 @@ watch(
 );
 
 const counts = computed(() => status.value.manifest?.counts);
+const steps = computed(() => status.value.steps ?? emptyProjectIndexSteps());
 const showIndexNow = computed(
   () => !status.value.isIndexed && status.value.phase === 'idle' && !status.value.isPaused,
 );
-const indexing = computed(() => isIndexingPhase(status.value.phase));
+const localIndexing = computed(() => isLocalIndexingPhase(status.value.phase));
+const purposeRunning = computed(() => status.value.phase === 'purpose');
+const indexing = computed(() => isBusyPhase(status.value.phase));
 const paused = computed(() => !!status.value.isPaused && !indexing.value);
 const overallPercent = computed(() => Math.max(0, Math.min(100, status.value.percent)));
-// play/pause: идёт индекс, пауза или остался purpose
-const showPlayPause = computed(
-  () =>
-    indexing.value ||
-    paused.value ||
-    (!!counts.value?.purposePending && counts.value.purposePending > 0),
+const triggerPercent = computed(() => {
+  if (purposeRunning.value) {
+    return Math.max(0, Math.min(100, steps.value.purpose.percent));
+  }
+  return overallPercent.value;
+});
+
+const showPlayPause = computed(() => localIndexing.value || purposeRunning.value || paused.value);
+const showReindex = computed(() => status.value.isIndexed && !localIndexing.value);
+
+const purposeWorkCount = computed(() => {
+  const pending = counts.value?.purposePending ?? 0;
+  const failed = counts.value?.purposeFailed ?? 0;
+  return pending + failed;
+});
+const llmPurposeEnabled = computed(
+  () => settingsState.value.globalSettings.projectIndexLlmPurpose === true,
 );
-const showReindex = computed(() => status.value.isIndexed && !indexing.value);
+const showPurposeCta = computed(
+  () =>
+    status.value.isIndexed &&
+    !localIndexing.value &&
+    !purposeRunning.value &&
+    purposeWorkCount.value > 0,
+);
+
 const iconBtnClass =
   'inline-flex items-center justify-center rounded border border-void-border-1 bg-void-bg-1 text-void-fg-1 hover:brightness-110 shrink-0';
 const iconBtnStyle = { width: 22, height: 22, ...noDrag } as CSSProperties;
 
 const statusTitle = computed(() =>
   indexing.value
-    ? `Общий прогресс индексации: ${overallPercent.value}% · ${phaseLabel(status.value.phase)}`
+    ? status.value.phase === 'purpose'
+      ? `Purpose (LLM): ${steps.value.purpose.percent}%`
+      : `Общий прогресс индексации: ${overallPercent.value}% · ${phaseLabel(status.value.phase)}`
     : labelForStatus(status.value),
 );
 
@@ -200,6 +251,32 @@ const errorPaths = computed(() =>
     .map((e) => e.path)
     .join(', '),
 );
+
+const stepRows = computed(() => [
+  { key: 'scanning', label: 'Сканирование', step: steps.value.scanning, showCounts: false },
+  { key: 'analyzing', label: 'Анализ файлов', step: steps.value.analyzing, showCounts: true },
+  { key: 'purpose', label: 'Purpose (LLM)', step: steps.value.purpose, showCounts: true },
+]);
+
+async function onStartPurpose() {
+  if (!llmPurposeEnabled.value) {
+    await sapphireSettingsService.setGlobalSetting('projectIndexLlmPurpose', true);
+  }
+  await projectIndexService.startPurposeEnrichment();
+}
+
+function onPlayPause() {
+  if (indexing.value) {
+    projectIndexService.pause();
+    return;
+  }
+  if (paused.value && purposeWorkCount.value > 0 && !localIndexing.value && status.value.percent >= 100) {
+    // После паузы на purpose — продолжаем LLM, а не полный reindex.
+    void onStartPurpose();
+    return;
+  }
+  void projectIndexService.resume();
+}
 </script>
 
 <template>
@@ -225,9 +302,11 @@ const errorPaths = computed(() =>
         :class="`flex flex-col w-full min-w-0 ${compact ? 'gap-px' : 'gap-0.5'}`"
       >
         <div class="flex items-center justify-between gap-1 w-full min-w-0">
-          <span class="truncate text-void-fg-3">{{ paused ? 'Пауза' : 'Индексация' }}</span>
+          <span class="truncate text-void-fg-3">
+            {{ paused ? 'Пауза' : purposeRunning ? 'Purpose' : 'Индексация' }}
+          </span>
           <span class="shrink-0 tabular-nums text-void-fg-3">
-            {{ overallPercent }}%
+            {{ triggerPercent }}%
           </span>
         </div>
         <div
@@ -236,7 +315,7 @@ const errorPaths = computed(() =>
         >
           <div
             class="h-full rounded-full transition-[width] duration-150 ease-out"
-            :style="triggerProgressFillStyle(overallPercent)"
+            :style="triggerProgressFillStyle(triggerPercent)"
           />
         </div>
       </div>
@@ -257,21 +336,56 @@ const errorPaths = computed(() =>
         <div class="flex items-center justify-between gap-2 mb-1.5">
           <span class="text-xs font-medium text-void-fg-1">Общий прогресс</span>
           <span class="text-sm tabular-nums font-semibold text-void-fg-1">
-            {{ indexing || status.isIndexed || paused ? `${overallPercent}%` : '—' }}
+            {{ localIndexing || status.isIndexed || paused ? `${overallPercent}%` : '—' }}
           </span>
         </div>
-        <div class="h-2 w-full rounded-full overflow-hidden mb-1.5" :style="progressTrackStyle">
+        <div class="h-2 w-full rounded-full overflow-hidden mb-2" :style="progressTrackStyle">
           <div
             class="h-full rounded-full transition-[width] duration-150 ease-out"
-            :style="progressFillStyle(indexing || status.isIndexed || paused ? overallPercent : 0)"
+            :style="progressFillStyle(localIndexing || status.isIndexed || paused ? overallPercent : 0)"
           />
         </div>
+
+        <div class="flex flex-col gap-2 mb-2">
+          <div v-for="row in stepRows" :key="row.key" class="min-w-0">
+            <div class="flex items-center justify-between gap-2 mb-0.5">
+              <span class="text-[11px] text-void-fg-1 truncate">{{ row.label }}</span>
+              <span class="text-[11px] tabular-nums text-void-fg-3 shrink-0">
+                <template v-if="row.key === 'purpose'">
+                  {{ stepStateLabel(row.step.state)
+                  }}<template v-if="row.step.state === 'active' && row.step.total > 0">
+                    · {{ row.step.processed }}/{{ row.step.total }} · {{ row.step.percent }}%
+                  </template>
+                  <template v-else-if="row.step.state === 'done'"> · {{ row.step.percent }}%</template>
+                </template>
+                <template v-else-if="row.showCounts && row.step.total > 0">
+                  {{ row.step.processed }}/{{ row.step.total }} · {{ row.step.percent }}%
+                </template>
+                <template v-else>
+                  {{ stepStateLabel(row.step.state)
+                  }}{{ row.step.state === 'active' || row.step.state === 'done' ? ` · ${row.step.percent}%` : '' }}
+                </template>
+              </span>
+            </div>
+            <div class="h-1 w-full rounded-full overflow-hidden" :style="progressTrackStyle">
+              <div
+                class="h-full rounded-full transition-[width] duration-150 ease-out"
+                :style="progressFillStyle(row.step.percent)"
+              />
+            </div>
+          </div>
+        </div>
+
         <div class="flex items-center gap-1.5 min-w-0">
           <div class="text-[11px] text-void-fg-2 truncate min-w-0 flex-1">
             <template v-if="indexing">
               {{
                 `${phaseLabel(status.phase)}${
-                  status.total > 0 ? ` · ${status.processed}/${status.total}` : ''
+                  status.total > 0 && status.phase !== 'purpose'
+                    ? ` · ${status.processed}/${status.total}`
+                    : status.phase === 'purpose' && steps.purpose.total > 0
+                      ? ` · ${steps.purpose.processed}/${steps.purpose.total}`
+                      : ''
                 }`
               }}
             </template>
@@ -286,9 +400,7 @@ const errorPaths = computed(() =>
             :style="iconBtnStyle"
             :title="indexing ? 'Пауза' : 'Продолжить'"
             :aria-label="indexing ? 'Пауза' : 'Продолжить'"
-            @click.stop="
-              indexing ? projectIndexService.pause() : void projectIndexService.resume()
-            "
+            @click.stop="onPlayPause()"
           >
             <Pause
               v-if="indexing"
@@ -317,6 +429,23 @@ const errorPaths = computed(() =>
         >
           {{ status.currentPath }}
         </div>
+      </div>
+
+      <div
+        v-if="showPurposeCta"
+        class="mb-3 rounded-md border border-void-border-2 bg-void-bg-2 px-2.5 py-2"
+      >
+        <div class="text-[11px] text-void-fg-2 leading-snug mb-1.5">
+          Можно улучшить поиск: запустить LLM-описания ({{ purposeWorkCount }} файлов). Токены
+          списываются только после запуска.
+        </div>
+        <button
+          type="button"
+          class="text-xs bg-void-bg-1 text-void-fg-1 rounded px-2 py-1.5 text-left font-medium border border-void-border-1 hover:brightness-110 w-full"
+          @click="void onStartPurpose()"
+        >
+          {{ llmPurposeEnabled ? 'Запустить LLM-описания' : 'Включить и запустить' }}
+        </button>
       </div>
 
       <div class="grid grid-cols-2 gap-x-2 gap-y-1 text-[11px] text-void-fg-3 mb-3">
@@ -354,7 +483,7 @@ const errorPaths = computed(() =>
           v-if="paused"
           type="button"
           class="text-xs bg-void-bg-2 text-void-fg-1 rounded px-2 py-1.5 text-left font-medium"
-          @click="void projectIndexService.resume()"
+          @click="onPlayPause()"
         >
           Продолжить индексацию
         </button>

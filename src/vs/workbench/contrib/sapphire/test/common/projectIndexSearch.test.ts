@@ -9,8 +9,11 @@ import { searchProjectIndex } from '../../common/projectIndex/projectIndexSearch
 import {
   analyzeTextFile,
   contentHash,
+  formatProjectIndexError,
   kindFromPath,
   localRoleFromPath,
+  parsePurposeLlmJson,
+  shouldSkipPath,
 } from '../../common/projectIndex/projectIndexAnalyze.js';
 import type { ProjectIndexFileRecord } from '../../common/projectIndex/projectIndexTypes.js';
 
@@ -22,6 +25,30 @@ suite('projectIndex', () => {
     assert.strictEqual(kindFromPath('data.csv'), 'csv');
     assert.strictEqual(kindFromPath('plan.xlsx'), 'xlsx');
     assert.strictEqual(kindFromPath('pic.png'), null);
+    assert.strictEqual(kindFromPath('icons/code.svg'), null);
+  });
+
+  test('shouldSkipPath skips .build artifacts', () => {
+    assert.strictEqual(
+      shouldSkipPath('.build/web/extensions/csharp/syntaxes/csharp.tmLanguage.json'),
+      true,
+    );
+    assert.strictEqual(shouldSkipPath('src/a.ts'), false);
+  });
+
+  test('parsePurposeLlmJson ignores trailing text after JSON object', () => {
+    const parsed = parsePurposeLlmJson(
+      '{"purpose":"x","tags":["a"],"when_useful":"y"}\nextra note',
+    );
+    assert.strictEqual(parsed.purpose, 'x');
+    assert.deepStrictEqual(parsed.tags, ['a']);
+    assert.strictEqual(parsed.when_useful, 'y');
+  });
+
+  test('formatProjectIndexError reads message from plain objects', () => {
+    assert.strictEqual(formatProjectIndexError(new Error('boom')), 'boom');
+    assert.strictEqual(formatProjectIndexError({ message: 'llm failed' }), 'llm failed');
+    assert.strictEqual(formatProjectIndexError({ code: 1 }), '{"code":1}');
   });
 
   test('localRoleFromPath includes parent and symbols', () => {

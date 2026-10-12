@@ -56,6 +56,8 @@ export type SapphireStatefulModelInfo = {
 
 type CommonProviderSettings = {
   _didFillInProviderSettings: boolean | undefined; // undefined, затем true когда заполнены поля провайдера
+  /** Пользовательский opt-in: false — провайдер настроен, но не участвует в выборе моделей. */
+  isEnabled: boolean;
   models: SapphireStatefulModelInfo[];
 };
 
@@ -163,6 +165,12 @@ export const displayInfoOfSettingName = (
       placeholder: '(never)',
     };
   }
+  if (settingName === 'isEnabled') {
+    return {
+      title: '(never)',
+      placeholder: '(never)',
+    };
+  }
   if (settingName === 'models') {
     return {
       title: '(never)',
@@ -188,6 +196,7 @@ const settingsOf = <P extends ProviderName>(providerName: P): SettingsOfProvider
     ...defaultProviderSettings[providerName],
     ...modelInfoOfDefaultModelNames([...defaultModelsOfProvider[providerName]]),
     _didFillInProviderSettings: undefined,
+    isEnabled: true,
   }) as SettingsOfProvider[P];
 
 const modelInfoOfDefaultModelNames = (
@@ -247,8 +256,12 @@ export const isProviderNameDisabled = (
   providerName: ProviderName,
   settingsState: SapphireSettingsState,
 ) => {
+  const settingsAtProvider = settingsState.settingsOfProvider[providerName];
+  if (settingsAtProvider?.isEnabled === false) {
+    return 'providerDisabled' as const;
+  }
   // модели ещё не подтянулись или провайдер не настроен
-  const models = settingsState.settingsOfProvider[providerName]?.models ?? [];
+  const models = settingsAtProvider?.models ?? [];
   if (models.length === 0) {
     return 'providerNotAutoDetected' as const;
   }
@@ -267,18 +280,27 @@ export const isFeatureNameDisabled = (
     return isProviderNameDisabled(providerName, settingsState);
   }
 
-  // есть модели для включения
+  // есть модели для включения у включённых провайдеров
   const canTurnOnAModel = !!providerNames.find((providerName) => {
-    const models = settingsState.settingsOfProvider[providerName]?.models ?? [];
+    const p = settingsState.settingsOfProvider[providerName];
+    if (p?.isEnabled === false) return false;
+    const models = p?.models ?? [];
     return models.filter((m) => m.isHidden).length !== 0;
   });
   if (canTurnOnAModel) return 'needToEnableModel';
 
-  // провайдер есть — добавить модель
+  // включённый провайдер есть — добавить модель
+  const anyEnabledFilledIn = !!providerNames.find((providerName) => {
+    const p = settingsState.settingsOfProvider[providerName];
+    return !!p?._didFillInProviderSettings && p.isEnabled !== false;
+  });
+  if (anyEnabledFilledIn) return 'addModel';
+
+  // провайдеры настроены, но все выключены
   const anyFilledIn = !!providerNames.find(
     (providerName) => settingsState.settingsOfProvider[providerName]?._didFillInProviderSettings,
   );
-  if (anyFilledIn) return 'addModel';
+  if (anyFilledIn) return 'providerDisabled';
 
   return 'addProvider';
 };
@@ -534,7 +556,7 @@ export type GlobalSettings = {
   projectIndexEnabled: boolean;
   /** Индексировать xlsx/docx/pptx/pdf. */
   projectIndexIncludeOffice: boolean;
-  /** Очередь LLM-описаний файлов индекса (модель SCM). */
+  /** Разрешить LLM-описания файлов индекса (запуск только вручную из окна индекса). */
   projectIndexLlmPurpose: boolean;
 };
 
@@ -567,7 +589,7 @@ export const defaultGlobalSettings: GlobalSettings = {
   autoRetrieveRelevantFiles: true,
   projectIndexEnabled: true,
   projectIndexIncludeOffice: true,
-  projectIndexLlmPurpose: true,
+  projectIndexLlmPurpose: false,
 };
 
 export type GlobalSettingName = keyof GlobalSettings;

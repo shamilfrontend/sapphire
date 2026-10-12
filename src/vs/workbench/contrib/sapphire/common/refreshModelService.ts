@@ -45,22 +45,22 @@ poll -> do not fire
 export type RefreshModelStateOfProvider = Record<ProviderName, RefreshableState>;
 
 const refreshBasedOn: { [k in ProviderName]: (keyof SettingsOfProvider[k])[] } = {
-  anthropic: ['_didFillInProviderSettings', 'apiKey'],
-  openAI: ['_didFillInProviderSettings', 'apiKey'],
-  deepseek: ['_didFillInProviderSettings', 'apiKey'],
-  ollama: ['_didFillInProviderSettings', 'endpoint'],
-  vLLM: ['_didFillInProviderSettings', 'endpoint'],
-  openRouter: ['_didFillInProviderSettings', 'apiKey'],
-  openAICompatible: ['_didFillInProviderSettings', 'endpoint', 'apiKey'],
-  gemini: ['_didFillInProviderSettings', 'apiKey'],
-  groq: ['_didFillInProviderSettings', 'apiKey'],
-  xAI: ['_didFillInProviderSettings', 'apiKey'],
-  mistral: ['_didFillInProviderSettings', 'apiKey'],
-  lmStudio: ['_didFillInProviderSettings', 'endpoint'],
-  liteLLM: ['_didFillInProviderSettings', 'endpoint'],
-  googleVertex: ['_didFillInProviderSettings', 'project', 'region'],
-  microsoftAzure: ['_didFillInProviderSettings', 'project', 'apiKey', 'azureApiVersion'],
-  awsBedrock: ['_didFillInProviderSettings', 'apiKey', 'region', 'endpoint'],
+  anthropic: ['_didFillInProviderSettings', 'isEnabled', 'apiKey'],
+  openAI: ['_didFillInProviderSettings', 'isEnabled', 'apiKey'],
+  deepseek: ['_didFillInProviderSettings', 'isEnabled', 'apiKey'],
+  ollama: ['_didFillInProviderSettings', 'isEnabled', 'endpoint'],
+  vLLM: ['_didFillInProviderSettings', 'isEnabled', 'endpoint'],
+  openRouter: ['_didFillInProviderSettings', 'isEnabled', 'apiKey'],
+  openAICompatible: ['_didFillInProviderSettings', 'isEnabled', 'endpoint', 'apiKey'],
+  gemini: ['_didFillInProviderSettings', 'isEnabled', 'apiKey'],
+  groq: ['_didFillInProviderSettings', 'isEnabled', 'apiKey'],
+  xAI: ['_didFillInProviderSettings', 'isEnabled', 'apiKey'],
+  mistral: ['_didFillInProviderSettings', 'isEnabled', 'apiKey'],
+  lmStudio: ['_didFillInProviderSettings', 'isEnabled', 'endpoint'],
+  liteLLM: ['_didFillInProviderSettings', 'isEnabled', 'endpoint'],
+  googleVertex: ['_didFillInProviderSettings', 'isEnabled', 'project', 'region'],
+  microsoftAzure: ['_didFillInProviderSettings', 'isEnabled', 'project', 'apiKey', 'azureApiVersion'],
+  awsBedrock: ['_didFillInProviderSettings', 'isEnabled', 'apiKey', 'region', 'endpoint'],
 };
 
 const initialRefreshState = (): RefreshModelStateOfProvider => {
@@ -165,7 +165,7 @@ class RefreshModelService extends Disposable implements IRefreshModelService {
     this._clearProviderTimeout(providerName);
 
     const settingsAtProvider = this.sapphireSettingsService.state.settingsOfProvider[providerName];
-    if (!settingsAtProvider?._didFillInProviderSettings) {
+    if (!settingsAtProvider?._didFillInProviderSettings || settingsAtProvider.isEnabled === false) {
       this._setRefreshState(providerName, 'init', options);
       return;
     }

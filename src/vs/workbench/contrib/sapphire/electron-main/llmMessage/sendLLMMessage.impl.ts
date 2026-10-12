@@ -354,9 +354,12 @@ const newOpenAICompatibleSDK = async ({
   purpose?: 'chat' | 'list';
 }) => {
   const thisConfig = settingsOfProvider[providerName] as ProviderConnectionSettings;
-  const httpAgent = await getGatewayHttpAgentWithSystemCertificates();
   const apiKey = thisConfig.apiKey || 'unused';
   const baseURL = resolveOpenAICompatibleBaseURL(providerName, thisConfig, modelName, purpose);
+  // https.Agent ломает http:// (ERR_INVALID_PROTOCOL) — для локальных Ollama/LM Studio/vLLM и т.п.
+  const httpAgent = /^https:/i.test(baseURL)
+    ? await getGatewayHttpAgentWithSystemCertificates()
+    : undefined;
   const extraHeaders = parseExtraHeaders(thisConfig.headersJSON);
   if (providerName === 'microsoftAzure') {
     return new OpenAI({
@@ -369,7 +372,7 @@ const newOpenAICompatibleSDK = async ({
         'X-Client': 'sapphire',
         ...extraHeaders,
       },
-      httpAgent,
+      ...(httpAgent ? { httpAgent } : {}),
     });
   }
   return new OpenAI({
@@ -380,7 +383,7 @@ const newOpenAICompatibleSDK = async ({
       'X-Client': 'sapphire',
       ...extraHeaders,
     },
-    httpAgent,
+    ...(httpAgent ? { httpAgent } : {}),
   });
 };
 

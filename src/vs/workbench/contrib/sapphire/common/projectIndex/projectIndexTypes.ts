@@ -74,6 +74,21 @@ export type ProjectIndexManifest = {
 
 type ProjectIndexPhase = 'idle' | 'scanning' | 'analyzing' | 'purpose' | 'error';
 
+export type ProjectIndexStepState = 'pending' | 'active' | 'done' | 'error';
+
+export type ProjectIndexStepProgress = {
+  state: ProjectIndexStepState;
+  percent: number;
+  processed: number;
+  total: number;
+};
+
+export type ProjectIndexSteps = {
+  scanning: ProjectIndexStepProgress;
+  analyzing: ProjectIndexStepProgress;
+  purpose: ProjectIndexStepProgress;
+};
+
 export type ProjectIndexStatus = {
   phase: ProjectIndexPhase;
   percent: number;
@@ -84,6 +99,7 @@ export type ProjectIndexStatus = {
   isIndexed: boolean;
   /** true после pause/cancel пользователя до resume или reindex. */
   isPaused: boolean;
+  steps: ProjectIndexSteps;
   manifest: ProjectIndexManifest | null;
   recentFiles: ProjectIndexFileRecord[];
   errors: Array<{ path: string; error: string }>;
@@ -99,6 +115,14 @@ export type ProjectIndexSearchHit = {
   kind: ProjectIndexFileKind;
 };
 
+export function emptyProjectIndexSteps(): ProjectIndexSteps {
+  return {
+    scanning: { state: 'pending', percent: 0, processed: 0, total: 0 },
+    analyzing: { state: 'pending', percent: 0, processed: 0, total: 0 },
+    purpose: { state: 'pending', percent: 0, processed: 0, total: 0 },
+  };
+}
+
 export const EMPTY_PROJECT_INDEX_STATUS: ProjectIndexStatus = {
   phase: 'idle',
   percent: 0,
@@ -108,6 +132,7 @@ export const EMPTY_PROJECT_INDEX_STATUS: ProjectIndexStatus = {
   error: null,
   isIndexed: false,
   isPaused: false,
+  steps: emptyProjectIndexSteps(),
   manifest: null,
   recentFiles: [],
   errors: [],

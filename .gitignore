@@ -36,6 +36,7 @@ dist
 .env
 .env.*
 !.env.example
+.idea
 
 # Sapphire added these:
 .tmp/
@@ -47,4 +48,5 @@ dist
 docs/node_modules/
 docs/.vitepress/dist/
 docs/.vitepress/cache/
+.sapphire/
 .sapphire/index/

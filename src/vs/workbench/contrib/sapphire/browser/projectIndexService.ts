@@ -37,9 +37,11 @@ import {
   analyzeOfficeText,
   analyzeTextFile,
   contentHash,
+  formatProjectIndexError,
   isSecretPath,
   kindFromPath,
   localRoleFromPath,
+  parsePurposeLlmJson,
   shouldSkipDirName,
   shouldSkipPath,
 } from '../common/projectIndex/projectIndexAnalyze.js';
@@ -47,6 +49,7 @@ import { searchProjectIndex } from '../common/projectIndex/projectIndexSearch.js
 import {
   EMPTY_PROJECT_INDEX_STATUS,
   emptyManifest,
+  emptyProjectIndexSteps,
   PROJECT_INDEX_DIR_SEGMENTS,
   PROJECT_INDEX_GITIGNORE_LINE,
   PROJECT_INDEX_SCHEMA_VERSION,
@@ -57,6 +60,8 @@ import {
   ProjectIndexManifest,
   ProjectIndexSearchHit,
   ProjectIndexStatus,
+  ProjectIndexStepProgress,
+  ProjectIndexSteps,
   ProjectIndexSymbolRecord,
 } from '../common/projectIndex/projectIndexTypes.js';
 import { joinPath } from '../../../../base/common/resources.js';
@@ -84,8 +89,10 @@ export interface IProjectIndexService {
   reindexFull(): Promise<void>;
   /** Пауза индексации (как cancel) — до resume или полного reindex. */
   pause(): void;
-  /** Продолжить после паузы (инкремент + оставшийся purpose через LLM). */
+  /** Продолжить локальную индексацию после паузы (без авто-LLM). */
   resume(): Promise<void>;
+  /** Ручной запуск очереди LLM-описаний (purpose). */
+  startPurposeEnrichment(): Promise<void>;
   cancel(): void;
 }
 
@@ -99,7 +106,10 @@ class ProjectIndexService extends Disposable implements IProjectIndexService {
   private readonly _onDidChangeStatus = this._register(new Emitter<ProjectIndexStatus>());
   readonly onDidChangeStatus = this._onDidChangeStatus.event;
 
-  private status: ProjectIndexStatus = { ...EMPTY_PROJECT_INDEX_STATUS };
+  private status: ProjectIndexStatus = {
+    ...EMPTY_PROJECT_INDEX_STATUS,
+    steps: emptyProjectIndexSteps(),
+  };
   private files = new Map<string, ProjectIndexFileRecord>();
   private chunks: ProjectIndexChunkRecord[] = [];
   private symbols: ProjectIndexSymbolRecord[] = [];
@@ -230,6 +240,21 @@ class ProjectIndexService extends Disposable implements IProjectIndexService {
     await this.runIndex(false);
   }
 
+  async startPurposeEnrichment(): Promise<void> {
+    if (!this.rootUri()) {
+      return;
+    }
+    if (!this.sapphireSettingsService.state.globalSettings.projectIndexLlmPurpose) {
+      await this.sapphireSettingsService.setGlobalSetting('projectIndexLlmPurpose', true);
+    }
+    this.autoIndexPaused = false;
+    this.cancelled = false;
+    if (!this.loaded) {
+      await this.loadFromDisk();
+    }
+    this.enqueuePurposeJobs(false);
+  }
+
   cancel(): void {
     this.cancelled = true;
     this.autoIndexPaused = true;
@@ -312,24 +337,6 @@ class ProjectIndexService extends Disposable implements IProjectIndexService {
     return shouldSkipPath(rel);
   }
 
-  private hasPurposeWork(forceAll: boolean): boolean {
-    if (this.sapphireSettingsService.state.globalSettings.projectIndexLlmPurpose === false) {
-      return false;
-    }
-    for (const f of this.files.values()) {
-      if (f.llmStatus === 'skipped') {
-        continue;
-      }
-      if (!forceAll && f.llmStatus === 'done' && f.purpose) {
-        continue;
-      }
-      if (forceAll || f.llmStatus === 'pending' || f.llmStatus === 'failed') {
-        return true;
-      }
-    }
-    return false;
-  }
-
   private flushPendingIncremental(): void {
     if (this.autoIndexPaused || this.cancelled || !this.pendingIncremental) {
       return;
@@ -354,18 +361,15 @@ class ProjectIndexService extends Disposable implements IProjectIndexService {
   }
 
   /**
-   * Общий прогресс по фазам (не локальный внутри фазы):
-   * scanning ~2%, analyzing 5–80% (или 0–100% без LLM purpose), purpose 80–100%.
+   * Общий прогресс только по локальным шагам (scan + analyze).
+   * Purpose — отдельный опциональный трек, не влияет на «проиндексирован».
    */
   private computeOverallPercent(
     phase: ProjectIndexStatus['phase'],
     processed: number,
     total: number,
-    purposeDone: number,
   ): number {
-    const llmPurpose =
-      this.sapphireSettingsService.state.globalSettings.projectIndexLlmPurpose !== false;
-    if (phase === 'idle') {
+    if (phase === 'idle' || phase === 'purpose') {
       return this.files.size > 0 ? 100 : 0;
     }
     if (phase === 'error') {
@@ -375,25 +379,116 @@ class ProjectIndexService extends Disposable implements IProjectIndexService {
       return 2;
     }
     if (phase === 'analyzing') {
-      // Инкремент без изменений — анализ считаем завершённым.
       const local = total > 0 ? Math.min(1, processed / total) : 1;
-      if (!llmPurpose) {
-        return Math.round(local * 100);
-      }
-      return Math.round(5 + local * 75);
-    }
-    if (phase === 'purpose') {
-      const filesTotal = Math.max(1, this.files.size);
-      const local = Math.min(1, purposeDone / filesTotal);
-      return Math.min(99, Math.round(80 + local * 20));
+      return Math.round(local * 100);
     }
     return 0;
   }
 
+  private computeSteps(
+    phase: ProjectIndexStatus['phase'],
+    processed: number,
+    total: number,
+    purposeDone: number,
+    purposePending: number,
+    purposeFailed: number,
+  ): ProjectIndexSteps {
+    const purposeTotal = purposeDone + purposePending + purposeFailed;
+    const purposePercent =
+      purposeTotal > 0 ? Math.round((purposeDone / purposeTotal) * 100) : phase === 'idle' && this.files.size > 0 ? 100 : 0;
+
+    const scanning: ProjectIndexStepProgress = (() => {
+      if (phase === 'scanning') {
+        return { state: 'active', percent: 50, processed: 0, total: 0 };
+      }
+      if (phase === 'error' && this.status.steps.scanning.state === 'active') {
+        return { state: 'error', percent: this.status.steps.scanning.percent, processed: 0, total: 0 };
+      }
+      if (
+        phase === 'analyzing' ||
+        phase === 'purpose' ||
+        (phase === 'idle' && this.files.size > 0) ||
+        (phase === 'error' && this.files.size > 0)
+      ) {
+        return { state: 'done', percent: 100, processed: 0, total: 0 };
+      }
+      return { state: 'pending', percent: 0, processed: 0, total: 0 };
+    })();
+
+    const analyzing: ProjectIndexStepProgress = (() => {
+      if (phase === 'scanning') {
+        return { state: 'pending', percent: 0, processed: 0, total: 0 };
+      }
+      if (phase === 'analyzing') {
+        const pct = total > 0 ? Math.round((processed / total) * 100) : 0;
+        return { state: 'active', percent: pct, processed, total };
+      }
+      if (phase === 'error' && this.status.steps.analyzing.state === 'active') {
+        return {
+          state: 'error',
+          percent: this.status.steps.analyzing.percent,
+          processed: this.status.steps.analyzing.processed,
+          total: this.status.steps.analyzing.total,
+        };
+      }
+      if (
+        phase === 'purpose' ||
+        (phase === 'idle' && this.files.size > 0) ||
+        (phase === 'error' && this.files.size > 0)
+      ) {
+        return {
+          state: 'done',
+          percent: 100,
+          processed: total > 0 ? total : this.files.size,
+          total: total > 0 ? total : this.files.size,
+        };
+      }
+      return { state: 'pending', percent: 0, processed: 0, total: 0 };
+    })();
+
+    const purpose: ProjectIndexStepProgress = (() => {
+      // Живой прогресс только когда очередь реально бежит — иначе UI не мимикрирует под LLM.
+      if (phase === 'purpose' || this.purposeRunning) {
+        return {
+          state: 'active',
+          percent: Math.min(99, purposePercent),
+          processed: purposeDone,
+          total: Math.max(purposeTotal, 1),
+        };
+      }
+      const queueLeft = purposePending + purposeFailed;
+      if (queueLeft > 0) {
+        return {
+          state: 'pending',
+          percent: 0,
+          processed: 0,
+          total: queueLeft,
+        };
+      }
+      if (this.files.size > 0 && purposeDone > 0) {
+        return {
+          state: 'done',
+          percent: 100,
+          processed: purposeDone,
+          total: purposeTotal || purposeDone,
+        };
+      }
+      return {
+        state: 'pending',
+        percent: 0,
+        processed: 0,
+        total: 0,
+      };
+    })();
+
+    return { scanning, analyzing, purpose };
+  }
+
   private setStatus(patch: Partial<ProjectIndexStatus>): void {
     const manifest = this.buildManifest();
+    // Не показываем stale error после успешного purpose (llmStatus === 'done').
     const errors = [...this.files.values()]
-      .filter((f) => !!f.error)
+      .filter((f) => !!f.error && f.llmStatus !== 'done')
       .slice(-20)
       .map((f) => ({ path: f.path, error: f.error! }));
     const recentFiles = [...this.files.values()]
@@ -401,15 +496,21 @@ class ProjectIndexService extends Disposable implements IProjectIndexService {
       .slice(0, RECENT_FILES_LIMIT);
     const merged = { ...this.status, ...patch };
     const purposeDone = manifest?.counts.purposeDone ?? 0;
-    const percent = this.computeOverallPercent(
+    const purposePending = manifest?.counts.purposePending ?? 0;
+    const purposeFailed = manifest?.counts.purposeFailed ?? 0;
+    const percent = this.computeOverallPercent(merged.phase, merged.processed, merged.total);
+    const steps = this.computeSteps(
       merged.phase,
       merged.processed,
       merged.total,
       purposeDone,
+      purposePending,
+      purposeFailed,
     );
     this.status = {
       ...merged,
       percent,
+      steps,
       isIndexed: this.files.size > 0,
       isPaused: this.autoIndexPaused,
       manifest,
@@ -482,23 +583,27 @@ class ProjectIndexService extends Disposable implements IProjectIndexService {
       for (const f of files) {
         this.files.set(f.path, f);
       }
-      this.status = {
-        ...EMPTY_PROJECT_INDEX_STATUS,
+      this.setStatus({
         phase: 'idle',
         percent: files.length > 0 ? 100 : 0,
-        isIndexed: files.length > 0,
+        processed: 0,
+        total: 0,
+        currentPath: null,
+        error: null,
         manifest,
-        recentFiles: files.sort((a, b) => b.updatedAt - a.updatedAt).slice(0, RECENT_FILES_LIMIT),
-        errors: files.filter((f) => f.error).map((f) => ({ path: f.path, error: f.error! })),
-      };
-      this._onDidChangeStatus.fire(this.status);
+      });
     } catch {
       this.files.clear();
       this.chunks = [];
       this.symbols = [];
       this.edges = [];
       this.setStatus({
-        ...EMPTY_PROJECT_INDEX_STATUS,
+        phase: 'idle',
+        percent: 0,
+        processed: 0,
+        total: 0,
+        currentPath: null,
+        error: null,
         manifest: emptyManifest(root.fsPath),
       });
     }
@@ -608,7 +713,16 @@ class ProjectIndexService extends Disposable implements IProjectIndexService {
     }
 
     try {
-      // Discover без фазы scanning в UI — иначе на пустом инкременте мигало 0↔100%.
+      const showScanning = full || this.files.size === 0;
+      if (showScanning) {
+        this.setStatus({
+          phase: 'scanning',
+          processed: 0,
+          total: 0,
+          currentPath: null,
+          error: null,
+        });
+      }
       const discovered = await this.discoverFiles(root);
       if (myRun !== this.runId || this.cancelled) {
         return;
@@ -623,10 +737,14 @@ class ProjectIndexService extends Disposable implements IProjectIndexService {
       const deletedPaths = [...this.files.keys()].filter((path) => !existingPaths.has(path));
 
       // Тихий no-op: idle @ 100%, без persist и без сдвига lastIncrementalAt.
+      // LLM purpose больше не стартует автоматически.
       if (!full && toProcess.length === 0 && deletedPaths.length === 0) {
-        if (this.hasPurposeWork(false)) {
-          this.enqueuePurposeJobs(false);
-        }
+        this.setStatus({
+          phase: 'idle',
+          currentPath: null,
+          processed: 0,
+          total: 0,
+        });
         return;
       }
 
@@ -679,33 +797,18 @@ class ProjectIndexService extends Disposable implements IProjectIndexService {
       }
       await this.persist();
 
-      const llmPurpose =
-        this.sapphireSettingsService.state.globalSettings.projectIndexLlmPurpose !== false;
-      if (llmPurpose) {
-        if (toProcess.length > 0) {
-          // Сразу в purpose, без краткого idle @ 100%.
-          this.setStatus({
-            processed: toProcess.length,
-            total: toProcess.length,
-            currentPath: null,
-          });
-        }
-        this.enqueuePurposeJobs(full);
-      } else {
-        this.setStatus({
-          phase: 'idle',
-          currentPath: null,
-          processed: toProcess.length,
-          total: toProcess.length,
-        });
-      }
+      this.setStatus({
+        phase: 'idle',
+        currentPath: null,
+        processed: toProcess.length,
+        total: toProcess.length,
+      });
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       this.setStatus({ phase: 'error', error: message, currentPath: null });
     } finally {
       if (myRun === this.runId) {
         this.indexRunning = false;
-        // purpose может ещё идти — follow-up после drain (или сейчас, если idle).
         if (!this.purposeRunning) {
           this.flushPendingIncremental();
         }
@@ -1019,28 +1122,21 @@ ${chunkText}`;
         }
       });
 
-      const jsonMatch = fullText.match(/\{[\s\S]*\}/);
-      if (!jsonMatch) {
-        throw new Error('No JSON in purpose response');
-      }
-      const parsed = JSON.parse(jsonMatch[0]) as {
-        purpose?: string;
-        tags?: string[];
-        when_useful?: string;
-      };
+      const parsed = parsePurposeLlmJson(fullText);
       this.files.set(file.path, {
         ...file,
         purpose: (parsed.purpose ?? '').trim() || file.localRole,
         tags: Array.isArray(parsed.tags) ? parsed.tags.map(String).slice(0, 8) : [],
         whenUseful: (parsed.when_useful ?? '').trim() || undefined,
         llmStatus: 'done',
+        error: undefined,
         updatedAt: Date.now(),
       });
     } catch (err) {
       this.files.set(file.path, {
         ...file,
         llmStatus: 'failed',
-        error: err instanceof Error ? err.message : String(err),
+        error: formatProjectIndexError(err),
         updatedAt: Date.now(),
       });
     }

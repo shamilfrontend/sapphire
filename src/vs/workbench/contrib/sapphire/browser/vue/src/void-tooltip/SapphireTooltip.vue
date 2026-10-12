@@ -152,12 +152,14 @@ const tooltipCss = `
 #sapphire-tooltip-green,
 #sapphire-tooltip-provider-info {
   font-size: 12px;
-  padding: 0px 8px;
+  line-height: 16px;
+  padding: 4px 8px;
   border-radius: 6px;
   z-index: 999999;
   max-width: 300px;
   word-wrap: break-word;
   border: 1px solid rgba(100, 100, 100, 0.2);
+  box-shadow: 0 2px 8px var(--vscode-widget-shadow);
   opacity: 1;
 }
 #sapphire-tooltip,
@@ -182,21 +184,6 @@ const tooltipCss = `
   max-width: 280px;
   padding-top: 8px;
   padding-bottom: 8px;
-}
-#sapphire-tooltip-thread {
-  background-color: var(--vscode-editorHoverWidget-background);
-  color: var(--vscode-editorHoverWidget-foreground);
-  border: 1px solid var(--vscode-editorHoverWidget-border);
-  box-shadow: 0 2px 8px var(--vscode-widget-shadow);
-  font-size: 12px;
-  line-height: 16px;
-  padding: 4px 8px;
-  border-radius: 6px;
-  z-index: 999999;
-  max-width: 320px;
-  white-space: normal;
-  word-wrap: break-word;
-  opacity: 1;
 }
 `;
 

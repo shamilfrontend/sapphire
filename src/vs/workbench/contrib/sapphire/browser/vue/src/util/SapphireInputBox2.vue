@@ -489,13 +489,21 @@ watch(isMenuOpen, (open) => {
 
 const isEnabled = ref(true);
 
+/** Подставить initValue в DOM. silent — без onChangeText (hydrate при mount/смене треда). */
+const applyInitValue = (initValue: string | null | undefined, silent: boolean) => {
+  const r = textAreaRef.value;
+  if (!r) return;
+  const val = initValue ?? '';
+  r.value = val;
+  if (!silent) {
+    notifyChangeText(val);
+  }
+  adjustHeight();
+};
+
 const fns: TextAreaFns = {
   setValue: (val) => {
-    const r = textAreaRef.value;
-    if (!r) return;
-    r.value = val;
-    notifyChangeText(r.value);
-    adjustHeight();
+    applyInitValue(val, false);
   },
   enable: () => {
     isEnabled.value = true;
@@ -525,7 +533,12 @@ watch(
   (el) => {
     if (props.fnsRef) props.fnsRef.current = fns;
     syncExternalTextAreaRef(el);
-    adjustHeight();
+    // hydrate после mount: immediate watch initValue раньше бежал до появления ref
+    if (el) {
+      applyInitValue(props.initValue, true);
+    } else {
+      adjustHeight();
+    }
   },
   { flush: 'post' },
 );
@@ -536,12 +549,13 @@ onUnmounted(() => {
   }
 });
 
+// смена initValue после mount (без immediate — Vue игнорирует flush:'post' на первом вызове)
 watch(
   () => props.initValue,
   (initValue) => {
-    if (initValue) fns.setValue(initValue);
+    applyInitValue(initValue, true);
   },
-  { immediate: true, flush: 'post' },
+  { flush: 'post' },
 );
 
 defineExpose({

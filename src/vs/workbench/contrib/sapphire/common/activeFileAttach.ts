@@ -19,12 +19,12 @@ export const uriAlreadyInSelections = (
   );
 };
 
-/** Без untitled — только URI, читаемые через fileService. */
+/** Только file / vscode-remote — без untitled и виртуальных вкладок (void://settings и т.п.). */
 export const isAttachableActiveFileUri = (uri: URI | null | undefined): uri is URI => {
   if (!uri) {
     return false;
   }
-  if (uri.scheme === 'untitled') {
+  if (uri.scheme !== 'file' && uri.scheme !== 'vscode-remote') {
     return false;
   }
   return !!uri.fsPath;
@@ -32,7 +32,7 @@ export const isAttachableActiveFileUri = (uri: URI | null | undefined): uri is U
 
 /**
  * Добавить активный файл в staging (как @ / Ctrl+L).
- * `selns` не мутируется. No-op при disabled, omit, untitled или если уже есть.
+ * `selns` не мутируется. No-op при disabled, omit, non-file URI или если уже есть.
  */
 export const mergeActiveFileSelection = (
   selns: StagingSelectionItem[] | null | undefined,

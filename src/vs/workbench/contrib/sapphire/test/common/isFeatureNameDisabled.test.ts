@@ -68,4 +68,28 @@ suite('isFeatureNameDisabled / isProviderNameDisabled', () => {
 
     assert.strictEqual(isFeatureNameDisabled('Chat', state), 'addProvider');
   });
+
+  test('isProviderNameDisabled when isEnabled is false', () => {
+    const state = baseState();
+    state.settingsOfProvider.openAI.isEnabled = false;
+    state.settingsOfProvider.openAI.models = [
+      { modelName: 'gpt-4o', type: 'default', isHidden: false },
+    ];
+
+    assert.strictEqual(isProviderNameDisabled('openAI', state), 'providerDisabled');
+  });
+
+  test('isFeatureNameDisabled when selected provider is disabled', () => {
+    const state = baseState();
+    state.settingsOfProvider.openAI.isEnabled = false;
+    state.settingsOfProvider.openAI.models = [
+      { modelName: 'gpt-4o', type: 'default', isHidden: false },
+    ];
+    (state as any).modelSelectionOfFeature = {
+      ...state.modelSelectionOfFeature,
+      Chat: { providerName: 'openAI', modelName: 'gpt-4o' },
+    };
+
+    assert.strictEqual(isFeatureNameDisabled('Chat', state), 'providerDisabled');
+  });
 });

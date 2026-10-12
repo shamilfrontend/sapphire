@@ -157,7 +157,7 @@ MenuRegistry.appendMenuItems([
       group: '2_pane_toggles',
       command: {
         id: ToggleAuxiliaryBarAction.ID,
-        title: localize('toggleSecondarySideBar', 'PPR Assistant'),
+        title: localize('toggleSecondarySideBar', 'Чат'),
         toggled: { condition: AuxiliaryBarVisibleContext, icon: auxiliaryBarOnIcon },
         icon: auxiliaryBarOffIcon,
       },
@@ -177,7 +177,7 @@ MenuRegistry.appendMenuItems([
       group: '2_pane_toggles',
       command: {
         id: ToggleAuxiliaryBarAction.ID,
-        title: localize('toggleSecondarySideBar', 'PPR Assistant'),
+        title: localize('toggleSecondarySideBar', 'Чат'),
         toggled: { condition: AuxiliaryBarVisibleContext, icon: auxiliaryBarOnIcon },
         icon: auxiliaryBarOffIcon,
       },

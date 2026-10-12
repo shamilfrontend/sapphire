@@ -59,8 +59,25 @@ suite('activeFileAttach', () => {
       );
     });
 
-    test('accepts file uri', () => {
+    test('rejects void settings and other virtual schemes', () => {
+      assert.strictEqual(
+        isAttachableActiveFileUri(URI.from({ scheme: 'void', path: 'settings' })),
+        false,
+      );
+      assert.strictEqual(
+        isAttachableActiveFileUri(URI.from({ scheme: 'vscode-settings', path: 'settings' })),
+        false,
+      );
+    });
+
+    test('accepts file and vscode-remote uris', () => {
       assert.strictEqual(isAttachableActiveFileUri(fileA), true);
+      assert.strictEqual(
+        isAttachableActiveFileUri(
+          URI.from({ scheme: 'vscode-remote', authority: 'ssh-remote+host', path: '/proj/a.ts' }),
+        ),
+        true,
+      );
     });
   });
 
@@ -120,6 +137,18 @@ suite('activeFileAttach', () => {
       const out = mergeActiveFileSelection(
         [],
         { uri: untitled, language: 'plaintext' },
+        {
+          enabled: true,
+        },
+      );
+      assert.deepStrictEqual(out, []);
+    });
+
+    test('skips void settings', () => {
+      const settingsUri = URI.from({ scheme: 'void', path: 'settings' });
+      const out = mergeActiveFileSelection(
+        [],
+        { uri: settingsUri, language: 'plaintext' },
         {
           enabled: true,
         },

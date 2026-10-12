@@ -36,6 +36,7 @@ type ModelRow = SapphireStatefulModelInfo & {
 type ModelProviderGroup = {
   providerName: ProviderName;
   providerTitle: string;
+  isEnabled: boolean;
   rows: ModelRow[];
 };
 
@@ -70,6 +71,7 @@ const modelSections = computed<ModelSection[]>(() => {
       providerGroups.push({
         providerName,
         providerTitle: providerTitleOf(providerName),
+        isEnabled: providerSettings.isEnabled !== false,
         rows,
       });
     }
@@ -100,9 +102,14 @@ const hasOverrides = (providerName: ProviderName, modelName: string) =>
     <section v-for="section in modelSections" :key="section.id" class="mb-4">
       <h3 class="text-sm uppercase tracking-wide text-void-fg-3 px-3 pt-2 pb-1">{{ section.title }}</h3>
 
-      <div v-for="provider in section.providers" :key="provider.providerName">
-        <div class="text-sm text-void-fg-3 px-3 pt-4 pb-1">
-          {{ provider.providerTitle }}
+      <div
+        v-for="provider in section.providers"
+        :key="provider.providerName"
+        :class="provider.isEnabled ? '' : 'opacity-60'"
+      >
+        <div class="text-sm text-void-fg-3 px-3 pt-4 pb-1 flex items-center gap-2">
+          <span>{{ provider.providerTitle }}</span>
+          <span v-if="!provider.isEnabled" class="text-xs">(выключен)</span>
         </div>
         <div v-for="m in provider.rows" :key="`${m.modelName}${m.providerName}`">
           <div
