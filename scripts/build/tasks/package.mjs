@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { createRequire } from 'node:module';
+import { execFileSync } from 'node:child_process';
 
 import { buildRoot, getVersion, product, repoRoot, rootPackageJson } from '../constants.mjs';
 import { copyPatterns, ensureDir, rimraf, writeText } from '../fileUtils.mjs';
@@ -238,6 +239,91 @@ function getDesktopResourcesPath(destinationRoot, platform) {
   return path.join(destinationRoot, 'resources');
 }
 
+function resolveDarwinAppBundle(destinationRoot) {
+  const expectedBundleName = `${product.nameLong}.app`;
+  const expectedBundlePath = path.join(destinationRoot, expectedBundleName);
+  if (fs.existsSync(expectedBundlePath)) {
+    return expectedBundlePath;
+  }
+
+  const appBundles = fs
+    .readdirSync(destinationRoot, { withFileTypes: true })
+    .filter((entry) => entry.isDirectory() && entry.name.endsWith('.app'))
+    .map((entry) => entry.name);
+
+  if (appBundles.length === 0) {
+    return expectedBundlePath;
+  }
+
+  const runtimeBundlePath = path.join(destinationRoot, appBundles[0]);
+  if (runtimeBundlePath !== expectedBundlePath) {
+    fs.renameSync(runtimeBundlePath, expectedBundlePath);
+  }
+  return expectedBundlePath;
+}
+
+function applyDarwinBundleBranding(appBundlePath) {
+  const sourceIconPath = path.join(repoRoot, 'resources', 'darwin', 'code.icns');
+  const bundleIconPath = path.join(appBundlePath, 'Contents', 'Resources', 'electron.icns');
+  const plistPath = path.join(appBundlePath, 'Contents', 'Info.plist');
+  const macOsRoot = path.join(appBundlePath, 'Contents', 'MacOS');
+
+  if (fs.existsSync(sourceIconPath) && fs.existsSync(bundleIconPath)) {
+    fs.copyFileSync(sourceIconPath, bundleIconPath);
+  }
+
+  if (fs.existsSync(macOsRoot)) {
+    const oldExecutablePath = path.join(macOsRoot, 'Electron');
+    const newExecutablePath = path.join(macOsRoot, product.nameLong);
+    if (fs.existsSync(oldExecutablePath) && !fs.existsSync(newExecutablePath)) {
+      fs.renameSync(oldExecutablePath, newExecutablePath);
+    }
+  }
+
+  if (fs.existsSync(plistPath)) {
+    const plistSet = (key, value) => {
+      try {
+        execFileSync('/usr/libexec/PlistBuddy', ['-c', `Set :${key} ${value}`, plistPath], {
+          stdio: 'ignore',
+        });
+      } catch {
+        execFileSync('/usr/libexec/PlistBuddy', ['-c', `Add :${key} string ${value}`, plistPath], {
+          stdio: 'ignore',
+        });
+      }
+    };
+
+    plistSet('CFBundleName', product.nameLong);
+    plistSet('CFBundleDisplayName', product.nameLong);
+    plistSet('CFBundleExecutable', product.nameLong);
+    plistSet('CFBundleIdentifier', product.darwinBundleIdentifier);
+  }
+}
+
+async function applyCurrentTimestamps(rootPath) {
+  const now = new Date();
+  const queue = [rootPath];
+
+  while (queue.length > 0) {
+    const current = queue.shift();
+    if (!current) {
+      continue;
+    }
+
+    const stat = await fs.promises.lstat(current);
+    if (!stat.isSymbolicLink()) {
+      await fs.promises.utimes(current, now, now);
+    }
+
+    if (stat.isDirectory()) {
+      const entries = await fs.promises.readdir(current, { withFileTypes: true });
+      for (const entry of entries) {
+        queue.push(path.join(current, entry.name));
+      }
+    }
+  }
+}
+
 async function downloadDesktopRuntime(destinationRoot, platform, arch) {
   let lastError;
   for (let attempt = 1; attempt <= 3; attempt += 1) {
@@ -307,6 +393,11 @@ async function populateDesktopAppFolder({ appRoot, sourceRoot }) {
   });
   await copyProductionDependenciesToApp(appRoot);
   await writeBuildManifests(appRoot, 'package.json');
+  // ESM bootstrap chunks under out/chunks load "../product.json" and "../package.json",
+  // which resolves relative to out/chunks => out/*.json in packaged desktop builds.
+  await ensureDir(path.join(appRoot, 'out'));
+  fs.copyFileSync(path.join(appRoot, 'product.json'), path.join(appRoot, 'out', 'product.json'));
+  fs.copyFileSync(path.join(appRoot, 'package.json'), path.join(appRoot, 'out', 'package.json'));
 }
 
 async function ensureDesktopExecutableAlias(destinationRoot, platform) {
@@ -357,11 +448,17 @@ export async function packageDesktopTask({ platform, arch, minified }) {
   await ensureDir(destinationRoot);
 
   await downloadDesktopRuntime(destinationRoot, platform, arch);
+  let darwinAppBundlePath;
+  if (platform === 'darwin') {
+    darwinAppBundlePath = resolveDarwinAppBundle(destinationRoot);
+    applyDarwinBundleBranding(darwinAppBundlePath);
+  }
   const resourcesPath = getDesktopResourcesPath(destinationRoot, platform);
   const appRoot = path.join(resourcesPath, 'app');
   await rimraf(appRoot);
   await populateDesktopAppFolder({ appRoot, sourceRoot });
   await ensureDesktopExecutableAlias(destinationRoot, platform);
+  await applyCurrentTimestamps(destinationRoot);
 }
 
 export async function packageRehTask({ platform, arch, minified, withWeb }) {

@@ -202,6 +202,139 @@ async function runViteBundle(config) {
   await viteBuild(config);
 }
 
+async function restoreDesktopCssEntrypoints(outDir) {
+  const cssMappings = [
+    {
+      source: path.join(outDir, 'media', 'workbench.desktop.css'),
+      target: path.join(outDir, 'vs', 'workbench', 'workbench.desktop.main.css'),
+    },
+    {
+      source: path.join(outDir, 'media', 'processExplorerMain.css'),
+      target: path.join(
+        outDir,
+        'vs',
+        'code',
+        'electron-sandbox',
+        'processExplorer',
+        'processExplorerMain.css',
+      ),
+    },
+  ];
+
+  for (const { source, target } of cssMappings) {
+    if (!fs.existsSync(source)) {
+      continue;
+    }
+    await fs.promises.mkdir(path.dirname(target), { recursive: true });
+    await fs.promises.copyFile(source, target);
+  }
+}
+
+async function normalizeDesktopCodiconFontUrls(outDir) {
+  const mediaDir = path.join(outDir, 'media');
+  if (!fs.existsSync(mediaDir)) {
+    return;
+  }
+
+  const cssFiles = (await fs.promises.readdir(mediaDir))
+    .filter((name) => name.endsWith('.css'))
+    .map((name) => path.join(mediaDir, name));
+
+  const absoluteCodiconUrlPattern = /url\((['"]?)\/media\/codicon\.ttf(\?[^'")]+)?\1\)/g;
+  for (const cssFile of cssFiles) {
+    const content = await fs.promises.readFile(cssFile, 'utf8');
+    const patched = content.replace(
+      absoluteCodiconUrlPattern,
+      (_match, quote = '', query = '') => `url(${quote}./codicon.ttf${query}${quote})`,
+    );
+    if (patched !== content) {
+      await fs.promises.writeFile(cssFile, patched, 'utf8');
+    }
+  }
+}
+
+async function hoistLazyWidgetCssIntoStartupCss(outDir) {
+  const mediaDir = path.join(outDir, 'media');
+  const source = path.join(mediaDir, 'contextmenu.css');
+  if (!fs.existsSync(source)) {
+    return;
+  }
+
+  // Vite с cssCodeSplit кладёт CSS модулей, которые импортируют и стартовый бандл,
+  // и ленивый чанк contextmenu, только в media/contextmenu.css. Там оказываются
+  // базовые стили списка (position:absolute у строк), экшн-бара (display:flex)
+  // и скроллбаров. Пока чанк не загружен, тулбар стоит столбиком, а строки дерева
+  // накладываются. Стартовый CSS должен содержать эти правила сразу.
+  const marker = '/* sapphire-hoisted-contextmenu-css */';
+  const extra = await fs.promises.readFile(source, 'utf8');
+  const targets = ['workbench.desktop.css', 'processExplorerMain.css']
+    .map((name) => path.join(mediaDir, name))
+    .filter((filePath) => fs.existsSync(filePath));
+
+  for (const cssFile of targets) {
+    const content = await fs.promises.readFile(cssFile, 'utf8');
+    if (content.includes(marker)) {
+      continue;
+    }
+    await fs.promises.writeFile(cssFile, `${marker}\n${extra}\n${content}`, 'utf8');
+  }
+}
+
+async function ensureCodiconBaseRulesInDesktopCss(outDir) {
+  const mediaDir = path.join(outDir, 'media');
+  const targets = ['workbench.desktop.css', 'processExplorerMain.css']
+    .map((name) => path.join(mediaDir, name))
+    .filter((filePath) => fs.existsSync(filePath));
+
+  if (targets.length === 0) {
+    return;
+  }
+
+  const codiconSourceDir = path.join(
+    repoRoot,
+    'src',
+    'vs',
+    'base',
+    'browser',
+    'ui',
+    'codicons',
+    'codicon',
+  );
+  const sourceFiles = ['codicon.css', 'codicon-modifiers.css']
+    .map((name) => path.join(codiconSourceDir, name))
+    .filter((filePath) => fs.existsSync(filePath));
+
+  if (sourceFiles.length === 0) {
+    return;
+  }
+
+  // Базовое правило `.codicon[class*='codicon-'] { font: ...16px/1 codicon; ... }`
+  // и @font-face живут в codicon.css. При vite-сборке с cssCodeSplit они уходят
+  // в ленивый чанк (media/contextmenu.css) и не грузятся на старте, из-за чего
+  // codicon-иконки рендерятся системным шрифтом как «tofu»-боксы. Внедряем их
+  // напрямую в стартовые CSS, нормализуя url шрифта до ./codicon.ttf.
+  const relativeCodiconUrlPattern = /url\((['"]?)\.\/codicon\.ttf(\?[^'")]+)?\1\)/g;
+  const codiconBaseBlockParts = [];
+  for (const sourceFile of sourceFiles) {
+    const raw = await fs.promises.readFile(sourceFile, 'utf8');
+    codiconBaseBlockParts.push(
+      raw.replace(relativeCodiconUrlPattern, (_match, quote = '') => `url(${quote}./codicon.ttf${quote})`),
+    );
+  }
+  const codiconBaseBlock = `${codiconBaseBlockParts.join('\n')}\n`;
+
+  const baseRulePattern = /\.codicon\[class\*=['"]codicon-['"]\]\s*\{[^}]*16px\/1 codicon/;
+
+  for (const cssFile of targets) {
+    const content = await fs.promises.readFile(cssFile, 'utf8');
+    if (baseRulePattern.test(content)) {
+      continue;
+    }
+
+    await fs.promises.writeFile(cssFile, `${codiconBaseBlock}${content}`, 'utf8');
+  }
+}
+
 export async function transpileClientViteTask() {
   const input = entryListToInput([buildFile.codeWeb, ...buildFile.keyboardMaps]);
   const outDir = path.join(repoRoot, 'out');
@@ -250,6 +383,10 @@ export async function bundleDesktopTask(minify = false) {
       mapper: createDesktopMapper(),
     }),
   );
+  await normalizeDesktopCodiconFontUrls(outDir);
+  await hoistLazyWidgetCssIntoStartupCss(outDir);
+  await ensureCodiconBaseRulesInDesktopCss(outDir);
+  await restoreDesktopCssEntrypoints(outDir);
   await mapResourcePatterns(desktopResourcePatterns, outDir);
 }
 

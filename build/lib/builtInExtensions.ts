@@ -48,7 +48,11 @@ function log(...messages: string[]): void {
 
 function remapDirname(mapper: (dirname: string) => string): Stream {
   return es.mapSync((f: any) => {
-    f.dirname = mapper(f.dirname || '');
+    const currentDir = f.dirname || '';
+    const relativeDir = path.isAbsolute(currentDir) ? path.relative(f.base, currentDir) : currentDir;
+    const nextDir = mapper(relativeDir);
+    f.base = f.cwd;
+    f.path = path.resolve(f.cwd, nextDir, f.basename);
     return f;
   });
 }

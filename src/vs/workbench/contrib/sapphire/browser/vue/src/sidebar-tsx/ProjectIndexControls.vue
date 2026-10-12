@@ -88,7 +88,7 @@ const projectIndexService = accessor.get('IProjectIndexService');
 const workspaceService = accessor.get('IWorkspaceContextService');
 const status = useProjectIndexStatus();
 const open = ref(false);
-const hasWorkspace = ref(workspaceService.getWorkspace().folders.length > 0);
+const hasWorkspace = ref((workspaceService.getWorkspace().folders ?? []).length > 0);
 
 const reference = ref<HTMLElement | null>(null);
 const floating = ref<HTMLElement | null>(null);
@@ -109,7 +109,7 @@ const { x, y, strategy, update } = useFloating(reference, floating, {
 });
 
 const syncWorkspace = () => {
-  hasWorkspace.value = workspaceService.getWorkspace().folders.length > 0;
+  hasWorkspace.value = (workspaceService.getWorkspace().folders ?? []).length > 0;
 };
 
 let workspaceDisposable: { dispose: () => void } | undefined;
@@ -184,8 +184,9 @@ const kindEntries = computed(() => {
   return Object.entries(byKind);
 });
 
+const indexErrors = computed(() => status.value.errors ?? []);
 const errorPaths = computed(() =>
-  status.value.errors
+  indexErrors.value
     .slice(0, 5)
     .map((e) => e.path)
     .join(', '),
@@ -318,7 +319,7 @@ const errorPaths = computed(() =>
         <span v-for="[k, v] in kindEntries" :key="k" class="mr-2">{{ k }}: {{ v }}</span>
       </div>
 
-      <div v-if="status.errors.length > 0" class="mb-3 text-[11px] text-red-400">
+      <div v-if="indexErrors.length > 0" class="mb-3 text-[11px] text-red-400">
         Ошибки: {{ errorPaths }}
       </div>
 

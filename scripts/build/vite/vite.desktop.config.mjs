@@ -7,5 +7,8 @@ export function createDesktopViteConfig({ root, input, outDir, minify, mapper })
     outDir,
     minify,
     mapper,
+    define: {
+      'process.env': 'process.env',
+    },
   });
 }

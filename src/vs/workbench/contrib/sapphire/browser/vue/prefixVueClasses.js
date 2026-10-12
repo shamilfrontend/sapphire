@@ -166,7 +166,9 @@ const prefixClassListLiteral = (node) => {
   }
   if (t.isTemplateLiteral(node)) {
     const raw = node.quasis.map((q) => q.value.raw).join('');
-    if (looksLikeClassList(raw) || node.expressions.length > 0) {
+    // Интерполяция сама по себе не делает строку списком классов
+    // (`${count} в очереди` нельзя префиксовать).
+    if (looksLikeClassList(raw)) {
       return withPrefixAdded(node);
     }
   }

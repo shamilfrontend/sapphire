@@ -48,8 +48,8 @@
   --void-danger-muted: color-mix(in srgb, var(--void-danger) 12%, transparent);
   --void-danger-border: color-mix(in srgb, var(--void-danger) 35%, transparent);
 
-  /* DeepSeek dark palette */
-  &.dark {
+  /* DeepSeek dark palette. Класс на корне — void-dark (префикс Tailwind), не dark. */
+  &.void-dark {
     --void-bg-3: #121212;
     --void-bg-2: #1a1a1a;
     --void-bg-1: #2b2b2b;

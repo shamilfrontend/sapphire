@@ -81,7 +81,7 @@ const currentThread = computed(() => {
   return chatThreadsService.getCurrentThread();
 });
 const previousMessages = computed(() => currentThread.value?.messages ?? EMPTY_CHAT_MESSAGES);
-const selections = computed(() => currentThread.value.state.stagingSelections);
+const selections = computed(() => currentThread.value?.state?.stagingSelections ?? []);
 const setSelections = (s: StagingSelectionItem[]) => {
   chatThreadsService.setCurrentThreadState({ stagingSelections: s });
 };

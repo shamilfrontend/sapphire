@@ -355,21 +355,22 @@ export const useChatThreadsStreamState = (threadId: MaybeRefOrGetter<string>) =>
 export const useChatThreadMessageQueue = (threadId: MaybeRefOrGetter<string>) => {
   const accessor = useAccessor();
   const chatThreadsService = accessor.get('IChatThreadService');
-  const queue = ref(chatThreadsService.getMessageQueue(toValue(threadId)));
+  const readQueue = (id: string) => chatThreadsService.getMessageQueue(id) ?? [];
+  const queue = ref(readQueue(toValue(threadId)));
   watch(
     () => toValue(threadId),
     (id) => {
-      queue.value = chatThreadsService.getMessageQueue(id);
+      queue.value = readQueue(id);
     },
   );
   const listener = (threadId_: string) => {
     const id = toValue(threadId);
     if (threadId_ !== id) return;
-    queue.value = [...chatThreadsService.getMessageQueue(id)];
+    queue.value = [...readQueue(id)];
   };
   bindListener(
     () => {
-      queue.value = chatThreadsService.getMessageQueue(toValue(threadId));
+      queue.value = readQueue(toValue(threadId));
       chatThreadsStreamStateListeners.add(listener);
     },
     () => {

@@ -33,7 +33,7 @@ const reasoningView = computed(() => {
   const { reasoningCapabilities } = getModelCapabilities(providerName, modelName, overridesOfModel);
   const { canTurnOffReasoning, reasoningSlider: reasoningBudgetSlider } = reasoningCapabilities || {};
   const modelSelectionOptions =
-    sapphireSettingsState.value.optionsOfModelSelection[props.featureName][providerName]?.[modelName];
+    sapphireSettingsState.value.optionsOfModelSelection[props.featureName]?.[providerName]?.[modelName];
   const isReasoningEnabled = getIsReasoningEnabledState(
     props.featureName,
     providerName,
@@ -52,13 +52,16 @@ const reasoningView = computed(() => {
 const effortView = computed(() => {
   const view = reasoningView.value;
   if (!view || view.reasoningBudgetSlider?.type !== 'effort_slider') return null;
-  const { values, default: defaultVal } = view.reasoningBudgetSlider;
+  const values = view.reasoningBudgetSlider.values ?? [];
+  if (values.length === 0) return null;
+  const defaultVal = view.reasoningBudgetSlider.default;
   const min = view.canTurnOffReasoning ? -1 : 0;
   const max = values.length - 1;
+  const featureOptions = sapphireSettingsState.value.optionsOfModelSelection[props.featureName];
   const currentEffort =
-    sapphireSettingsState.value.optionsOfModelSelection[props.featureName][view.selection.providerName]?.[
-      view.selection.modelName
-    ]?.reasoningEffort ?? defaultVal;
+    featureOptions?.[view.selection.providerName]?.[view.selection.modelName]?.reasoningEffort ??
+    defaultVal ??
+    '';
   const valueIfOff = -1;
   const value = view.isReasoningEnabled && currentEffort ? values.indexOf(currentEffort) : valueIfOff;
   const effortLabelRu: Record<string, string> = {

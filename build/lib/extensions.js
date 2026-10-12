@@ -90,7 +90,15 @@ function ensureBufferContents() {
 }
 function remapDirname(mapper) {
     return event_stream_1.default.mapSync((f) => {
-        f.dirname = mapper(f.dirname || '');
+        // Vinyl dirname is absolute. Склеивать его со строкой `extensions/<name>/`
+        // нельзя: path.relative потом уезжает в `.build/Users/...` вместо `.build/extensions`.
+        const currentDir = f.dirname || '';
+        const relativeDir = path_1.default.isAbsolute(currentDir)
+            ? path_1.default.relative(f.base, currentDir)
+            : currentDir;
+        const nextDir = mapper(relativeDir);
+        f.base = f.cwd;
+        f.path = path_1.default.resolve(f.cwd, nextDir, f.basename);
         return f;
     });
 }
@@ -188,13 +196,17 @@ function fromLocalWebpack(extensionPath, webpackConfigFileName, disableMangle) {
                 (0, fancy_log_1.default)(`Bundled extension: ${ansi_colors_1.default.yellow(path_1.default.join(path_1.default.basename(extensionPath), path_1.default.relative(extensionPath, webpackConfigPath)))}...`);
                 if (err) {
                     result.emit('error', err);
+                    return;
                 }
                 const { compilation } = stats;
                 if (compilation.errors.length > 0) {
                     result.emit('error', compilation.errors.join('\n'));
+                    return;
                 }
                 if (compilation.warnings.length > 0) {
-                    result.emit('error', compilation.warnings.join('\n'));
+                    for (const warning of compilation.warnings) {
+                        console.warn(warning);
+                    }
                 }
             };
             const exportedConfig = require(webpackConfigPath);

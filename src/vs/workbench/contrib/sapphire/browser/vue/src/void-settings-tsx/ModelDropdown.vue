@@ -47,7 +47,7 @@ const memoizedOptions = ref<ModelOption[]>([]);
 const syncOptions = () => {
   const oldOptions = oldOptionsRef.value;
   const state = settingsState.value;
-  const newOptions = state._modelOptions.filter((o) =>
+  const newOptions = (state._modelOptions ?? []).filter((o) =>
     filter(o.selection, {
       chatMode: state.globalSettings.chatMode,
       overridesOfModel: state.overridesOfModel,
@@ -69,7 +69,7 @@ const selectedOption = computed(() => {
   const selection = state.modelSelectionOfFeature[props.featureName];
   const options = memoizedOptions.value;
   if (!selection) return options[0];
-  return state._modelOptions.find((v) => modelSelectionsEqual(v.selection, selection))!;
+  return (state._modelOptions ?? []).find((v) => modelSelectionsEqual(v.selection, selection))!;
 });
 
 const onChangeOption = (newOption: ModelOption) => {

@@ -75,6 +75,7 @@ const autoActiveSelection = ref<StagingSelectionItem | null>(null);
 const autoAttachEnabled = computed(
   () => settingsState.value.globalSettings.autoAttachActiveFile !== false,
 );
+const selections = computed(() => props.selections ?? []);
 
 // Виртуальная «Активный» метка: файл редактора, если autoAttach и не в omit/heuristics.
 watch(
@@ -94,7 +95,7 @@ watch(
         if (!cancelled) autoActiveSelection.value = null;
         return;
       }
-      if (uriAlreadyInSelections(props.selections, currentURI.fsPath)) {
+      if (uriAlreadyInSelections(selections.value, currentURI.fsPath)) {
         if (!cancelled) autoActiveSelection.value = null;
         return;
       }
@@ -118,11 +119,11 @@ watch(
 );
 
 const autoList = computed(() => (autoActiveSelection.value ? [autoActiveSelection.value] : []));
-const allSelections = computed(() => [...props.selections, ...autoList.value]);
+const allSelections = computed(() => [...selections.value, ...autoList.value]);
 const selectionPathLabels = computed(() =>
   uniquePathLabels(allSelections.value.map((s) => getRelative(s.uri, accessor) ?? s.uri.fsPath)),
 );
-const autoStart = computed(() => props.selections.length);
+const autoStart = computed(() => selections.value.length);
 const autoEnd = computed(() => autoStart.value + autoList.value.length);
 
 const selectionKey = (selection: StagingSelectionItem, i: number) => {

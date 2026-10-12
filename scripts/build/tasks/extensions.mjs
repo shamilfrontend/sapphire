@@ -1,5 +1,6 @@
 import path from 'node:path';
 import { createRequire } from 'node:module';
+import { finished } from 'node:stream/promises';
 import { repoRoot } from '../constants.mjs';
 import { rimraf } from '../fileUtils.mjs';
 import { runCommand, spawnLongRunning, waitForChildren } from '../processUtils.mjs';
@@ -67,16 +68,12 @@ const extensionMediaScripts = [
   'extensions/simple-browser/esbuild-preview.js',
 ];
 
-function streamToPromise(stream) {
-  return new Promise((resolve, reject) => {
-    stream.on('end', resolve);
-    stream.on('finish', resolve);
-    stream.on('error', reject);
-  });
-}
-
 async function runExtensionBuildStream(stream, destination) {
-  await streamToPromise(stream.pipe(vfs.dest(destination)));
+  // vinyl-fs dest — duplex: читаемая сторона может дать `end` до того,
+  // как асинхронные ветки (vsce.listFiles / webpack) допишут файлы.
+  // finished() ждёт закрытия writable-стороны и отклоняется при error.
+  const dest = stream.pipe(vfs.dest(destination));
+  await finished(dest);
 }
 
 export function hasExtensionProject(name) {

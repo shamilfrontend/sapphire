@@ -51,7 +51,13 @@ function ensureBufferContents(): Stream {
 
 function remapDirname(mapper: (dirname: string) => string): Stream {
   return es.mapSync((f: File) => {
-    f.dirname = mapper(f.dirname || '');
+    // Vinyl dirname is absolute. Prefixing it as a string sends files to
+    // `.build/Users/...` instead of `.build/extensions`.
+    const currentDir = f.dirname || '';
+    const relativeDir = path.isAbsolute(currentDir) ? path.relative(f.base, currentDir) : currentDir;
+    const nextDir = mapper(relativeDir);
+    f.base = f.cwd;
+    f.path = path.resolve(f.cwd, nextDir, f.basename);
     return f;
   });
 }

@@ -336,5 +336,48 @@
   performance.mark('code/didLoadWorkbenchMain');
 
   // Load workbench
-  result.main(configuration);
+  const resolveEntrypoint = (
+    moduleValue: unknown,
+  ): ((config: INativeWindowConfiguration) => void) | undefined => {
+    const queue: unknown[] = [moduleValue];
+    const seen = new Set<unknown>();
+
+    while (queue.length > 0) {
+      const candidate = queue.shift();
+      if (!candidate || seen.has(candidate)) {
+        continue;
+      }
+      seen.add(candidate);
+
+      if (typeof candidate === 'function') {
+        return candidate as (config: INativeWindowConfiguration) => void;
+      }
+
+      if (typeof candidate === 'object') {
+        const maybeMain = (candidate as { main?: unknown }).main;
+        if (typeof maybeMain === 'function') {
+          return maybeMain as (config: INativeWindowConfiguration) => void;
+        }
+
+        const maybeDefault = (candidate as { default?: unknown }).default;
+        if (maybeDefault) {
+          queue.push(maybeDefault);
+        }
+
+        for (const value of Object.values(candidate)) {
+          if (value && typeof value === 'object') {
+            queue.push(value);
+          }
+        }
+      }
+    }
+
+    return undefined;
+  };
+
+  const workbenchMain = resolveEntrypoint(result);
+  if (typeof workbenchMain !== 'function') {
+    throw new TypeError('Workbench bootstrap failed: expected main() export.');
+  }
+  workbenchMain(configuration);
 })();

@@ -32,15 +32,20 @@ export function getIconsStyleSheet(themeService: IThemeService | undefined): IIc
       const productIconTheme = themeService
         ? themeService.getProductIconTheme()
         : new UnthemedProductIconTheme();
+      const fallbackIconTheme = new UnthemedProductIconTheme();
       const usedFontIds: { [id: string]: IconFontDefinition } = {};
 
       const rules = new css.Builder();
       const rootAttribs = new css.Builder();
       for (const contribution of iconRegistry.getIcons()) {
         const definition = productIconTheme.getIcon(contribution);
+        const fallbackDefinition = fallbackIconTheme.getIcon(contribution);
         if (!definition) {
           continue;
         }
+
+        // Prefer stable built-in codicon glyphs for runtime reliability.
+        const fontCharacter = fallbackDefinition?.fontCharacter ?? definition.fontCharacter;
 
         const fontContribution = definition.font;
         const fontFamilyVar = css.inline`--vscode-icon-${css.className(contribution.id)}-font-family`;
@@ -48,18 +53,18 @@ export function getIconsStyleSheet(themeService: IThemeService | undefined): IIc
         if (fontContribution) {
           usedFontIds[fontContribution.id] = fontContribution.definition;
           rootAttribs.push(
-            css.inline`${fontFamilyVar}: ${css.stringValue(fontContribution.id)};`,
-            css.inline`${contentVar}: ${css.stringValue(definition.fontCharacter)};`,
+            css.inline`${fontFamilyVar}: 'codicon';`,
+            css.inline`${contentVar}: ${css.stringValue(fontCharacter)};`,
           );
           rules.push(
-            css.inline`.codicon-${css.className(contribution.id)}:before { content: ${css.stringValue(definition.fontCharacter)}; font-family: ${css.stringValue(fontContribution.id)}; }`,
+            css.inline`.codicon-${css.className(contribution.id)}:before { content: ${css.stringValue(fontCharacter)}; font-family: 'codicon'; }`,
           );
         } else {
           rootAttribs.push(
-            css.inline`${contentVar}: ${css.stringValue(definition.fontCharacter)}; ${fontFamilyVar}: 'codicon';`,
+            css.inline`${contentVar}: ${css.stringValue(fontCharacter)}; ${fontFamilyVar}: 'codicon';`,
           );
           rules.push(
-            css.inline`.codicon-${css.className(contribution.id)}:before { content: ${css.stringValue(definition.fontCharacter)}; }`,
+            css.inline`.codicon-${css.className(contribution.id)}:before { content: ${css.stringValue(fontCharacter)}; }`,
           );
         }
       }

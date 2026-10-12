@@ -12,6 +12,7 @@
 // #region --- workbench common
 
 import './workbench.common.main.js';
+import '../base/browser/ui/codicons/codiconStyles.js';
 
 // #endregion
 

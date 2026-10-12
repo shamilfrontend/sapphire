@@ -30,17 +30,21 @@ export function createViteConfig({
   minify,
   mapper,
   root,
+  define,
 }) {
   return {
     root,
     logLevel: 'info',
+    define,
     build: {
       emptyOutDir: true,
       outDir,
       sourcemap: true,
       target: 'es2022',
+      modulePreload: false,
       minify: minify ? 'esbuild' : false,
       rollupOptions: {
+        preserveEntrySignatures: 'exports-only',
         input,
         external: (id) =>
           !id.startsWith('.') && !path.isAbsolute(id) && !id.startsWith('\0'),

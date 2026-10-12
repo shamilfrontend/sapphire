@@ -14,6 +14,7 @@ import { INLSConfiguration } from './vs/nls.js';
 
 const require = createRequire(import.meta.url);
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const runtimeRoot = path.basename(__dirname) === 'chunks' ? path.dirname(__dirname) : __dirname;
 
 // Install a hook to module resolution to map 'fs' to 'original-fs'
 if (process.env.ELECTRON_RUN_AS_NODE || process.versions.electron) {
@@ -48,7 +49,7 @@ if (process.env.VSCODE_DEV) {
   }
 }
 globalThis._VSCODE_PACKAGE_JSON = { ...pkg };
-globalThis._VSCODE_FILE_ROOT = __dirname;
+globalThis._VSCODE_FILE_ROOT = runtimeRoot;
 
 // #region NLS helpers
 

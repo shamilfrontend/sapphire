@@ -64,7 +64,13 @@ function log(...messages) {
 }
 function remapDirname(mapper) {
     return event_stream_1.default.mapSync((f) => {
-        f.dirname = mapper(f.dirname || '');
+        const currentDir = f.dirname || '';
+        const relativeDir = path_1.default.isAbsolute(currentDir)
+            ? path_1.default.relative(f.base, currentDir)
+            : currentDir;
+        const nextDir = mapper(relativeDir);
+        f.base = f.cwd;
+        f.path = path_1.default.resolve(f.cwd, nextDir, f.basename);
         return f;
     });
 }

@@ -100,7 +100,7 @@ const { x, y, strategy } = useFloating(referenceRef, floatingRef, {
 watch(
   () => [props.selectedOption, props.options] as const,
   () => {
-    if (props.options.length === 0) return;
+    if (!props.options?.length) return;
     if (props.selectedOption !== undefined) return;
     changeOption(props.options[0]);
   },
