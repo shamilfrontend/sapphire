@@ -42,8 +42,6 @@ dist
 .tmp2/
 .tool-versions
 /src2/
-src/vs/workbench/contrib/sapphire/browser/react/out/**
-src/vs/workbench/contrib/sapphire/browser/react/src2/**
 
 # VitePress docs
 docs/node_modules/

@@ -83,5 +83,3 @@ import '../common/sapphireModelService.js';
 
 // office (xlsx, docx, pptx, pdf) для чата и tools
 import '../common/officeExtractService.js';
-
-// Jira bridge: localhost + системный браузер

@@ -24,7 +24,6 @@
 | `browser/editCodeService.ts` | Apply / Ctrl+K / diffs |
 | `browser/autocompleteService.ts` | Tab FIM |
 | `browser/sapphireAgentsWindowService.ts` | оверлей Режим Агент |
-| `common/jira/*` | URL Jira/Confluence + мост |
 | `electron-main/llmMessage/sendLLMMessage.impl.ts` | HTTP-клиент Transitcard |
 | `electron-main/mcpChannel.ts` | MCP на main |
 | `browser/vue/.../SapphireOnboarding.vue` | онбординг |

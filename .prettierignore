@@ -64,7 +64,3 @@ docs/.vitepress/dist
 # Template files Prettier cannot parse
 resources/linux/snap/snapcraft.yaml
 **/*@@*
-
-# Generated Sapphire React build output / scratch
-src/vs/workbench/contrib/sapphire/browser/react/out
-src/vs/workbench/contrib/sapphire/browser/react/src2

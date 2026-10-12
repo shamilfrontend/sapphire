@@ -46,26 +46,6 @@ const FIXED_OPENAI_BASE: Partial<Record<ProviderName, string>> = {
 	mistral: 'https://api.mistral.ai/v1',
 };
 
-export const openaiCompatibleProviderNames = [
-	'openAI',
-	'deepseek',
-	'ollama',
-	'vLLM',
-	'openRouter',
-	'openAICompatible',
-	'groq',
-	'xAI',
-	'mistral',
-	'lmStudio',
-	'liteLLM',
-	'googleVertex',
-	'microsoftAzure',
-	'awsBedrock',
-] as const satisfies readonly ProviderName[];
-
-export const isOpenAICompatibleProvider = (providerName: ProviderName): boolean =>
-	(openaiCompatibleProviderNames as readonly string[]).includes(providerName);
-
 const trimSlash = (url: string): string => url.replace(/\/+$/, '');
 
 const withV1 = (endpoint: string): string => {

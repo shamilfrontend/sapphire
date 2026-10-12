@@ -4,8 +4,8 @@
 
 ```text
 src/vs/workbench/contrib/sapphire/
-├── browser/          # UI, actions, React mounts, tools runtime, agent loop
-│   ├── react/src/    # sidebar, settings, onboarding, agents-window, quick-edit
+├── browser/          # UI, actions, Vue mounts, tools runtime, agent loop
+│   ├── vue/src/      # sidebar, settings, onboarding, agents-window, quick-edit
 │   ├── chatThreadAgentLoop.ts
 │   ├── chatThreadCheckpoints.ts
 │   ├── sapphireAgentsWindowService.ts
@@ -28,7 +28,7 @@ Sapphire — Electron-приложение (как VS Code): **main** и **brows
 
 ## Обход CSP / node_modules
 
-1. **Бандить** код в browser (так сделан React).
+1. **Бандить** код в browser (так сделан Vue).
 2. **IPC-канал** main ↔ browser (так сделан `sendLLMMessage`, MCP, office extract).
 
 ## Термины VS Code
