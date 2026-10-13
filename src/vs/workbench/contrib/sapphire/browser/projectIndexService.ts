@@ -51,7 +51,6 @@ import {
   emptyManifest,
   emptyProjectIndexSteps,
   PROJECT_INDEX_DIR_SEGMENTS,
-  PROJECT_INDEX_GITIGNORE_LINE,
   PROJECT_INDEX_SCHEMA_VERSION,
   ProjectIndexChunkRecord,
   ProjectIndexEdgeRecord,
@@ -646,7 +645,8 @@ class ProjectIndexService extends Disposable implements IProjectIndexService {
     } catch {
       /* каталог уже есть */
     }
-    await this.ensureGitignore(root);
+    // Не мутируем корневой .gitignore пользователя (Wave 5).
+    await this.ensureSapphireIndexGitignore(root);
     const manifest = this.buildManifest();
     if (!manifest) {
       return;
@@ -662,23 +662,20 @@ class ProjectIndexService extends Disposable implements IProjectIndexService {
     this.status = { ...this.status, manifest };
   }
 
-  private async ensureGitignore(root: URI): Promise<void> {
-    const gitignore = joinPath(root, '.gitignore');
+  /** Только `.sapphire/.gitignore` — не трогаем корневой `.gitignore` репозитория. */
+  private async ensureSapphireIndexGitignore(root: URI): Promise<void> {
+    const gitignore = joinPath(root, WORKSPACE_DOT_DIR, '.gitignore');
+    const line = 'index/\n';
     try {
       if (await this.fileService.exists(gitignore)) {
         const cur = (await this.fileService.readFile(gitignore)).value.toString();
-        if (cur.includes(PROJECT_INDEX_GITIGNORE_LINE)) {
+        if (cur.includes('index/')) {
           return;
         }
-        const next = cur.endsWith('\n')
-          ? `${cur}${PROJECT_INDEX_GITIGNORE_LINE}\n`
-          : `${cur}\n${PROJECT_INDEX_GITIGNORE_LINE}\n`;
+        const next = cur.endsWith('\n') ? `${cur}${line}` : `${cur}\n${line}`;
         await this.fileService.writeFile(gitignore, VSBuffer.fromString(next));
       } else {
-        await this.fileService.writeFile(
-          gitignore,
-          VSBuffer.fromString(`${PROJECT_INDEX_GITIGNORE_LINE}\n`),
-        );
+        await this.fileService.writeFile(gitignore, VSBuffer.fromString(line));
       }
     } catch {
       /* игнорируем */
@@ -861,6 +858,23 @@ class ProjectIndexService extends Disposable implements IProjectIndexService {
     size: number,
     existingPaths: Set<string>,
   ): Promise<void> {
+    // Secret paths: не читаем и не пишем chunks (раньше только llmStatus=skipped).
+    if (isSecretPath(relPath)) {
+      this.chunks = this.chunks.filter((c) => c.path !== relPath);
+      this.symbols = this.symbols.filter((s) => s.path !== relPath);
+      this.edges = this.edges.filter((e) => e.fromPath !== relPath);
+      this.files.set(relPath, {
+        path: relPath,
+        mtime,
+        size,
+        kind: kindFromPath(relPath) ?? 'other',
+        hash: `${mtime}:${size}`,
+        localRole: localRoleFromPath(relPath),
+        llmStatus: 'skipped',
+        updatedAt: Date.now(),
+      });
+      return;
+    }
     const kind = kindFromPath(relPath);
     if (!kind) {
       return;
@@ -1177,4 +1191,3 @@ registerAction2(
     }
   },
 );
-

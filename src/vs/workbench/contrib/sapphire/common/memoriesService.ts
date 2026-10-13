@@ -14,6 +14,7 @@ import {
   StorageScope,
   StorageTarget,
 } from '../../../../platform/storage/common/storage.js';
+import { looksLikeSecretMemoryContent } from './agentSecurityPolicy.js';
 import { SAPPHIRE_MEMORIES_STORAGE_KEY } from './storageKeys.js';
 import { MemoryType } from './toolsServiceTypes.js';
 
@@ -114,6 +115,11 @@ class MemoriesService extends Disposable implements IMemoriesService {
     };
     if (!entry.key || !entry.value) {
       throw new Error('save_memory: key and value are required');
+    }
+    if (looksLikeSecretMemoryContent(entry.key, entry.value)) {
+      throw new Error(
+        'save_memory: refusing to store secret-like content (api keys, tokens, passwords)',
+      );
     }
 
     const bucket =

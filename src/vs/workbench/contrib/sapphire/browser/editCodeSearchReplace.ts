@@ -350,12 +350,8 @@ export class EditCodeSearchReplace {
                 const errorMessage =
                   typeof originalBounds === 'string' ? originalBounds : ('Has overlap' as const);
 
-                console.log('--------------Error finding text in code:');
-                console.log('originalFileCode', { originalFileCode });
-                console.log('fullText', { fullText });
-                console.log('error:', errorMessage);
-                console.log('block.orig:', block.orig);
-                console.log('---------');
+                // Не логируем тела файлов / LLM-вывод (утечка содержимого в console).
+                console.warn('Search/replace match failed:', errorMessage);
                 const content = this._errContentOfInvalidStr(errorMessage, block.orig);
                 const resumeFrom = completedSRBlocksCache.length;
                 const retryMsg =

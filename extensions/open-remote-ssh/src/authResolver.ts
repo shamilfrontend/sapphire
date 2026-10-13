@@ -90,7 +90,7 @@ export class RemoteSSHResolver implements vscode.RemoteAuthorityResolver, vscode
     // so let's hardcode the default values here
     const remoteSSHconfig = vscode.workspace.getConfiguration('remote.SSH');
     const enableDynamicForwarding = remoteSSHconfig.get<boolean>('enableDynamicForwarding', true)!;
-    const enableAgentForwarding = remoteSSHconfig.get<boolean>('enableAgentForwarding', true)!;
+    const enableAgentForwarding = remoteSSHconfig.get<boolean>('enableAgentForwarding', false)!;
     const serverDownloadUrlTemplate = remoteSSHconfig.get<string>('serverDownloadUrlTemplate');
     const defaultExtensions = remoteSSHconfig.get<string[]>('defaultExtensions', []);
     const remotePlatformMap = remoteSSHconfig.get<Record<string, string>>('remotePlatform', {});

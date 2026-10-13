@@ -82,3 +82,5 @@ import '../common/sapphireModelService.js';
 
 // office (xlsx, docx, pptx, pdf) для чата и tools
 import '../common/officeExtractService.js';
+// DNS egress checks for browse_url / web tools
+import '../common/webEgressService.js';

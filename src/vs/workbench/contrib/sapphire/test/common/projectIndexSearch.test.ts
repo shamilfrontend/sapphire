@@ -36,6 +36,12 @@ suite('projectIndex', () => {
     assert.strictEqual(shouldSkipPath('src/a.ts'), false);
   });
 
+  test('shouldSkipPath skips secret paths', () => {
+    assert.strictEqual(shouldSkipPath('.env'), true);
+    assert.strictEqual(shouldSkipPath('config/secrets.yaml'), true);
+    assert.strictEqual(shouldSkipPath('certs/server.pem'), true);
+  });
+
   test('parsePurposeLlmJson ignores trailing text after JSON object', () => {
     const parsed = parsePurposeLlmJson(
       '{"purpose":"x","tags":["a"],"when_useful":"y"}\nextra note',

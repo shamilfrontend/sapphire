@@ -100,7 +100,7 @@ export type ShallowDirectoryItem = {
 };
 
 export const approvalTypeOfBuiltinToolName: Partial<{
-  [T in BuiltinToolName]?: 'edits' | 'terminal' | 'MCP tools';
+  [T in BuiltinToolName]?: 'edits' | 'terminal' | 'MCP tools' | 'network';
 }> = {
   create_file_or_folder: 'edits',
   delete_file_or_folder: 'edits',
@@ -111,6 +111,8 @@ export const approvalTypeOfBuiltinToolName: Partial<{
   run_persistent_command: 'terminal',
   open_persistent_terminal: 'terminal',
   kill_persistent_terminal: 'terminal',
+  web_search: 'network',
+  browse_url: 'network',
 };
 
 export type ToolApprovalType = NonNullable<

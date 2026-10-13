@@ -558,6 +558,11 @@ export type GlobalSettings = {
   projectIndexIncludeOffice: boolean;
   /** Разрешить LLM-описания файлов индекса (запуск только вручную из окна индекса). */
   projectIndexLlmPurpose: boolean;
+  /**
+   * Elevated: разрешить agent tools вне корней workspace.
+   * По умолчанию false — path sandbox (см. agentSecurityPolicy.ts).
+   */
+  allowAgentPathsOutsideWorkspace: boolean;
 };
 
 export const defaultGlobalSettings: GlobalSettings = {
@@ -566,17 +571,18 @@ export const defaultGlobalSettings: GlobalSettings = {
   userRules: defaultUserRules,
   skillInstructions: skillInstructionsFromUserSkills(defaultUserSkills),
   userSkills: defaultUserSkills,
-  // Tab-автодополнение включено «из коробки». Пользователь может отключить в Settings.
-  enableAutocomplete: true,
+  // Privacy-by-default: FIM/агент/авто-attach выключены, пока пользователь не включит.
+  enableAutocomplete: false,
   syncApplyToChat: true,
   syncSCMToChat: true,
   enableFastApply: true,
-  chatMode: 'agent',
-  // edits автоодобряем; terminal и MCP — только с подтверждением.
+  chatMode: 'normal',
+  // Правки / terminal / MCP / network — только с подтверждением (безопасный default).
   autoApprove: {
-    edits: true,
+    edits: false,
     terminal: false,
     'MCP tools': false,
+    network: false,
   },
   showInlineSuggestions: true,
   includeToolLintErrors: true,
@@ -585,11 +591,12 @@ export const defaultGlobalSettings: GlobalSettings = {
   disableSystemMessage: false,
   autoAcceptLLMChanges: false,
   playChatNotificationSound: true,
-  autoAttachActiveFile: true,
-  autoRetrieveRelevantFiles: true,
+  autoAttachActiveFile: false,
+  autoRetrieveRelevantFiles: false,
   projectIndexEnabled: true,
   projectIndexIncludeOffice: true,
   projectIndexLlmPurpose: false,
+  allowAgentPathsOutsideWorkspace: false,
 };
 
 export type GlobalSettingName = keyof GlobalSettings;

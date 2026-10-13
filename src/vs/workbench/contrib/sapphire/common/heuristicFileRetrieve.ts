@@ -192,6 +192,10 @@ const STOP_WORDS = new Set(
 
 const EXCLUDED_PATH_PARTS = ['node_modules', '.git', 'dist', 'build', 'out', '.venv', 'vendor'];
 
+/** Имена/фрагменты путей с секретами — не подтягивать в SELECTIONS. */
+const EXCLUDED_SECRET_BASENAME_RE =
+  /(^|\/)(\.env($|\.)|.*credentials.*|.*secrets?.*|.*\.pem$|.*\.key$)/i;
+
 /** Похоже на путь: `/`, `\`, расширение файла или glob `*`. */
 const PATH_LIKE_RE =
   /(?:[A-Za-z0-9_.@-]+[\\/])+[A-Za-z0-9_.@*-]+|[A-Za-z0-9_.@-]+\.[A-Za-z0-9]{1,8}\b|\*[A-Za-z0-9_.@/-]*/g;
@@ -283,7 +287,11 @@ export const textSearchQueriesFromTokens = (tokens: HeuristicQueryToken[]): stri
 };
 
 export const isExcludedHeuristicPath = (fsPath: string): boolean => {
-  const parts = fsPath.split(/[/\\]/).map((p) => p.toLowerCase());
+  const norm = fsPath.replace(/\\/g, '/');
+  if (EXCLUDED_SECRET_BASENAME_RE.test(norm)) {
+    return true;
+  }
+  const parts = norm.split('/').map((p) => p.toLowerCase());
   return EXCLUDED_PATH_PARTS.some((ex) => parts.includes(ex));
 };
 

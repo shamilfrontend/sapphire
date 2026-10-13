@@ -62,7 +62,13 @@ const setLayoutMode = (mode: LayoutMode) => {
 };
 
 const approvalLabel = (approvalType: ToolApprovalType) =>
-  approvalType === 'edits' ? 'правки' : approvalType === 'terminal' ? 'терминал' : 'MCP';
+  approvalType === 'edits'
+    ? 'правки'
+    : approvalType === 'terminal'
+      ? 'терминал'
+      : approvalType === 'network'
+        ? 'сеть'
+        : 'MCP';
 
 const mcpIntro = `
 Use Model Context Protocol to provide Agent mode with more tools.
@@ -293,6 +299,24 @@ const providerSections = [
                         :approvalType="approvalType"
                         :desc="`Автоодобрение: ${approvalLabel(approvalType)}`"
                       />
+                    </div>
+                  </ErrorBoundary>
+
+                  <ErrorBoundary>
+                    <div class="flex items-center gap-x-2">
+                      <SapphireSwitch
+                        size="xs"
+                        :value="settingsState.globalSettings.allowAgentPathsOutsideWorkspace === true"
+                        @change="
+                          sapphireSettingsService.setGlobalSetting(
+                            'allowAgentPathsOutsideWorkspace',
+                            $event,
+                          )
+                        "
+                      />
+                      <span class="text-void-fg-3 text-xs pointer-events-none">
+                        Разрешить пути вне workspace (elevated)
+                      </span>
                     </div>
                   </ErrorBoundary>
 

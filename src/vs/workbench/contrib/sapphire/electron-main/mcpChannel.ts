@@ -28,6 +28,8 @@ import { MCPUserStateOfName } from '../common/sapphireSettingsTypes.js';
 import { MAX_TOOL_ABSOLUTE_TIME } from '../common/prompt/prompts.js';
 import { stableMcpToolName } from '../common/prompt/mcpToolDisclosure.js';
 import { generateUuid } from '../../../../base/common/uuid.js';
+import { buildMcpStdioEnv } from '../common/agentSecurityPolicy.js';
+import { assertMcpServerHttpUrl } from '../common/webEgressPolicy.js';
 
 const getClientConfig = (serverName: string) => ({
   name: `${serverName}-client`,
@@ -199,7 +201,7 @@ export class MCPChannel implements IServerChannel {
     let info: MCPServerNonError;
 
     if (server.url) {
-      const serverUrl = new URL(server.url);
+      const serverUrl = assertMcpServerHttpUrl(server.url);
       // Сначала Streamable HTTP, при ошибке — SSE
       try {
         transport = new StreamableHTTPClientTransport(serverUrl);
@@ -232,14 +234,11 @@ export class MCPChannel implements IServerChannel {
         };
       }
     } else if (server.command) {
-      // console.log('ENV DATA: ', server.env)
+      // Не передаём полный process.env (API keys / secrets) — только allowlist + server.env.
       transport = new StdioClientTransport({
         command: server.command,
         args: server.args,
-        env: {
-          ...server.env,
-          ...process.env,
-        } as Record<string, string>,
+        env: buildMcpStdioEnv(server.env),
       });
 
       await client.connect(transport);
@@ -307,19 +306,35 @@ export class MCPChannel implements IServerChannel {
     const prevServer = this.infoOfClientId[serverName]?.mcpServer;
     // Включение сервера
     if (isOn) {
-      // this.mcpEmitters.serverEvent.onChangeLoading.fire(getLoadingServerObject(serverName, isOn))
-      const clientInfo = await this._createClientUnsafe(
-        this.infoOfClientId[serverName].mcpServerEntryJSON,
-        serverName,
-        isOn,
-      );
-      this.mcpEmitters.serverEvent.onUpdate.fire({
-        response: {
-          name: serverName,
-          newServer: clientInfo.mcpServer,
-          prevServer,
-        },
-      });
+      try {
+        const clientInfo = await this._createClientUnsafe(
+          this.infoOfClientId[serverName].mcpServerEntryJSON,
+          serverName,
+          isOn,
+        );
+        this.infoOfClientId[serverName] = clientInfo;
+        this.mcpEmitters.serverEvent.onUpdate.fire({
+          response: {
+            name: serverName,
+            newServer: clientInfo.mcpServer,
+            prevServer,
+          },
+        });
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        console.warn(`Failed to enable MCP server ${serverName}:`, message);
+        this.mcpEmitters.serverEvent.onUpdate.fire({
+          response: {
+            name: serverName,
+            newServer: {
+              status: 'error',
+              error: message,
+              command: prevServer?.command,
+            },
+            prevServer,
+          },
+        });
+      }
     }
     // Выключение сервера
     else {

@@ -146,6 +146,9 @@ export function kindFromPath(relPath: string): ProjectIndexFileKind | null {
 
 export function shouldSkipPath(relPath: string): boolean {
   const norm = relPath.replace(/\\/g, '/');
+  if (isSecretPath(norm)) {
+    return true;
+  }
   const parts = norm.split('/');
   for (const part of parts) {
     if (SKIP_DIR_NAMES.has(part)) {

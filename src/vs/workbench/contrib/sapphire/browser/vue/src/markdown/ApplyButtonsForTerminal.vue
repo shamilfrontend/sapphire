@@ -20,12 +20,26 @@ defineProps<{
 
 const accessor = useAccessor();
 const terminalToolService = accessor.get('ITerminalToolService');
+const sapphireSettingsService = accessor.get('ISapphireSettingsService');
 
 const isShellRunning = ref(false);
 const interruptToolRef = ref<(() => void) | null>(null);
 
 const onClickSubmit = async (codeStr: string) => {
   if (isShellRunning.value) return;
+  // Тот же путь, что и у agent terminal tools: без autoApprove — явное подтверждение.
+  const autoApproveTerminal =
+    sapphireSettingsService.state.globalSettings.autoApprove.terminal === true;
+  if (!autoApproveTerminal) {
+    const preview = codeStr.length > 400 ? `${codeStr.slice(0, 400)}…` : codeStr;
+    const ok = window.confirm(
+      `Запустить команду в терминале?\n\n${preview}\n\n(Автоодобрение терминала выключено в настройках.)`,
+    );
+    if (!ok) {
+      return;
+    }
+  }
+
   try {
     isShellRunning.value = true;
     const terminalId = await terminalToolService.createPersistentTerminal({ cwd: null });

@@ -3,8 +3,8 @@
  *  Licensed under the Apache License, Version 2.0. See LICENSE.txt for more information.
  *--------------------------------------------------------------------------------------*/
 
-import { Fragment, defineComponent, h, onMounted, onUnmounted, onWatcherCleanup, ref, watch, type PropType, type VNodeChild } from 'vue';
-import { AlertTriangle, Ban, ChevronRight, CircleEllipsis, Hammer } from 'lucide-vue-next';
+import { defineComponent, h, onMounted, onUnmounted, onWatcherCleanup, ref, watch, type PropType, type VNodeChild } from 'vue';
+import { ChevronRight, Hammer } from 'lucide-vue-next';
 import { useAccessor, useChatThreadsState, useChatThreadsStreamState, useSettingsState } from '../util/services.js';
 import { URI } from '../../../../../../../base/common/uri.js';
 import ChatMarkdownRender from '../markdown/ChatMarkdownRender.vue';
@@ -619,6 +619,7 @@ const toolNameToDesc = (toolName: BuiltinToolName, _toolParams: BuiltinToolCallP
     };
   }
 };
+
 export const ToolRequestAcceptRejectButtons = ({
   toolName
 }: {
@@ -670,13 +671,22 @@ export const ToolRequestAcceptRejectButtons = ({
             `
   }, "\n      Отмена\n    ");
   const approvalType = isABuiltinToolName(toolName) ? approvalTypeOfBuiltinToolName[toolName] : 'MCP tools';
+  const approvalDesc =
+    approvalType === 'edits'
+      ? 'правки'
+      : approvalType === 'terminal'
+        ? 'терминал'
+        : approvalType === 'network'
+          ? 'сеть'
+          : 'MCP';
+
   const approvalToggle = approvalType ? h("div", {
     key: approvalType,
     class: "flex items-center ml-2 gap-x-1"
   }, h(ToolApprovalTypeSwitch, {
     size: "xs",
     approvalType: approvalType,
-    desc: `Автоодобрение: ${approvalType}`
+    desc: `Автоодобрение: ${approvalDesc}`
   })) : null;
   return h("div", {
     class: "flex gap-2 mx-0.5 items-center"
