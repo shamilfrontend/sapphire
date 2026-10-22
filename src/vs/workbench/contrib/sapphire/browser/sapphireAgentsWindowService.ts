@@ -1,5 +1,5 @@
 /*--------------------------------------------------------------------------------------
- *  PPR Code — оверлей «Режим Агент» и переключатель в titlebar.
+ *  Sapphire — оверлей «Режим Агент» и переключатель в titlebar.
  *--------------------------------------------------------------------------------------*/
 
 import { Disposable, toDisposable } from '../../../../base/common/lifecycle.js';
@@ -23,9 +23,9 @@ import { mountAgentsWindow } from './vue/out/agents-window-tsx/index.js';
 
 const SAPPHIRE_SET_LAYOUT_MODE_ACTION_ID = 'sapphire.setLayoutMode';
 
-/** Класс `codicon-ppr-agents-window` в titlebar оформлен как pill в titlebarpart.css. */
+/** Класс `codicon-sapphire-agents-window` в titlebar оформлен как pill в titlebarpart.css. */
 const agentsWindowIcon = registerIcon(
-  'ppr-agents-window',
+  'sapphire-agents-window',
   Codicon.linkExternal,
   nls.localize('pprAgentsWindowIcon', 'Режим Агент'),
 );

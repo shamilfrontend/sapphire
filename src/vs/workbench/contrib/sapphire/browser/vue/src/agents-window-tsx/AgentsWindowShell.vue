@@ -1,6 +1,6 @@
 <script setup lang="ts">
 /*--------------------------------------------------------------------------------------
- *  PPR Code — fullscreen Режим Агент (chat-first shell).
+ *  Sapphire — fullscreen Режим Агент (chat-first shell).
  *--------------------------------------------------------------------------------------*/
 
 import { computed, onMounted, onUnmounted, reactive, ref, watch } from 'vue';
@@ -19,7 +19,8 @@ import AgentsReviewPane from './AgentsReviewPane.vue';
 import AgentsPlanPane from './AgentsPlanPane.vue';
 import AgentsThreadTree from './AgentsThreadTree.vue';
 
-const SIDEBAR_KEY = 'ppr.agentsSidebarCollapsed';
+const SIDEBAR_KEY = 'sapphire.agentsSidebarCollapsed';
+const LEGACY_SIDEBAR_KEY = 'ppr.agentsSidebarCollapsed';
 const noDrag = { WebkitAppRegion: 'no-drag' } as CSSProperties;
 
 const workspaceLabel = (workspaceService: {
@@ -36,7 +37,16 @@ const workspaceLabel = (workspaceService: {
 
 const readSidebarCollapsed = (): boolean => {
   try {
-    return localStorage.getItem(SIDEBAR_KEY) === '1';
+    let raw = localStorage.getItem(SIDEBAR_KEY);
+    if (raw === null) {
+      const legacy = localStorage.getItem(LEGACY_SIDEBAR_KEY);
+      if (legacy !== null) {
+        localStorage.setItem(SIDEBAR_KEY, legacy);
+        localStorage.removeItem(LEGACY_SIDEBAR_KEY);
+        raw = legacy;
+      }
+    }
+    return raw === '1';
   } catch {
     return false;
   }
@@ -60,7 +70,6 @@ let workspaceDisposable: { dispose: () => void } | undefined;
 const reviewOpen = ref(false);
 const planFsPath = ref<string | null>(null);
 const selectedFsPath = ref<string | null>(null);
-
 onMounted(() => {
   const update = () => {
     workspace.value = workspaceLabel(workspaceService);
@@ -121,6 +130,7 @@ const toggleSidebar = () => {
   sidebarCollapsed.value = next;
   try {
     localStorage.setItem(SIDEBAR_KEY, next ? '1' : '0');
+    localStorage.removeItem(LEGACY_SIDEBAR_KEY);
   } catch {
     // localStorage недоступен (квота / приватный режим)
   }
@@ -145,7 +155,9 @@ const leaveSettings = () => {
 };
 
 const showPlan = computed(() => !!planFsPath.value && !settingsActive.value);
-const showReview = computed(() => reviewOpen.value && sortedURIs.value.length > 0 && !showPlan.value);
+const showReview = computed(
+  () => reviewOpen.value && sortedURIs.value.length > 0 && !showPlan.value,
+);
 const showSidePane = computed(() => showReview.value || showPlan.value);
 
 const reviewApi = reactive({

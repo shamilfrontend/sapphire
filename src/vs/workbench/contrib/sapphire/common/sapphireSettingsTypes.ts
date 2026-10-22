@@ -344,8 +344,17 @@ export type UserSkill = {
 };
 
 /** Стабильные id shipped UI-скиллов (re-seed при удалении). */
-export const PPR_DEFAULT_SKILL_LANDING_ID = 'ppr-default-skill-landing';
-export const PPR_DEFAULT_SKILL_DASHBOARD_ID = 'ppr-default-skill-dashboard';
+export const SAPPHIRE_DEFAULT_SKILL_LANDING_ID = 'sapphire-default-skill-landing';
+export const SAPPHIRE_DEFAULT_SKILL_DASHBOARD_ID = 'sapphire-default-skill-dashboard';
+
+/** Старые id shipped-скиллов из PPR-сборок; remap в mergeShippedUserSkills. */
+const LEGACY_PPR_DEFAULT_SKILL_LANDING_ID = 'ppr-default-skill-landing';
+const LEGACY_PPR_DEFAULT_SKILL_DASHBOARD_ID = 'ppr-default-skill-dashboard';
+
+const LEGACY_SHIPPED_SKILL_ID_MAP: Readonly<Record<string, string>> = {
+  [LEGACY_PPR_DEFAULT_SKILL_LANDING_ID]: SAPPHIRE_DEFAULT_SKILL_LANDING_ID,
+  [LEGACY_PPR_DEFAULT_SKILL_DASHBOARD_ID]: SAPPHIRE_DEFAULT_SKILL_DASHBOARD_ID,
+};
 
 const LANDING_SKILL_CONTENT = `Когда применять: лендинг, промо, маркетинговая страница, hero, сайт продукта «с улицы».
 Когда не применять: админка, кабинет, таблицы, KPI, формы внутри продукта.
@@ -385,7 +394,7 @@ Gotchas (избегать):
 
 export const defaultUserSkills: UserSkill[] = [
   {
-    id: PPR_DEFAULT_SKILL_LANDING_ID,
+    id: SAPPHIRE_DEFAULT_SKILL_LANDING_ID,
     name: 'Лендинг',
     slug: 'design-landing',
     category: 'design',
@@ -393,7 +402,7 @@ export const defaultUserSkills: UserSkill[] = [
     enabled: false,
   },
   {
-    id: PPR_DEFAULT_SKILL_DASHBOARD_ID,
+    id: SAPPHIRE_DEFAULT_SKILL_DASHBOARD_ID,
     name: 'Дашборд',
     slug: 'design-dashboard',
     category: 'design',
@@ -447,10 +456,23 @@ export const mergeShippedUserSkills = (
   existing: UserSkill[],
   shipped: UserSkill[] = defaultUserSkills,
 ): UserSkill[] => {
-  const normalized = existing.map((s) => normalizeUserSkill(s));
+  const remapped = existing.map((s) => {
+    const nextId = LEGACY_SHIPPED_SKILL_ID_MAP[s.id];
+    return nextId ? { ...s, id: nextId } : s;
+  });
+  // After remap, collapse duplicate ids (legacy + already-migrated).
+  const byId = new Map<string, UserSkill>();
+  for (const s of remapped) {
+    const prev = byId.get(s.id);
+    if (!prev) {
+      byId.set(s.id, s);
+      continue;
+    }
+    byId.set(s.id, { ...prev, enabled: prev.enabled || s.enabled });
+  }
+  const normalized = [...byId.values()].map((s) => normalizeUserSkill(s));
   let next = [...normalized];
-  for (const s of shipped) {
-    const shippedNorm = normalizeUserSkill(s);
+  for (const s of shipped) {    const shippedNorm = normalizeUserSkill(s);
     const idx = next.findIndex((x) => x.id === shippedNorm.id);
     if (idx < 0) {
       next = [shippedNorm, ...next];

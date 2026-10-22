@@ -76,13 +76,13 @@
   background-color: var(--void-bg-3) !important;
 }
 
-.ppr-plan-editor {
+.sapphire-plan-editor {
   position: relative;
   height: 100%;
   width: 100%;
 }
 
-.ppr-plan-editor-monaco {
+.sapphire-plan-editor-monaco {
   position: absolute;
   top: 36px;
   left: 0;
@@ -90,24 +90,24 @@
   bottom: 0;
 }
 
-.ppr-plan-editor-overlay {
+.sapphire-plan-editor-overlay {
   position: absolute;
   inset: 0;
   z-index: 10;
 }
 
-.ppr-plan-editor-mode-preview .ppr-plan-editor-monaco {
+.sapphire-plan-editor-mode-preview .sapphire-plan-editor-monaco {
   pointer-events: none;
   visibility: hidden;
 }
 
-.ppr-plan-editor-mode-preview .ppr-plan-editor-overlay {
+.sapphire-plan-editor-mode-preview .sapphire-plan-editor-overlay {
   pointer-events: auto;
   user-select: text;
   -webkit-user-select: text;
 }
 
-.ppr-plan-editor-mode-markdown .ppr-plan-editor-overlay {
+.sapphire-plan-editor-mode-markdown .sapphire-plan-editor-overlay {
   pointer-events: none;
 }
 
@@ -120,7 +120,7 @@
   .part.titlebar
   > .titlebar-container
   > .titlebar-left
-  > .ppr-project-index-titlebar {
+  > .sapphire-project-index-titlebar {
   position: relative;
   z-index: 2500;
   -webkit-app-region: no-drag;
@@ -135,7 +135,7 @@
   .part.titlebar
   > .titlebar-container
   > .titlebar-left
-  > .ppr-project-index-titlebar
+  > .sapphire-project-index-titlebar
   * {
   -webkit-app-region: no-drag;
 }

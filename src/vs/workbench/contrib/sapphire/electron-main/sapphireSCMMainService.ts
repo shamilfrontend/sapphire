@@ -103,4 +103,20 @@ export class SapphireSCMService implements ISapphireSCMService {
       path,
     );
   }
+
+  async gitChangedFiles(path: string): Promise<string[]> {
+    const useStagedChanges = await hasStagedChanges(path);
+    const args = ['diff', '--name-only'];
+    if (useStagedChanges) {
+      args.push('--staged');
+    }
+    const output = await git(args, path);
+    if (!output) {
+      return [];
+    }
+    return output
+      .split('\n')
+      .map((line) => line.trim().replace(/\\/g, '/').replace(/^"(.*)"$/, '$1'))
+      .filter(Boolean);
+  }
 }

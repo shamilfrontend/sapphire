@@ -27,6 +27,7 @@ import {
   WorkbenchPhase,
 } from '../../../common/contributions.js';
 import { Action2, registerAction2 } from '../../../../platform/actions/common/actions.js';
+import { CommandsRegistry } from '../../../../platform/commands/common/commands.js';
 import { IOfficeExtractService } from '../common/officeExtractService.js';
 import { IConvertToLLMMessageService } from './convertToLLMMessageService.js';
 import { ILLMMessageService } from '../common/sendLLMMessageService.js';
@@ -40,12 +41,21 @@ import {
   formatProjectIndexError,
   isSecretPath,
   kindFromPath,
+  layerFromPath,
   localRoleFromPath,
   parsePurposeLlmJson,
   shouldSkipDirName,
   shouldSkipPath,
 } from '../common/projectIndex/projectIndexAnalyze.js';
 import { searchProjectIndex } from '../common/projectIndex/projectIndexSearch.js';
+import { isScriptPath } from '../common/projectIndex/projectIndexStructure.js';
+import {
+  buildTourPromptInput,
+  buildTourRecord,
+  isTourStale,
+  parseTourLlmJson,
+  PROJECT_INDEX_TOUR_SYSTEM_MESSAGE,
+} from '../common/projectIndex/projectIndexTour.js';
 import {
   EMPTY_PROJECT_INDEX_STATUS,
   emptyManifest,
@@ -62,6 +72,7 @@ import {
   ProjectIndexStepProgress,
   ProjectIndexSteps,
   ProjectIndexSymbolRecord,
+  ProjectIndexTour,
 } from '../common/projectIndex/projectIndexTypes.js';
 import { joinPath } from '../../../../base/common/resources.js';
 import { WORKSPACE_DOT_DIR, isUnderWorkspaceStateDir } from '../common/workspaceDotDir.js';
@@ -69,7 +80,9 @@ import { migrateLegacyWorkspaceDotDir } from './migrateWorkspaceDotDir.js';
 
 export const IProjectIndexService = createDecorator<IProjectIndexService>('projectIndexService');
 
-export const PPR_REINDEX_WORKSPACE_COMMAND_ID = 'ppr.projectIndex.reindex';
+export const SAPPHIRE_REINDEX_WORKSPACE_COMMAND_ID = 'sapphire.projectIndex.reindex';
+/** @deprecated keybindings may still use this; aliased to SAPPHIRE_REINDEX_WORKSPACE_COMMAND_ID */
+export const LEGACY_PPR_REINDEX_WORKSPACE_COMMAND_ID = 'ppr.projectIndex.reindex';
 
 export interface IProjectIndexService {
   readonly _serviceBrand: undefined;
@@ -92,6 +105,9 @@ export interface IProjectIndexService {
   resume(): Promise<void>;
   /** Ручной запуск очереди LLM-описаний (purpose). */
   startPurposeEnrichment(): Promise<void>;
+  getTour(): ProjectIndexTour | null;
+  /** Один LLM-запрос → `.sapphire/index/tour.json`. */
+  generateTour(): Promise<void>;
   cancel(): void;
 }
 
@@ -113,6 +129,7 @@ class ProjectIndexService extends Disposable implements IProjectIndexService {
   private chunks: ProjectIndexChunkRecord[] = [];
   private symbols: ProjectIndexSymbolRecord[] = [];
   private edges: ProjectIndexEdgeRecord[] = [];
+  private tour: ProjectIndexTour | null = null;
   private runId = 0;
   private cancelled = false;
   /** После Cancel пользователя — не стартуем watcher/startIfNeeded до явного reindex. */
@@ -120,6 +137,10 @@ class ProjectIndexService extends Disposable implements IProjectIndexService {
   private debounceTimer: ReturnType<typeof setTimeout> | undefined;
   private purposeQueue: string[] = [];
   private purposeRunning = false;
+  /** Один авто-тур на успешный purpose-batch. */
+  private autoTourScheduledForBatch = false;
+  private tourRunning = false;
+  private tourError: string | null = null;
   private loaded = false;
   /** true, пока идёт discover/analyze (не очередь purpose). */
   private indexRunning = false;
@@ -189,6 +210,10 @@ class ProjectIndexService extends Disposable implements IProjectIndexService {
     return this.edges;
   }
 
+  getTour(): ProjectIndexTour | null {
+    return this.tour;
+  }
+
   search(query: string, pageNumber: number): ProjectIndexSearchHit[] {
     return this.searchPaged(query, pageNumber).hits;
   }
@@ -226,6 +251,10 @@ class ProjectIndexService extends Disposable implements IProjectIndexService {
   async reindexFull(): Promise<void> {
     this.autoIndexPaused = false;
     this.pendingIncremental = false;
+    this.tour = null;
+    this.tourError = null;
+    this.setStatus({ tour: null, tourError: null, tourStale: false });
+    await this.clearTourFile();
     await this.runIndex(true);
   }
 
@@ -254,6 +283,95 @@ class ProjectIndexService extends Disposable implements IProjectIndexService {
     this.enqueuePurposeJobs(false);
   }
 
+  async generateTour(): Promise<void> {
+    if (!this.rootUri()) {
+      return;
+    }
+    if (this.tourRunning) {
+      return;
+    }
+    if (!this.loaded) {
+      await this.loadFromDisk();
+    }
+    if (this.files.size === 0) {
+      this.tourError = 'Index is empty — run indexing first.';
+      this.setStatus({ tourError: this.tourError, tourRunning: false });
+      return;
+    }
+    this.tourRunning = true;
+    this.tourError = null;
+    this.cancelled = false;
+    this.autoIndexPaused = false;
+    this.setStatus({ tourRunning: true, tourError: null });
+    try {
+      const files = this.getFiles();
+      const knownPaths = new Set(files.map((f) => f.path));
+      const user = buildTourPromptInput({ files, edges: this.edges });
+      const modelSelection = this.sapphireSettingsService.state.modelSelectionOfFeature.SCM ?? null;
+      const modelSelectionOptions = modelSelection
+        ? this.sapphireSettingsService.state.optionsOfModelSelection.SCM[modelSelection.providerName]?.[
+            modelSelection.modelName
+          ]
+        : undefined;
+      const overridesOfModel = this.sapphireSettingsService.state.overridesOfModel;
+      const { messages, separateSystemMessage } =
+        this.convertToLLMMessageService.prepareLLMSimpleMessages({
+          simpleMessages: [{ role: 'user', content: user }],
+          systemMessage: PROJECT_INDEX_TOUR_SYSTEM_MESSAGE,
+          modelSelection,
+          featureName: 'SCM',
+        });
+
+      const fullText = await new Promise<string>((resolve, reject) => {
+        const requestId = this.llmMessageService.sendLLMMessage({
+          messagesType: 'chatMessages',
+          featureName: 'SCM',
+          messages,
+          separateSystemMessage,
+          chatMode: null,
+          modelSelection,
+          modelSelectionOptions,
+          overridesOfModel,
+          onText: () => {},
+          onFinalMessage: ({ fullText }) => resolve(fullText),
+          onError: (e) => reject(e),
+          onAbort: () => reject(new Error('aborted')),
+          logging: { loggingName: 'ProjectIndexTour' },
+        });
+        if (!requestId) {
+          reject(new Error('LLM request not started'));
+        }
+      });
+
+      if (this.cancelled) {
+        return;
+      }
+      const steps = parseTourLlmJson(fullText, knownPaths);
+      const purposeDone = [...this.files.values()].filter((f) => f.llmStatus === 'done').length;
+      this.tour = buildTourRecord(steps, {
+        files: this.files.size,
+        edges: this.edges.length,
+        purposeDone,
+      });
+      this.tourError = null;
+      await this.persistTour();
+      this.setStatus({
+        tour: this.tour,
+        tourRunning: false,
+        tourError: null,
+        tourStale: false,
+      });
+    } catch (err) {
+      this.tourError = formatProjectIndexError(err);
+      this.setStatus({ tourRunning: false, tourError: this.tourError });
+    } finally {
+      this.tourRunning = false;
+      if (this.status.tourRunning) {
+        this.setStatus({ tourRunning: false });
+      }
+    }
+  }
+
   cancel(): void {
     this.cancelled = true;
     this.autoIndexPaused = true;
@@ -261,6 +379,7 @@ class ProjectIndexService extends Disposable implements IProjectIndexService {
     this.purposeQueue = [];
     this.pendingIncremental = false;
     this.indexRunning = false;
+    this.tourRunning = false;
     if (this.debounceTimer) {
       clearTimeout(this.debounceTimer);
       this.debounceTimer = undefined;
@@ -268,6 +387,7 @@ class ProjectIndexService extends Disposable implements IProjectIndexService {
     this.setStatus({
       phase: 'idle',
       currentPath: null,
+      tourRunning: false,
     });
   }
 
@@ -275,6 +395,7 @@ class ProjectIndexService extends Disposable implements IProjectIndexService {
     return (
       this.indexRunning ||
       this.purposeRunning ||
+      this.tourRunning ||
       this.status.phase === 'scanning' ||
       this.status.phase === 'analyzing' ||
       this.status.phase === 'purpose'
@@ -506,6 +627,8 @@ class ProjectIndexService extends Disposable implements IProjectIndexService {
       purposePending,
       purposeFailed,
     );
+    const tour = merged.tour !== undefined ? merged.tour : this.tour;
+    const tourStale = isTourStale(tour, manifest?.counts);
     this.status = {
       ...merged,
       percent,
@@ -515,6 +638,10 @@ class ProjectIndexService extends Disposable implements IProjectIndexService {
       manifest,
       recentFiles,
       errors,
+      tour,
+      tourRunning: merged.tourRunning ?? this.tourRunning,
+      tourError: merged.tourError !== undefined ? merged.tourError : this.tourError,
+      tourStale,
     };
     this._onDidChangeStatus.fire(this.status);
   }
@@ -565,6 +692,8 @@ class ProjectIndexService extends Disposable implements IProjectIndexService {
       this.chunks = [];
       this.symbols = [];
       this.edges = [];
+      this.tour = null;
+      this.tourError = null;
       this.setStatus({ ...EMPTY_PROJECT_INDEX_STATUS });
       this.loaded = true;
       return;
@@ -574,10 +703,34 @@ class ProjectIndexService extends Disposable implements IProjectIndexService {
     try {
       const manifestBuf = await this.fileService.readFile(joinPath(dir, 'manifest.json'));
       const manifest = JSON.parse(manifestBuf.value.toString()) as ProjectIndexManifest;
+      if (manifest.schemaVersion !== PROJECT_INDEX_SCHEMA_VERSION) {
+        this.files.clear();
+        this.chunks = [];
+        this.symbols = [];
+        this.edges = [];
+        this.tour = null;
+        this.tourError = null;
+        this.setStatus({
+          phase: 'idle',
+          percent: 0,
+          processed: 0,
+          total: 0,
+          currentPath: null,
+          error: null,
+          manifest: emptyManifest(root.fsPath),
+          tour: null,
+          tourError: null,
+          tourStale: false,
+        });
+        this.loaded = true;
+        return;
+      }
       const files = await this.readJsonl<ProjectIndexFileRecord>(joinPath(dir, 'files.jsonl'));
       this.chunks = await this.readJsonl<ProjectIndexChunkRecord>(joinPath(dir, 'chunks.jsonl'));
       this.symbols = await this.readJsonl<ProjectIndexSymbolRecord>(joinPath(dir, 'symbols.jsonl'));
       this.edges = await this.readJsonl<ProjectIndexEdgeRecord>(joinPath(dir, 'edges.jsonl'));
+      this.tour = await this.readTour(dir);
+      this.tourError = null;
       this.files.clear();
       for (const f of files) {
         this.files.set(f.path, f);
@@ -590,12 +743,16 @@ class ProjectIndexService extends Disposable implements IProjectIndexService {
         currentPath: null,
         error: null,
         manifest,
+        tour: this.tour,
+        tourError: null,
       });
     } catch {
       this.files.clear();
       this.chunks = [];
       this.symbols = [];
       this.edges = [];
+      this.tour = null;
+      this.tourError = null;
       this.setStatus({
         phase: 'idle',
         percent: 0,
@@ -604,6 +761,9 @@ class ProjectIndexService extends Disposable implements IProjectIndexService {
         currentPath: null,
         error: null,
         manifest: emptyManifest(root.fsPath),
+        tour: null,
+        tourError: null,
+        tourStale: false,
       });
     }
     this.loaded = true;
@@ -626,6 +786,48 @@ class ProjectIndexService extends Disposable implements IProjectIndexService {
   private async writeJsonl(uri: URI, rows: unknown[]): Promise<void> {
     const body = rows.map((r) => JSON.stringify(r)).join('\n') + (rows.length ? '\n' : '');
     await this.fileService.writeFile(uri, VSBuffer.fromString(body));
+  }
+
+  private async readTour(dir: URI): Promise<ProjectIndexTour | null> {
+    try {
+      const buf = await this.fileService.readFile(joinPath(dir, 'tour.json'));
+      const parsed = JSON.parse(buf.value.toString()) as ProjectIndexTour;
+      if (!parsed || !Array.isArray(parsed.steps) || parsed.steps.length === 0) {
+        return null;
+      }
+      return parsed;
+    } catch {
+      return null;
+    }
+  }
+
+  private async persistTour(): Promise<void> {
+    const root = this.rootUri();
+    if (!root || !this.tour) {
+      return;
+    }
+    const dir = this.indexDir(root);
+    try {
+      await this.fileService.createFolder(dir);
+    } catch {
+      /* already exists */
+    }
+    await this.fileService.writeFile(
+      joinPath(dir, 'tour.json'),
+      VSBuffer.fromString(JSON.stringify(this.tour, null, 2)),
+    );
+  }
+
+  private async clearTourFile(): Promise<void> {
+    const root = this.rootUri();
+    if (!root) {
+      return;
+    }
+    try {
+      await this.fileService.del(joinPath(this.indexDir(root), 'tour.json'));
+    } catch {
+      /* missing ok */
+    }
   }
 
   private async persist(): Promise<void> {
@@ -869,6 +1071,7 @@ class ProjectIndexService extends Disposable implements IProjectIndexService {
         size,
         kind: kindFromPath(relPath) ?? 'other',
         hash: `${mtime}:${size}`,
+        layer: layerFromPath(relPath),
         localRole: localRoleFromPath(relPath),
         llmStatus: 'skipped',
         updatedAt: Date.now(),
@@ -924,14 +1127,25 @@ class ProjectIndexService extends Disposable implements IProjectIndexService {
         this.chunks.push(...analyzed.chunks);
         this.symbols.push(...analyzed.symbols);
         this.edges.push(...analyzed.edges);
-        const lsSymbols = await this.collectDocumentSymbols(uri);
-        if (lsSymbols.length) {
-          this.symbols = this.symbols.filter((s) => s.path !== relPath);
-          this.symbols.push(...lsSymbols);
-          localRole = localRoleFromPath(
-            relPath,
-            lsSymbols.map((s) => s.symbolName).slice(0, 8),
-          );
+        if (!isScriptPath(relPath)) {
+          const lsSymbols = await this.collectDocumentSymbols(uri);
+          if (lsSymbols.length) {
+            this.symbols = this.symbols.filter((s) => s.path !== relPath);
+            this.symbols.push(...lsSymbols);
+            this.edges = this.edges.filter((e) => !(e.fromPath === relPath && e.type === 'contains'));
+            for (const symbol of lsSymbols) {
+              this.edges.push({
+                fromPath: relPath,
+                toPath: relPath,
+                type: 'contains',
+                toSymbol: symbol.symbolName,
+              });
+            }
+            localRole = localRoleFromPath(
+              relPath,
+              lsSymbols.map((s) => s.symbolName).slice(0, 8),
+            );
+          }
         }
       }
     } catch (err) {
@@ -946,6 +1160,7 @@ class ProjectIndexService extends Disposable implements IProjectIndexService {
       size,
       kind,
       hash,
+      layer: layerFromPath(relPath),
       localRole,
       purpose: unchangedPurpose ? prev.purpose : undefined,
       tags: unchangedPurpose ? prev.tags : undefined,
@@ -1018,6 +1233,7 @@ class ProjectIndexService extends Disposable implements IProjectIndexService {
   }
 
   private enqueuePurposeJobs(forceAll: boolean): void {
+    this.autoTourScheduledForBatch = false;
     this.purposeQueue = [];
     for (const f of this.files.values()) {
       if (f.llmStatus === 'skipped') {
@@ -1033,10 +1249,27 @@ class ProjectIndexService extends Disposable implements IProjectIndexService {
     void this.drainPurposeQueue();
   }
 
+  private scheduleAutoTour(): void {
+    if (this.autoTourScheduledForBatch || this.tourRunning || this.cancelled || this.files.size === 0) {
+      return;
+    }
+    const counts = this.status.manifest?.counts;
+    const snapshot = counts
+      ? { files: counts.files, edges: counts.edges, purposeDone: counts.purposeDone }
+      : null;
+    const missing = !this.tour || !this.tour.steps?.length;
+    if (!missing && !isTourStale(this.tour, snapshot)) {
+      return;
+    }
+    this.autoTourScheduledForBatch = true;
+    void this.generateTour();
+  }
+
   private async drainPurposeQueue(): Promise<void> {
     if (this.purposeRunning) {
       return;
     }
+    const batchSize = this.purposeQueue.length;
     this.purposeRunning = true;
     try {
       while (this.purposeQueue.length && PURPOSE_CONCURRENCY > 0) {
@@ -1071,6 +1304,9 @@ class ProjectIndexService extends Disposable implements IProjectIndexService {
       this.setStatus({ phase: 'idle', currentPath: null });
     } finally {
       this.purposeRunning = false;
+      if (batchSize > 0 && !this.cancelled) {
+        this.scheduleAutoTour();
+      }
       if (!this.indexRunning) {
         this.flushPendingIncremental();
       }
@@ -1160,7 +1396,7 @@ ${chunkText}`;
 registerSingleton(IProjectIndexService, ProjectIndexService, InstantiationType.Eager);
 
 class ProjectIndexWorkbenchContribution extends Disposable implements IWorkbenchContribution {
-  static readonly ID = 'workbench.contrib.ppr.projectIndex';
+  static readonly ID = 'workbench.contrib.sapphire.projectIndex';
 
   constructor(@IProjectIndexService projectIndexService: IProjectIndexService) {
     super();
@@ -1178,9 +1414,9 @@ registerAction2(
   class extends Action2 {
     constructor() {
       super({
-        id: PPR_REINDEX_WORKSPACE_COMMAND_ID,
+        id: SAPPHIRE_REINDEX_WORKSPACE_COMMAND_ID,
         title: {
-          value: localize('ppr.reindex', 'Sapphire: Reindex Workspace'),
+          value: localize('sapphire.reindex', 'Sapphire: Reindex Workspace'),
           original: 'Sapphire: Reindex Workspace',
         },
         f1: true,
@@ -1190,4 +1426,9 @@ registerAction2(
       return accessor.get(IProjectIndexService).reindexFull();
     }
   },
+);
+
+CommandsRegistry.registerCommandAlias(
+  LEGACY_PPR_REINDEX_WORKSPACE_COMMAND_ID,
+  SAPPHIRE_REINDEX_WORKSPACE_COMMAND_ID,
 );

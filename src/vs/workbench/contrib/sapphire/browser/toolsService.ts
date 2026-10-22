@@ -105,6 +105,11 @@ import { IOfficeExtractService } from '../common/officeExtractService.js';
 import { formatOfficePage, officePlainText } from '../common/office/officeDocument.js';
 import { onlineMcpServerNames } from '../common/prompt/mcpToolDisclosure.js';
 import { IProjectIndexService } from './projectIndexService.js';
+import {
+  buildProjectIndexImpact,
+  formatProjectIndexImpact,
+} from '../common/projectIndex/projectIndexImpact.js';
+import { formatTourForAgent, isTourStale } from '../common/projectIndex/projectIndexTour.js';
 
 const MAX_GREP_MATCHES = 300;
 const MAX_DIAGNOSTICS = 500;
@@ -563,6 +568,13 @@ class ToolsService implements IToolsService {
         const pageNumber = validatePageNum(pageNumberUnknown);
         return { query, pageNumber };
       },
+      diff_impact: (params: RawToolParamsObj) => {
+        const paths = validateOptionalStr('paths', params.paths);
+        return { paths };
+      },
+      get_project_tour: (_params: RawToolParamsObj) => {
+        return {};
+      },
       search_for_files: (params: RawToolParamsObj) => {
         const {
           query: queryUnknown,
@@ -944,6 +956,62 @@ class ToolsService implements IToolsService {
         };
       },
 
+      diff_impact: async ({ paths }) => {
+        const changedPaths = (paths ?? '')
+          .split(/[\n,]/)
+          .map((part) => part.trim().replace(/\\/g, '/').replace(/^\.\//, ''))
+          .filter(Boolean);
+        if (changedPaths.length === 0) {
+          return {
+            result: {
+              summary: 'No paths given. Pass workspace-relative paths of the files that changed.',
+              changedPaths: [],
+              affected: [],
+              layers: [],
+            },
+          };
+        }
+        const impact = buildProjectIndexImpact({
+          changedPaths,
+          files: this.projectIndexService.getFiles(),
+          symbols: this.projectIndexService.getSymbols(),
+          edges: this.projectIndexService.getEdges(),
+        });
+        return {
+          result: {
+            summary: formatProjectIndexImpact(impact),
+            changedPaths: impact.changedPaths,
+            affected: impact.affected.map((hit) => ({
+              path: hit.path,
+              symbol: hit.symbol ?? null,
+              via: hit.via,
+              hops: hit.hops,
+            })),
+            layers: impact.layers,
+          },
+        };
+      },
+
+      get_project_tour: async () => {
+        const tour = this.projectIndexService.getTour();
+        const status = this.projectIndexService.getStatus();
+        const summary = formatTourForAgent(tour);
+        const stale =
+          status.tourStale ||
+          isTourStale(tour, status.manifest?.counts);
+        const body =
+          tour && stale
+            ? `${summary}\n\n(Note: tour may be stale vs current index — ask user to regenerate from Project Index if needed.)`
+            : summary;
+        return {
+          result: {
+            summary: body,
+            stepCount: tour?.steps.length ?? 0,
+            stale,
+          },
+        };
+      },
+
       search_for_files: async ({ query: queryStr, isRegex, searchInFolder, pageNumber }) => {
         const cts = new CancellationTokenSource();
         const searchFolders =
@@ -1265,7 +1333,7 @@ class ToolsService implements IToolsService {
                 {
                   type: 'GET',
                   url: `https://html.duckduckgo.com/html/?q=${encodeURIComponent(query)}`,
-                  headers: { 'User-Agent': 'Mozilla/5.0 (compatible; PPRCodeBot/1.0)' },
+                  headers: { 'User-Agent': 'Mozilla/5.0 (compatible; SapphireCodeBot/1.0)' },
                 },
                 cts.token,
               );
@@ -1313,7 +1381,7 @@ class ToolsService implements IToolsService {
               {
                 type: 'GET',
                 url,
-                headers: { 'User-Agent': 'Mozilla/5.0 (compatible; PPRCodeBot/1.0)' },
+                headers: { 'User-Agent': 'Mozilla/5.0 (compatible; SapphireCodeBot/1.0)' },
               },
               cts.token,
             );
@@ -1548,6 +1616,8 @@ class ToolsService implements IToolsService {
           .join('\n');
         return body + nextPageStr(result.hasNextPage);
       },
+      diff_impact: (_params, result) => result.summary,
+      get_project_tour: (_params, result) => result.summary,
       search_for_files: (params, result) =>
         result.uris.map((uri) => uri.fsPath).join('\n') + nextPageStr(result.hasNextPage),
       search_in_file: (params, result) => {

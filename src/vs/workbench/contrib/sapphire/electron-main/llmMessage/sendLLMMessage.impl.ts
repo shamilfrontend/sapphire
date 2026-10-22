@@ -40,7 +40,7 @@ import {
   resolveOpenAICompatibleBaseURL,
   type ProviderConnectionSettings,
 } from '../../common/llmProviderConfig.js';
-import { PPR_LLM_CONNECT_TIMEOUT_MS, PPR_LLM_STREAM_IDLE_MS } from '../../common/llmRetryStatus.js';
+import { SAPPHIRE_LLM_CONNECT_TIMEOUT_MS, SAPPHIRE_LLM_STREAM_IDLE_MS } from '../../common/llmRetryStatus.js';
 import { listAnthropicModels, sendAnthropicChat } from './sendAnthropic.js';
 import { listGeminiModels, sendGeminiChat } from './sendGemini.js';
 import { availableTools, InternalToolInfo } from '../../common/prompt/prompts.js';
@@ -125,9 +125,9 @@ const invalidApiKeyMessage = (providerName: ProviderName) =>
   LLM_ERROR_HINTS.unauthorized(providerTitle(providerName));
 
 /** Максимум попыток при 408/429 (включая первую). */
-const PPR_GATEWAY_MAX_ATTEMPTS = 3;
-const PPR_GATEWAY_DEFAULT_RETRY_MS = 1_000;
-const PPR_GATEWAY_MAX_RETRY_MS = 30_000;
+const SAPPHIRE_GATEWAY_MAX_ATTEMPTS = 3;
+const SAPPHIRE_GATEWAY_DEFAULT_RETRY_MS = 1_000;
+const SAPPHIRE_GATEWAY_MAX_RETRY_MS = 30_000;
 
 const getGatewayErrorHeader = (error: APIError, name: string): string | undefined => {
   const headers = error.headers;
@@ -187,7 +187,7 @@ const withProviderRetries = async <T>(
   };
   opts?.setAborter?.(abortAll);
 
-  for (let attempt = 0; attempt < PPR_GATEWAY_MAX_ATTEMPTS; attempt++) {
+  for (let attempt = 0; attempt < SAPPHIRE_GATEWAY_MAX_ATTEMPTS; attempt++) {
     if (aborted) {
       throw new OpenAI.APIUserAbortError();
     }
@@ -199,18 +199,18 @@ const withProviderRetries = async <T>(
       if (error instanceof OpenAI.APIUserAbortError || aborted) {
         throw error instanceof OpenAI.APIUserAbortError ? error : new OpenAI.APIUserAbortError();
       }
-      if (!isRetryableProviderError(error) || attempt === PPR_GATEWAY_MAX_ATTEMPTS - 1) {
+      if (!isRetryableProviderError(error) || attempt === SAPPHIRE_GATEWAY_MAX_ATTEMPTS - 1) {
         throw error;
       }
 
       const retryAfterSec = getRetryAfterSeconds(error);
       const baseMs =
-        retryAfterSec != null ? retryAfterSec * 1000 : PPR_GATEWAY_DEFAULT_RETRY_MS * 2 ** attempt;
-      const delayMs = Math.min(Math.max(baseMs, 0), PPR_GATEWAY_MAX_RETRY_MS);
+        retryAfterSec != null ? retryAfterSec * 1000 : SAPPHIRE_GATEWAY_DEFAULT_RETRY_MS * 2 ** attempt;
+      const delayMs = Math.min(Math.max(baseMs, 0), SAPPHIRE_GATEWAY_MAX_RETRY_MS);
       // attempt — номер неудачной попытки (0-based); следующая — (attempt+2) из max.
       opts?.onRetry?.({
         attempt: attempt + 2,
-        maxAttempts: PPR_GATEWAY_MAX_ATTEMPTS,
+        maxAttempts: SAPPHIRE_GATEWAY_MAX_ATTEMPTS,
         status: error.status,
         ...(retryAfterSec != null ? { retryAfterSec } : {}),
       });
@@ -666,7 +666,7 @@ const _sendGatewayChat = async ({
 
   withProviderRetries(
     async (signal) => {
-      const connect = withConnectTimeoutSignal(signal, PPR_LLM_CONNECT_TIMEOUT_MS);
+      const connect = withConnectTimeoutSignal(signal, SAPPHIRE_LLM_CONNECT_TIMEOUT_MS);
       try {
         const req = gatewayRequestOptions(connect.signal, requestId, featureName);
         try {
@@ -679,7 +679,7 @@ const _sendGatewayChat = async ({
             throw new LLMConnectTimeoutError();
           }
           if (isStreamOptionsRejected(error)) {
-            const retryConnect = withConnectTimeoutSignal(signal, PPR_LLM_CONNECT_TIMEOUT_MS);
+            const retryConnect = withConnectTimeoutSignal(signal, SAPPHIRE_LLM_CONNECT_TIMEOUT_MS);
             try {
               return await openai.chat.completions.create(
                 options,
@@ -705,7 +705,7 @@ const _sendGatewayChat = async ({
     .then(async (response) => {
       let idleTimedOut = false;
       const idle = createStreamIdleWatchdog({
-        idleMs: PPR_LLM_STREAM_IDLE_MS,
+        idleMs: SAPPHIRE_LLM_STREAM_IDLE_MS,
         onIdle: () => {
           idleTimedOut = true;
           try {

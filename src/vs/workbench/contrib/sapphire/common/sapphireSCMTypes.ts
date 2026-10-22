@@ -31,6 +31,10 @@ export interface ISapphireSCMService {
    * @param path путь к git-репозиторию
    */
   gitLog(path: string): Promise<string>;
+  /**
+   * Пути из git diff --name-only. Если есть staged, берутся только они — как у gitStat.
+   */
+  gitChangedFiles(path: string): Promise<string[]>;
 }
 
 export const ISapphireSCMService = createDecorator<ISapphireSCMService>('sapphireSCMService');

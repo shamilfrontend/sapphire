@@ -5,7 +5,7 @@
 
 import { WORKSPACE_DOT_DIR } from '../workspaceDotDir.js';
 
-export const PROJECT_INDEX_SCHEMA_VERSION = 1;
+export const PROJECT_INDEX_SCHEMA_VERSION = 3;
 export const PROJECT_INDEX_DIR_SEGMENTS = [WORKSPACE_DOT_DIR, 'index'] as const;
 export const PROJECT_INDEX_GITIGNORE_LINE = `${WORKSPACE_DOT_DIR}/index/`;
 
@@ -20,12 +20,25 @@ export type ProjectIndexFileKind =
 
 type ProjectIndexLlmStatus = 'pending' | 'done' | 'failed' | 'skipped';
 
+/** Слой по пути файла, без LLM. */
+export type ProjectIndexLayer =
+  | 'browser'
+  | 'electron-main'
+  | 'common'
+  | 'node'
+  | 'test'
+  | 'docs'
+  | 'other';
+
+export type ProjectIndexEdgeType = 'imports' | 'contains' | 'calls';
+
 export type ProjectIndexFileRecord = {
   path: string;
   mtime: number;
   size: number;
   kind: ProjectIndexFileKind;
   hash: string;
+  layer: ProjectIndexLayer;
   localRole: string;
   purpose?: string;
   tags?: string[];
@@ -47,11 +60,16 @@ export type ProjectIndexSymbolRecord = {
   kind: string;
   startLine: number;
   endLine: number;
+  /** Класс-владелец для method. */
+  owner?: string;
 };
 
 export type ProjectIndexEdgeRecord = {
   fromPath: string;
   toPath: string;
+  type: ProjectIndexEdgeType;
+  fromSymbol?: string;
+  toSymbol?: string;
 };
 
 export type ProjectIndexManifest = {
@@ -70,6 +88,21 @@ export type ProjectIndexManifest = {
     purposePending: number;
     purposeFailed: number;
   };
+};
+
+export type ProjectIndexTourStep = {
+  order: number;
+  title: string;
+  description: string;
+  /** Workspace-relative paths, 1–5. */
+  paths: string[];
+  symbols?: string[];
+};
+
+export type ProjectIndexTour = {
+  generatedAt: number;
+  basedOn: { files: number; edges: number; purposeDone: number };
+  steps: ProjectIndexTourStep[];
 };
 
 type ProjectIndexPhase = 'idle' | 'scanning' | 'analyzing' | 'purpose' | 'error';
@@ -103,6 +136,11 @@ export type ProjectIndexStatus = {
   manifest: ProjectIndexManifest | null;
   recentFiles: ProjectIndexFileRecord[];
   errors: Array<{ path: string; error: string }>;
+  tour: ProjectIndexTour | null;
+  tourRunning: boolean;
+  tourError: string | null;
+  /** basedOn сильно расходится с текущими counts. */
+  tourStale: boolean;
 };
 
 export type ProjectIndexSearchHit = {
@@ -136,6 +174,10 @@ export const EMPTY_PROJECT_INDEX_STATUS: ProjectIndexStatus = {
   manifest: null,
   recentFiles: [],
   errors: [],
+  tour: null,
+  tourRunning: false,
+  tourError: null,
+  tourStale: false,
 };
 
 export function emptyManifest(root: string): ProjectIndexManifest {

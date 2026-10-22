@@ -131,6 +131,8 @@ export type BuiltinToolCallParams = {
   get_dir_tree: { uri: URI };
   search_pathnames_only: { query: string; includePattern: string | null; pageNumber: number };
   search_project_index: { query: string; pageNumber: number };
+  diff_impact: { paths: string | null };
+  get_project_tour: {};
   search_for_files: {
     query: string;
     isRegex: boolean;
@@ -208,6 +210,17 @@ export type BuiltinToolResultType = {
       kind: string;
     }>;
     hasNextPage: boolean;
+  };
+  diff_impact: {
+    summary: string;
+    changedPaths: string[];
+    affected: Array<{ path: string; symbol: string | null; via: string; hops: number }>;
+    layers: string[];
+  };
+  get_project_tour: {
+    summary: string;
+    stepCount: number;
+    stale: boolean;
   };
   search_for_files: { uris: URI[]; hasNextPage: boolean };
   search_in_file: { lines: number[] };

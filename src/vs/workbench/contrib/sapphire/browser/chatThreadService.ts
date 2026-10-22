@@ -26,8 +26,8 @@ import { getErrorMessage } from '../common/sendLLMMessageTypes.js';
 import { ISapphireSettingsService } from '../common/sapphireSettingsService.js';
 import {
   isChatPrepTimeoutError,
-  PPR_CHAT_HEURISTIC_TIMEOUT_MS,
-  PPR_CHAT_PREP_TIMEOUT_MS,
+  SAPPHIRE_CHAT_HEURISTIC_TIMEOUT_MS,
+  SAPPHIRE_CHAT_PREP_TIMEOUT_MS,
   racePrepAwait,
 } from '../common/chatPrepGuard.js';
 import { chatTrace } from '../common/chatSendTrace.js';
@@ -887,7 +887,7 @@ class ChatThreadService extends Disposable implements IChatThreadService {
                 },
               ),
               prepCts.token,
-              PPR_CHAT_HEURISTIC_TIMEOUT_MS,
+              SAPPHIRE_CHAT_HEURISTIC_TIMEOUT_MS,
             );
             chatTrace(threadId, 'prep.heuristic.done', `selns=${selns.length}`);
           } catch (e) {
@@ -915,9 +915,9 @@ class ChatThreadService extends Disposable implements IChatThreadService {
       };
 
       let userMessageContent: string;
-      chatTrace(threadId, 'prep.local.start', `timeoutMs=${PPR_CHAT_PREP_TIMEOUT_MS}`);
+      chatTrace(threadId, 'prep.local.start', `timeoutMs=${SAPPHIRE_CHAT_PREP_TIMEOUT_MS}`);
       try {
-        const local = await racePrepAwait(runLocalPrep(), prepCts.token, PPR_CHAT_PREP_TIMEOUT_MS);
+        const local = await racePrepAwait(runLocalPrep(), prepCts.token, SAPPHIRE_CHAT_PREP_TIMEOUT_MS);
         currSelns = local.selns;
         userMessageContent = local.userMessageContent;
         chatTrace(threadId, 'prep.local.done');

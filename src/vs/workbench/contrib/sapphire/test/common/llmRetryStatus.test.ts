@@ -8,19 +8,19 @@ import { ensureNoDisposablesAreLeakedInTestSuite } from '../../../../../base/tes
 import {
   formatAgentRetryStatusHint,
   formatGatewayRetryStatusHint,
-  PPR_LLM_CONNECT_TIMEOUT_MS,
-  PPR_LLM_STREAM_IDLE_MS,
+  SAPPHIRE_LLM_CONNECT_TIMEOUT_MS,
+  SAPPHIRE_LLM_STREAM_IDLE_MS,
 } from '../../common/llmRetryStatus.js';
 
 suite('llmRetryStatus', () => {
   ensureNoDisposablesAreLeakedInTestSuite();
 
-  test('PPR_LLM_STREAM_IDLE_MS is 90s', () => {
-    assert.strictEqual(PPR_LLM_STREAM_IDLE_MS, 90_000);
+  test('SAPPHIRE_LLM_STREAM_IDLE_MS is 90s', () => {
+    assert.strictEqual(SAPPHIRE_LLM_STREAM_IDLE_MS, 90_000);
   });
 
-  test('PPR_LLM_CONNECT_TIMEOUT_MS is 90s', () => {
-    assert.strictEqual(PPR_LLM_CONNECT_TIMEOUT_MS, 90_000);
+  test('SAPPHIRE_LLM_CONNECT_TIMEOUT_MS is 90s', () => {
+    assert.strictEqual(SAPPHIRE_LLM_CONNECT_TIMEOUT_MS, 90_000);
   });
 
   test('formatGatewayRetryStatusHint — 408 with Retry-After', () => {

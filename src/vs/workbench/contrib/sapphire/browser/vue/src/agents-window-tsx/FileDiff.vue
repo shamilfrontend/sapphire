@@ -1,6 +1,6 @@
 <script setup lang="ts">
 /*--------------------------------------------------------------------------------------
- *  PPR Code — pending file diffs beside the chat in Режим Агент.
+ *  Sapphire — pending file diffs beside the chat in Режим Агент.
  *--------------------------------------------------------------------------------------*/
 
 import { ref, watch } from 'vue';

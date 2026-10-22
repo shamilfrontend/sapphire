@@ -170,7 +170,7 @@ registerAction2(
     constructor() {
       super({
         id: SAPPHIRE_OPEN_SIDEBAR_ACTION_ID,
-        title: 'Открыть ассистента PPR',
+        title: 'Открыть ассистента Sapphire',
       });
     }
 

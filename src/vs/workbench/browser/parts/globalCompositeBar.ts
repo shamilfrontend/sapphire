@@ -918,7 +918,7 @@ function simpleActivityContextMenuActions(
   return [
     ...currentElementContextMenuActions,
     // allow-any-unicode-next-line
-    // PPR AI: кнопка Accounts скрыта — пункт переключения в меню не показываем.
+    // Sapphire: кнопка Accounts скрыта — пункт переключения в меню не показываем.
     toAction({
       id: 'toggle.hideManage',
       label: localize('manage', 'Manage'),
@@ -933,7 +933,7 @@ function simpleActivityContextMenuActions(
 
 export function isAccountsActionVisible(storageService: IStorageService): boolean {
   // allow-any-unicode-next-line
-  // PPR AI: Accounts в activity bar / titlebar не нужен.
+  // Sapphire: Accounts в activity bar / titlebar не нужен.
   return false;
 }
 

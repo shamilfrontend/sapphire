@@ -1,15 +1,15 @@
 /*--------------------------------------------------------------------------------------
- *  PPR Code — отмена и таймаут prep перед agent loop (heuristic, getModelSafe, office).
+ *  Sapphire — отмена и таймаут prep перед agent loop (heuristic, getModelSafe, office).
  *--------------------------------------------------------------------------------------*/
 
 import { CancellationToken } from '../../../../base/common/cancellation.js';
 import { CancellationError } from '../../../../base/common/errors.js';
 
 /** Максимальное ожидание всего local prep (heuristic / model / office), мс. */
-export const PPR_CHAT_PREP_TIMEOUT_MS = 8_000;
+export const SAPPHIRE_CHAT_PREP_TIMEOUT_MS = 8_000;
 
 /** Отдельный лимит на heuristic search — иначе fileSearch может съесть весь prep. */
-export const PPR_CHAT_HEURISTIC_TIMEOUT_MS = 3_000;
+export const SAPPHIRE_CHAT_HEURISTIC_TIMEOUT_MS = 3_000;
 
 export class ChatPrepTimeoutError extends Error {
   override readonly name = 'ChatPrepTimeoutError';
@@ -32,7 +32,7 @@ export function isChatPrepTimeoutError(e: unknown): boolean {
 export function racePrepAwait<T>(
   promise: Promise<T>,
   token: CancellationToken,
-  timeoutMs: number = PPR_CHAT_PREP_TIMEOUT_MS,
+  timeoutMs: number = SAPPHIRE_CHAT_PREP_TIMEOUT_MS,
 ): Promise<T> {
   if (token.isCancellationRequested) {
     return Promise.reject(new CancellationError());

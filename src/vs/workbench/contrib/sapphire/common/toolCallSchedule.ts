@@ -10,6 +10,8 @@ const PARALLEL_READ_ONLY_TOOLS = new Set<string>([
   'get_dir_tree',
   'search_pathnames_only',
   'search_project_index',
+  'diff_impact',
+  'get_project_tour',
   'search_for_files',
   'search_in_file',
   'grep_search',

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 /*--------------------------------------------------------------------------------------
- *  PPR Code — folder tree of chats in the Режим Агент sidebar.
+ *  Sapphire — folder tree of chats in the Режим Агент sidebar.
  *--------------------------------------------------------------------------------------*/
 
 import { computed, inject } from 'vue';

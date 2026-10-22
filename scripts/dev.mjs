@@ -21,6 +21,8 @@ const codeScript = isWin
 const requiredOutFiles = [
   path.join(root, 'out', 'main.js'),
   path.join(root, 'out', 'bootstrap-window.js'),
+  path.join(root, 'out', 'product.json'),
+  path.join(root, 'out', 'package.json'),
   path.join(root, 'out', 'vs', 'base', 'parts', 'sandbox', 'electron-sandbox', 'preload.js'),
   path.join(root, 'out', 'vs', 'code', 'electron-sandbox', 'workbench', 'workbench-dev.html'),
   path.join(root, 'out', 'vs', 'code', 'electron-sandbox', 'workbench', 'workbench.js'),
@@ -39,11 +41,11 @@ const freshCompileMarkers = [
 const children = [];
 let shuttingDown = false;
 
-function spawnNpm(script, { label } = {}) {
+function spawnNpm(script, { label, env } = {}) {
   const child = spawn(npm, ['run', script], {
     cwd: root,
     stdio: 'inherit',
-    env: process.env,
+    env: env ? { ...process.env, ...env } : process.env,
     shell: isWin,
   });
   child.on('exit', (code, signal) => {
@@ -128,11 +130,12 @@ async function main() {
   const appArgs = process.argv.slice(2);
   const watchStartedAt = Date.now();
 
-  console.log('[dev] Starting watch (client + extensions)...');
-  spawnNpm('watch', { label: 'watch' });
-
   console.log('[dev] Starting watchvue...');
   spawnNpm('watchvue', { label: 'watchvue' });
+
+  console.log('[dev] Starting watch (client + extensions)...');
+  // watchvue owns the Vue pipeline; skip buildReact inside watch-client to avoid src2 races.
+  spawnNpm('watch', { label: 'watch', env: { SKIP_VUE_BUILD: '1' } });
 
   console.log('[dev] Waiting for first compile after clean-out (this can take a few minutes)...');
   await waitForFreshCompile(watchStartedAt);

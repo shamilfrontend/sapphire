@@ -6,7 +6,7 @@
 import Anthropic from '@anthropic-ai/sdk';
 import { getModelCapabilities, getReservedOutputTokenSpace, getSendableReasoningInfo } from '../../common/modelCapabilities.js';
 import { LLM_ERROR_HINTS, type ProviderConnectionSettings } from '../../common/llmProviderConfig.js';
-import { PPR_LLM_CONNECT_TIMEOUT_MS, PPR_LLM_STREAM_IDLE_MS } from '../../common/llmRetryStatus.js';
+import { SAPPHIRE_LLM_CONNECT_TIMEOUT_MS, SAPPHIRE_LLM_STREAM_IDLE_MS } from '../../common/llmRetryStatus.js';
 import { availableTools, type InternalToolInfo } from '../../common/prompt/prompts.js';
 import {
 	type GatewayModelResponse,
@@ -194,7 +194,7 @@ export const sendAnthropicChat = async (params: AnthropicChatParams): Promise<vo
 	const connectTimer = setTimeout(() => {
 		connectTimedOut = true;
 		abort.abort();
-	}, PPR_LLM_CONNECT_TIMEOUT_MS);
+	}, SAPPHIRE_LLM_CONNECT_TIMEOUT_MS);
 	params._setAborter(() => {
 		clearTimeout(connectTimer);
 		abort.abort();
@@ -226,7 +226,7 @@ export const sendAnthropicChat = async (params: AnthropicChatParams): Promise<vo
 		};
 		const pokeIdle = () => {
 			clearIdle();
-			idleTimer = setTimeout(() => abort.abort(), PPR_LLM_STREAM_IDLE_MS);
+			idleTimer = setTimeout(() => abort.abort(), SAPPHIRE_LLM_STREAM_IDLE_MS);
 		};
 
 		let inputTokens = 0;

@@ -119,6 +119,14 @@ async function runSrcTsc({ outDir, watch = false }) {
   return undefined;
 }
 
+async function copyRuntimeManifests(outDir) {
+  // bootstrap-meta.js loads these from out/ when running from sources (VSCODE_DEV).
+  const destination = path.join(repoRoot, outDir);
+  await fsp.mkdir(destination, { recursive: true });
+  await fsp.copyFile(path.join(repoRoot, 'product.json'), path.join(destination, 'product.json'));
+  await fsp.copyFile(path.join(repoRoot, 'package.json'), path.join(destination, 'package.json'));
+}
+
 async function copySourceAssets(outDir) {
   await copyPatterns({
     cwd: repoRoot,
@@ -132,6 +140,7 @@ async function copySourceAssets(outDir) {
     destinationRoot: path.join(repoRoot, outDir),
     mapPath: (relativePath) => relativePath.replace(/^src\//, ''),
   });
+  await copyRuntimeManifests(outDir);
 }
 
 async function runApiProposalsWatch() {
@@ -166,7 +175,10 @@ export async function compileClientTask() {
 }
 
 export async function watchClientTask() {
-  await buildReact();
+  // npm run dev starts watchvue separately; skipping avoids racing prepareSrc2 (rm src2).
+  if (process.env.SKIP_VUE_BUILD !== '1') {
+    await buildReact();
+  }
   await rimraf(path.join(repoRoot, 'out'));
   await copySourceAssets('out');
   const tscWatcher = await runSrcTsc({ outDir: 'out', watch: true });

@@ -1,5 +1,5 @@
 /*--------------------------------------------------------------------------------------
- *  PPR Code — open the Режим Агент review pane from the chat command bar.
+ *  Sapphire — open the Режим Агент review pane from the chat command bar.
  *--------------------------------------------------------------------------------------*/
 
 import { inject, provide, type InjectionKey } from 'vue';

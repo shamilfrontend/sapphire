@@ -698,7 +698,7 @@ const textAreaStyle = {
     <!-- Список пунктов mention -->
     <div class="max-h-[400px] w-full max-w-full overflow-y-auto overflow-x-auto">
       <div class="w-max min-w-full flex flex-col gap-0 text-nowrap flex-nowrap">
-        <div v-if="options.length === 0" class="text-void-fg-3 px-3 py-0.5">No results found</div>
+        <div v-if="!options?.length" class="text-void-fg-3 px-3 py-0.5">No results found</div>
         <template v-else>
           <div
             v-for="(o, oIdx) in options"

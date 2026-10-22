@@ -295,6 +295,8 @@ export function compactToolResult(name: string, rawParams: unknown, content: str
       break;
     case 'search_pathnames_only':
     case 'search_project_index':
+    case 'diff_impact':
+    case 'get_project_tour':
     case 'search_for_files':
     case 'search_in_file':
     case 'grep_search':

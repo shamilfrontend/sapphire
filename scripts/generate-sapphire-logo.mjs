@@ -1,7 +1,7 @@
 /**
  * Propagates Sapphire precomposed logo assets into app / Dock / watermark targets.
  *
- * Usage: node scripts/generate-ppr-logo.mjs
+ * Usage: node scripts/generate-sapphire-logo.mjs
  *
  * Sources (PNG only — full app-icon art with dark squircle + crystal):
  *   sapphire_icons/logo_cube_noshadow.png   — empty-editor watermark / UI
@@ -144,7 +144,7 @@ const DARWIN_ICONSET_FILES = [
 
 async function writeDarwinIconsetPngs(squircle1024, setDir) {
   mkdirSync(setDir, { recursive: true });
-  const staging = mkdtempSync(join(tmpdir(), 'ppr-icon-stage-'));
+  const staging = mkdtempSync(join(tmpdir(), 'sapphire-icon-stage-'));
   // sharp resize + sips re-encode: iconutil/actool reject many sharp-only PNGs as invalid
   for (const { size, name } of DARWIN_ICONSET_FILES) {
     const staged = join(staging, `staged-${name}`);
@@ -157,7 +157,7 @@ async function writeDarwinIconsetPngs(squircle1024, setDir) {
 }
 
 async function writeIcns(squircle1024, icnsPath) {
-  const iconset = mkdtempSync(join(tmpdir(), 'ppr-iconset-'));
+  const iconset = mkdtempSync(join(tmpdir(), 'sapphire-iconset-'));
   const setDir = join(iconset, 'code.iconset');
   await writeDarwinIconsetPngs(squircle1024, setDir);
   execFileSync('iconutil', ['-c', 'icns', setDir, '-o', icnsPath], { stdio: 'pipe' });
@@ -169,7 +169,7 @@ async function writeIcns(squircle1024, icnsPath) {
  * gulp copies resources/darwin/Assets.car into the .app; regenerating only .icns is not enough.
  */
 async function writeAssetsCar(squircle1024, carPath) {
-  const work = mkdtempSync(join(tmpdir(), 'ppr-assets-car-'));
+  const work = mkdtempSync(join(tmpdir(), 'sapphire-assets-car-'));
   try {
     const appIconset = join(work, 'code.xcassets', 'code.appiconset');
     await writeDarwinIconsetPngs(squircle1024, appIconset);
@@ -279,7 +279,7 @@ async function writeUiAndWebAssets(markPngPath) {
   console.log('updated', favicon);
 
   const innoBmp = join(root, 'resources/win32/inno-sapphire.bmp');
-  const innoStaging = mkdtempSync(join(tmpdir(), 'ppr-inno-'));
+  const innoStaging = mkdtempSync(join(tmpdir(), 'sapphire-inno-'));
   try {
     const innoPng = join(innoStaging, 'inno-sapphire.png');
     await sharp(markPngPath).resize(1200, 1200).removeAlpha().png().toFile(innoPng);
@@ -342,14 +342,14 @@ async function writePlatformIcons(markPngPath) {
 
   // Refresh packaged Electron / gulp app icons if present (Dock / Finder).
   const appResourceDirs = [
-    join(root, '.build/electron/PPR Code.app/Contents/Resources'),
-    join(root, '../VSCode-darwin-arm64/PPR Code.app/Contents/Resources'),
+    join(root, '.build/electron/Sapphire.app/Contents/Resources'),
+    join(root, '../VSCode-darwin-arm64/Sapphire.app/Contents/Resources'),
   ];
   for (const resourcesDir of appResourceDirs) {
     if (!existsSync(resourcesDir)) {
       continue;
     }
-    const builtIcns = join(resourcesDir, 'PPR Code.icns');
+    const builtIcns = join(resourcesDir, 'Sapphire.icns');
     copyFileSync(darwinIcns, builtIcns);
     console.log('updated', builtIcns);
     const appIcon = join(resourcesDir, 'AppIcon.icns');

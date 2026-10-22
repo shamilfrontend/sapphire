@@ -1,5 +1,5 @@
 /*--------------------------------------------------------------------------------------
- *  PPR Code — unit tests for chat prep cancel / timeout guard.
+ *  Sapphire — unit tests for chat prep cancel / timeout guard.
  *--------------------------------------------------------------------------------------*/
 
 import assert from 'assert';
@@ -9,8 +9,8 @@ import { isCancellationError } from '../../../../../base/common/errors.js';
 import {
   ChatPrepTimeoutError,
   isChatPrepTimeoutError,
-  PPR_CHAT_HEURISTIC_TIMEOUT_MS,
-  PPR_CHAT_PREP_TIMEOUT_MS,
+  SAPPHIRE_CHAT_HEURISTIC_TIMEOUT_MS,
+  SAPPHIRE_CHAT_PREP_TIMEOUT_MS,
   racePrepAwait,
 } from '../../common/chatPrepGuard.js';
 import {
@@ -20,8 +20,8 @@ import {
   shouldFlushDeadQueue,
 } from '../../common/chatStreamGuards.js';
 import {
-  PPR_LLM_CONNECT_TIMEOUT_MS,
-  PPR_LLM_STREAM_IDLE_MS,
+  SAPPHIRE_LLM_CONNECT_TIMEOUT_MS,
+  SAPPHIRE_LLM_STREAM_IDLE_MS,
 } from '../../common/llmRetryStatus.js';
 import { LLM_ERROR_HINTS } from '../../common/llmProviderConfig.js';
 import {
@@ -33,12 +33,12 @@ import {
 suite('chatPrepGuard', () => {
   ensureNoDisposablesAreLeakedInTestSuite();
 
-  test('PPR_CHAT_PREP_TIMEOUT_MS is 8s', () => {
-    assert.strictEqual(PPR_CHAT_PREP_TIMEOUT_MS, 8_000);
+  test('SAPPHIRE_CHAT_PREP_TIMEOUT_MS is 8s', () => {
+    assert.strictEqual(SAPPHIRE_CHAT_PREP_TIMEOUT_MS, 8_000);
   });
 
-  test('PPR_CHAT_HEURISTIC_TIMEOUT_MS is 3s', () => {
-    assert.strictEqual(PPR_CHAT_HEURISTIC_TIMEOUT_MS, 3_000);
+  test('SAPPHIRE_CHAT_HEURISTIC_TIMEOUT_MS is 3s', () => {
+    assert.strictEqual(SAPPHIRE_CHAT_HEURISTIC_TIMEOUT_MS, 3_000);
   });
 
   test('isChatPrepTimeoutError detects by name', () => {
@@ -47,12 +47,12 @@ suite('chatPrepGuard', () => {
     assert.strictEqual(isChatPrepTimeoutError(new Error('x')), false);
   });
 
-  test('PPR_LLM_CONNECT_TIMEOUT_MS is 90s', () => {
-    assert.strictEqual(PPR_LLM_CONNECT_TIMEOUT_MS, 90_000);
+  test('SAPPHIRE_LLM_CONNECT_TIMEOUT_MS is 90s', () => {
+    assert.strictEqual(SAPPHIRE_LLM_CONNECT_TIMEOUT_MS, 90_000);
   });
 
-  test('PPR_LLM_STREAM_IDLE_MS is 90s', () => {
-    assert.strictEqual(PPR_LLM_STREAM_IDLE_MS, 90_000);
+  test('SAPPHIRE_LLM_STREAM_IDLE_MS is 90s', () => {
+    assert.strictEqual(SAPPHIRE_LLM_STREAM_IDLE_MS, 90_000);
   });
 
   test('connectTimeout hint is defined', () => {

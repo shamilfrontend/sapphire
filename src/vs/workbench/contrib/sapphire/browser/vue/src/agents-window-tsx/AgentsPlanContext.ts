@@ -1,5 +1,5 @@
 /*--------------------------------------------------------------------------------------
- *  PPR Code — open a plan beside the chat in Режим Агент.
+ *  Sapphire — open a plan beside the chat in Режим Агент.
  *--------------------------------------------------------------------------------------*/
 
 import { inject, provide, type InjectionKey } from 'vue';

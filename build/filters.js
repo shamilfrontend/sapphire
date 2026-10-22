@@ -63,7 +63,7 @@ module.exports.unicodeFilter = [
 
   '!src/vs/base/browser/dompurify/**',
   '!src/vs/workbench/services/keybinding/browser/keyboardLayouts/**',
-  // PPR / Sapphire: Russian UI copy and non-MS headers
+  // Sapphire: Russian UI copy and non-MS headers
   '!src/vs/workbench/contrib/sapphire/**',
 ];
 
