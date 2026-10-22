@@ -10,8 +10,8 @@ import {
   mergeShippedUserSkills,
   normalizeUserSkill,
   parseSlashSkillSlugs,
-  PPR_DEFAULT_SKILL_DASHBOARD_ID,
-  PPR_DEFAULT_SKILL_LANDING_ID,
+  SAPPHIRE_DEFAULT_SKILL_DASHBOARD_ID,
+  SAPPHIRE_DEFAULT_SKILL_LANDING_ID,
   resolveSkillContentsBySlugs,
   skillInstructionsForUserText,
   skillInstructionsFromUserSkills,
@@ -34,23 +34,23 @@ suite('UserSkills', () => {
   test('mergeShippedUserSkills seeds into empty list', () => {
     const next = mergeShippedUserSkills([]);
     assert.strictEqual(next.length, defaultUserSkills.length);
-    assert.ok(next.some((s) => s.id === PPR_DEFAULT_SKILL_LANDING_ID));
-    assert.ok(next.some((s) => s.id === PPR_DEFAULT_SKILL_DASHBOARD_ID));
-    assert.strictEqual(next.find((s) => s.id === PPR_DEFAULT_SKILL_LANDING_ID)?.enabled, false);
+    assert.ok(next.some((s) => s.id === SAPPHIRE_DEFAULT_SKILL_LANDING_ID));
+    assert.ok(next.some((s) => s.id === SAPPHIRE_DEFAULT_SKILL_DASHBOARD_ID));
+    assert.strictEqual(next.find((s) => s.id === SAPPHIRE_DEFAULT_SKILL_LANDING_ID)?.enabled, false);
   });
 
   test('mergeShippedUserSkills re-seeds deleted shipped skill', () => {
     const onlyCustom = [sampleCustom()];
     const next = mergeShippedUserSkills(onlyCustom);
-    assert.ok(next.some((s) => s.id === PPR_DEFAULT_SKILL_LANDING_ID));
+    assert.ok(next.some((s) => s.id === SAPPHIRE_DEFAULT_SKILL_LANDING_ID));
     assert.ok(next.some((s) => s.id === 'custom-1'));
-    assert.strictEqual(next[0].id, PPR_DEFAULT_SKILL_LANDING_ID);
+    assert.strictEqual(next[0].id, SAPPHIRE_DEFAULT_SKILL_LANDING_ID);
   });
 
   test('mergeShippedUserSkills keeps enabled, refreshes content', () => {
     const existing: UserSkill[] = [
       {
-        id: PPR_DEFAULT_SKILL_LANDING_ID,
+        id: SAPPHIRE_DEFAULT_SKILL_LANDING_ID,
         name: 'Old',
         content: 'stale',
         enabled: true,
@@ -59,12 +59,41 @@ suite('UserSkills', () => {
       },
     ];
     const next = mergeShippedUserSkills(existing);
-    const landing = next.find((s) => s.id === PPR_DEFAULT_SKILL_LANDING_ID)!;
+    const landing = next.find((s) => s.id === SAPPHIRE_DEFAULT_SKILL_LANDING_ID)!;
     assert.strictEqual(landing.enabled, true);
     assert.strictEqual(landing.slug, 'design-landing');
     assert.strictEqual(landing.category, 'design');
     assert.ok(landing.content.includes('Когда применять'));
     assert.notStrictEqual(landing.content, 'stale');
+  });
+
+  test('mergeShippedUserSkills remaps legacy PPR skill ids and keeps enabled', () => {
+    const existing: UserSkill[] = [
+      {
+        id: 'ppr-default-skill-landing',
+        name: 'Old',
+        content: 'stale',
+        enabled: true,
+        slug: 'wrong',
+        category: 'x',
+      },
+      {
+        id: 'ppr-default-skill-dashboard',
+        name: 'Old Dash',
+        content: 'stale',
+        enabled: false,
+        slug: 'wrong',
+        category: 'x',
+      },
+    ];
+    const next = mergeShippedUserSkills(existing);
+    assert.ok(!next.some((s) => s.id.startsWith('ppr-default-skill-')));
+    const landing = next.find((s) => s.id === SAPPHIRE_DEFAULT_SKILL_LANDING_ID)!;
+    const dashboard = next.find((s) => s.id === SAPPHIRE_DEFAULT_SKILL_DASHBOARD_ID)!;
+    assert.strictEqual(landing.enabled, true);
+    assert.strictEqual(dashboard.enabled, false);
+    assert.strictEqual(landing.slug, 'design-landing');
+    assert.strictEqual(dashboard.slug, 'design-dashboard');
   });
 
   test('mergeShippedUserSkills preserves unrelated skills', () => {
@@ -111,7 +140,7 @@ suite('UserSkills', () => {
     const skills = mergeShippedUserSkills([]);
     assert.strictEqual(skillInstructionsFromUserSkills(skills), '');
     const withOn = skills.map((s) =>
-      s.id === PPR_DEFAULT_SKILL_LANDING_ID ? { ...s, enabled: true } : s,
+      s.id === SAPPHIRE_DEFAULT_SKILL_LANDING_ID ? { ...s, enabled: true } : s,
     );
     const text = skillInstructionsFromUserSkills(withOn);
     assert.ok(text.includes('Когда применять'));
@@ -121,7 +150,7 @@ suite('UserSkills', () => {
   test('skillInstructionsForUserText merges always-on and slash', () => {
     const skills = mergeShippedUserSkills([]);
     const alwaysOn = skillInstructionsFromUserSkills(
-      skills.map((s) => (s.id === PPR_DEFAULT_SKILL_DASHBOARD_ID ? { ...s, enabled: true } : s)),
+      skills.map((s) => (s.id === SAPPHIRE_DEFAULT_SKILL_DASHBOARD_ID ? { ...s, enabled: true } : s)),
     );
     assert.ok(alwaysOn.includes('KPI'));
     const combined = skillInstructionsForUserText(skills, alwaysOn, '/design-landing hero');

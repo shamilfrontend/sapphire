@@ -13,6 +13,8 @@
 | `get_dir_tree` | ✓ | ✓ | — | Дерево каталога |
 | `search_pathnames_only` | ✓ | ✓ | — | Поиск по именам файлов |
 | `search_project_index` | ✓ | ✓ | — | Поиск по `.sapphire/index` (purpose, теги, символы) |
+| `diff_impact` | ✓ | ✓ | — | охват изменений по графу индекса (до 2 hops) |
+| `get_project_tour` | ✓ | ✓ | — | Сохранённый тур онбординга (`tour.json`) |
 | `search_for_files` | ✓ | ✓ | — | Пути файлов по содержимому |
 | `search_in_file` | ✓ | ✓ | — | Строки внутри файла |
 | `grep_search` | ✓ | ✓ | — | Совпадения по workspace (path + строка) |
@@ -50,6 +52,8 @@
 
 - `read_file` / `search_in_file` для `.xlsx` / `.xlsm`, `.docx`, `.pptx`, `.pdf` — извлечённый текст; файл > 25 МБ не разбирается. См. [Офисные файлы](/guide/office), [архитектура](/architecture/office-extract).
 - `search_project_index` — локальный индекс (token-score). См. [Индекс проекта](/architecture/project-index).
+- `diff_impact` — BFS до 2 hops по графу индекса (импорты и вызовы) для относительных путей. Тот же расчёт попадает в генерацию commit message.
+- `get_project_tour` — шаги онбординга из `.sapphire/index/tour.json` (генерируется вручную в UI индекса).
 - Планы: `.sapphire/plans/*.plan.md` (YAML frontmatter + markdown, опционально Mermaid).
 - `web_search` / `browse_url` идут в публичную сеть, не на LLM-шлюз. См. [Приватность](/guide/privacy).
 - Параллельные subagents — только read-only набор; `run_subagent` у дочернего агента недоступен (без вложенности).

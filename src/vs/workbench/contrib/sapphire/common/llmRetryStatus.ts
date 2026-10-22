@@ -4,10 +4,10 @@
  *--------------------------------------------------------------------------------------*/
 
 /** Пауза между chunk стрима, после которой клиент abort (мс). */
-export const PPR_LLM_STREAM_IDLE_MS = 90_000;
+export const SAPPHIRE_LLM_STREAM_IDLE_MS = 90_000;
 
 /** Таймаут ожидания ответа на chat.completions.create до первого chunk (мс). */
-export const PPR_LLM_CONNECT_TIMEOUT_MS = 90_000;
+export const SAPPHIRE_LLM_CONNECT_TIMEOUT_MS = 90_000;
 
 type GatewayRetryStatusParams = {
   /** Номер попытки с 1 (напр. 2 из 3). */

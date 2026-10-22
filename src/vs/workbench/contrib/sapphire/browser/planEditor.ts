@@ -86,9 +86,11 @@ import { mountPlanEditor } from './vue/out/plan-editor-tsx/index.js';
 
 type PlanEditorMode = 'preview' | 'markdown';
 
-const PLAN_EDITOR_ID = 'ppr.planEditor';
-const PLAN_EDITOR_INPUT_ID = 'workbench.editors.ppr.planEditorInput';
-const PLAN_EDITOR_PANE_ID = 'workbench.editor.ppr.planEditor';
+const PLAN_EDITOR_ID = 'sapphire.planEditor';
+const LEGACY_PLAN_EDITOR_ID = 'ppr.planEditor';
+const PLAN_EDITOR_INPUT_ID = 'workbench.editors.sapphire.planEditorInput';
+const LEGACY_PLAN_EDITOR_INPUT_ID = 'workbench.editors.ppr.planEditorInput';
+const PLAN_EDITOR_PANE_ID = 'workbench.editor.sapphire.planEditor';
 const PLAN_EDITOR_TOOLBAR_HEIGHT = 36;
 
 interface IPlanEditorViewState extends ICodeEditorViewState {
@@ -293,17 +295,17 @@ class PlanEditorPane extends AbstractTextCodeEditor<IPlanEditorViewState> {
 
   protected override createEditor(parent: HTMLElement): void {
     this.editorRoot = parent;
-    parent.classList.add('ppr-plan-editor');
+    parent.classList.add('sapphire-plan-editor');
     this.syncModeClass();
 
     const monacoHost = document.createElement('div');
-    monacoHost.className = 'ppr-plan-editor-monaco';
+    monacoHost.className = 'sapphire-plan-editor-monaco';
     parent.appendChild(monacoHost);
 
     super.createEditor(monacoHost);
 
     this.overlay = document.createElement('div');
-    this.overlay.className = 'ppr-plan-editor-overlay';
+    this.overlay.className = 'sapphire-plan-editor-overlay';
     parent.appendChild(this.overlay);
 
     this.instantiationService.invokeFunction((accessor) => {
@@ -313,8 +315,8 @@ class PlanEditorPane extends AbstractTextCodeEditor<IPlanEditorViewState> {
   }
 
   private syncModeClass(): void {
-    this.editorRoot?.classList.toggle('ppr-plan-editor-mode-preview', this.mode === 'preview');
-    this.editorRoot?.classList.toggle('ppr-plan-editor-mode-markdown', this.mode === 'markdown');
+    this.editorRoot?.classList.toggle('sapphire-plan-editor-mode-preview', this.mode === 'preview');
+    this.editorRoot?.classList.toggle('sapphire-plan-editor-mode-markdown', this.mode === 'markdown');
   }
 
   private getChromeProps() {
@@ -427,30 +429,46 @@ class PlanEditorPane extends AbstractTextCodeEditor<IPlanEditorViewState> {
 }
 
 class PlanEditorContribution extends Disposable implements IWorkbenchContribution {
-  static readonly ID = 'workbench.contrib.ppr.planEditor';
+  static readonly ID = 'workbench.contrib.sapphire.planEditor';
 
   constructor(
     @IEditorResolverService editorResolverService: IEditorResolverService,
     @IInstantiationService instantiationService: IInstantiationService,
   ) {
     super();
+    const options = {
+      singlePerResource: true,
+      canSupportResource: (resource: URI) => isPlanFilePath(resource.path),
+    };
+    const factory = {
+      createEditorInput: ({ resource }: { resource: URI }) => ({
+        editor: instantiationService.createInstance(PlanEditorInput, resource),
+      }),
+    };
+    const label = localize('sapphire.planEditor.label', 'Plan Editor');
     this._register(
       editorResolverService.registerEditor(
         '*.plan.md',
         {
           id: PLAN_EDITOR_ID,
-          label: localize('ppr.planEditor.label', 'Plan Editor'),
+          label,
           priority: RegisteredEditorPriority.default,
         },
+        options,
+        factory,
+      ),
+    );
+    // Legacy Open With / association id from PPR builds
+    this._register(
+      editorResolverService.registerEditor(
+        '*.plan.md',
         {
-          singlePerResource: true,
-          canSupportResource: (resource) => isPlanFilePath(resource.path),
+          id: LEGACY_PLAN_EDITOR_ID,
+          label,
+          priority: RegisteredEditorPriority.option,
         },
-        {
-          createEditorInput: ({ resource }) => ({
-            editor: instantiationService.createInstance(PlanEditorInput, resource),
-          }),
-        },
+        options,
+        factory,
       ),
     );
   }
@@ -460,7 +478,7 @@ class PlanEditorWorkingCopyEditorHandler
   extends Disposable
   implements IWorkbenchContribution, IWorkingCopyEditorHandler
 {
-  static readonly ID = 'workbench.contrib.ppr.planEditorWorkingCopyHandler';
+  static readonly ID = 'workbench.contrib.sapphire.planEditorWorkingCopyHandler';
 
   constructor(
     @IInstantiationService private readonly instantiationService: IInstantiationService,
@@ -487,16 +505,15 @@ Registry.as<IEditorPaneRegistry>(EditorExtensions.EditorPane).registerEditorPane
   EditorPaneDescriptor.create(
     PlanEditorPane,
     PlanEditorPane.ID,
-    localize('ppr.planEditor.pane', 'Plan Editor'),
+    localize('sapphire.planEditor.pane', 'Plan Editor'),
   ),
   [new SyncDescriptor(PlanEditorInput)],
 );
 
-Registry.as<IEditorFactoryRegistry>(EditorExtensions.EditorFactory).registerEditorSerializer(
-  PlanEditorInput.ID,
-  PlanEditorInputSerializer,
-);
-
+const editorFactoryRegistry = Registry.as<IEditorFactoryRegistry>(EditorExtensions.EditorFactory);
+editorFactoryRegistry.registerEditorSerializer(PlanEditorInput.ID, PlanEditorInputSerializer);
+// Restore tabs serialized under the legacy PPR input typeId
+editorFactoryRegistry.registerEditorSerializer(LEGACY_PLAN_EDITOR_INPUT_ID, PlanEditorInputSerializer);
 registerWorkbenchContribution2(
   PlanEditorContribution.ID,
   PlanEditorContribution,

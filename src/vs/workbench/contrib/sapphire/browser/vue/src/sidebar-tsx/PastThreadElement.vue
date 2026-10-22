@@ -86,9 +86,6 @@ const showSpinner = computed(() => {
           : 'bg-void-bg-2-hover hover:bg-void-bg-2-alt opacity-80 hover:opacity-100'
       }
 		`"
-    data-tooltip-id="sapphire-tooltip"
-    :data-tooltip-content="firstMsg"
-    data-tooltip-place="top"
     @click="
       chatThreadsService.openTab(pastThread.id);
       onThreadClick?.();

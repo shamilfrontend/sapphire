@@ -355,6 +355,19 @@ class TerminalToolService extends Disposable implements ITerminalToolService {
 
     let terminal: ITerminalInstance | undefined;
     const disposables: IDisposable[] = [];
+    let resolveUserInterrupt: (() => void) | undefined;
+    let interruptForceDispose = false;
+
+    const sendCtrlC = () => {
+      if (!terminal) {
+        return;
+      }
+      try {
+        terminal.sendText('\x03', false);
+      } catch {
+        // терминал уже закрыт
+      }
+    };
 
     const cleanupTerminal = () => {
       if (!terminal) return;
@@ -371,8 +384,19 @@ class TerminalToolService extends Disposable implements ITerminalToolService {
       terminal = undefined;
     };
 
+    // Persistent: Ctrl+C (сессию оставляем); повторный interrupt — dispose. Temp: сразу dispose.
     const interrupt = () => {
-      cleanupTerminal();
+      sendCtrlC();
+      resolveUserInterrupt?.();
+      if (!isPersistent) {
+        cleanupTerminal();
+        return;
+      }
+      if (interruptForceDispose) {
+        cleanupTerminal();
+      } else {
+        interruptForceDispose = true;
+      }
     };
 
     const waitForResult = async (): Promise<{
@@ -498,7 +522,7 @@ class TerminalToolService extends Disposable implements ITerminalToolService {
           })
         : undefined;
 
-      const waitUntilInterrupt = isPersistent
+      const waitUntilBgTimeout = isPersistent
         ? new Promise<void>((res) => {
             const id = setTimeout(() => {
               if (resolveReason) return;
@@ -507,7 +531,10 @@ class TerminalToolService extends Disposable implements ITerminalToolService {
             }, MAX_TERMINAL_BG_COMMAND_TIME * 1000);
             disposables.push(toDisposable(() => clearTimeout(id)));
           })
-        : new Promise<void>((res) => {
+        : undefined;
+
+      const waitUntilInactive = !isPersistent
+        ? new Promise<void>((res) => {
             let globalTimeoutId: ReturnType<typeof setTimeout>;
             const resetTimer = () => {
               clearTimeout(globalTimeoutId);
@@ -528,7 +555,17 @@ class TerminalToolService extends Disposable implements ITerminalToolService {
               toDisposable(() => clearTimeout(globalTimeoutId)),
             );
             resetTimer();
-          });
+          })
+        : undefined;
+
+      const waitUntilUserInterrupt = new Promise<void>((res) => {
+        resolveUserInterrupt = () => {
+          if (!resolveReason) {
+            resolveReason = { type: 'timeout' };
+          }
+          res();
+        };
+      });
 
       // как runCommand: очистить ввод, send
       // runCommand: void — не в Promise.race
@@ -547,7 +584,9 @@ class TerminalToolService extends Disposable implements ITerminalToolService {
         await Promise.any(
           [
             waitUntilDone,
-            waitUntilInterrupt,
+            waitUntilBgTimeout,
+            waitUntilInactive,
+            waitUntilUserInterrupt,
             ...(waitUntilAbsolute ? [waitUntilAbsolute] : []),
           ].filter(Boolean) as Promise<void>[],
         );
@@ -556,6 +595,9 @@ class TerminalToolService extends Disposable implements ITerminalToolService {
       disposables.forEach((d) => d.dispose());
 
       if (resolveReason?.type === 'timeout') {
+        // Остановить BG-команду (persistent session сохраняем).
+        sendCtrlC();
+        await timeout(50);
         const terminalId = isPersistent ? params.persistentTerminalId : params.terminalId;
         try {
           result = await this.readTerminal(terminalId);

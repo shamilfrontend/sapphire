@@ -5,10 +5,16 @@
 
 import { officeKindFromPath } from '../office/officeDocument.js';
 import { LEGACY_WORKSPACE_DOT_DIR, WORKSPACE_DOT_DIR, isUnderWorkspaceStateDir } from '../workspaceDotDir.js';
+import {
+  analyzeTypeScriptStructure,
+  isScriptPath,
+  resolveWorkspaceSpecifier,
+} from './projectIndexStructure.js';
 import type {
   ProjectIndexChunkRecord,
   ProjectIndexEdgeRecord,
   ProjectIndexFileKind,
+  ProjectIndexLayer,
   ProjectIndexSymbolRecord,
 } from './projectIndexTypes.js';
 
@@ -146,6 +152,9 @@ export function kindFromPath(relPath: string): ProjectIndexFileKind | null {
 
 export function shouldSkipPath(relPath: string): boolean {
   const norm = relPath.replace(/\\/g, '/');
+  if (isSecretPath(norm)) {
+    return true;
+  }
   const parts = norm.split('/');
   for (const part of parts) {
     if (SKIP_DIR_NAMES.has(part)) {
@@ -239,6 +248,37 @@ export function contentHash(text: string, mtime: number, size: number): string {
   return `${(h >>> 0).toString(16)}:${mtime}:${size}:${text.length}`;
 }
 
+export function layerFromPath(relPath: string): ProjectIndexLayer {
+  const norm = relPath.replace(/\\/g, '/');
+  const parts = norm.split('/');
+  const base = parts[parts.length - 1] ?? '';
+  const segs = new Set(parts.slice(0, -1));
+  if (
+    segs.has('test') ||
+    segs.has('tests') ||
+    segs.has('__tests__') ||
+    /\.(test|spec)\.[^.]+$/.test(base)
+  ) {
+    return 'test';
+  }
+  if (segs.has('docs') || base.endsWith('.md')) {
+    return 'docs';
+  }
+  if (segs.has('electron-main')) {
+    return 'electron-main';
+  }
+  if (segs.has('browser')) {
+    return 'browser';
+  }
+  if (segs.has('common')) {
+    return 'common';
+  }
+  if (segs.has('node')) {
+    return 'node';
+  }
+  return 'other';
+}
+
 export function localRoleFromPath(relPath: string, symbolNames: string[] = []): string {
   const base = basenameOf(relPath);
   const parent = parentDirOf(relPath);
@@ -266,51 +306,6 @@ function extractImportSpecs(source: string): string[] {
   return out;
 }
 
-function resolveRelativeImport(
-  fromRelPath: string,
-  spec: string,
-  existingPaths: Set<string>,
-): string | null {
-  if (!spec.startsWith('.')) {
-    return null;
-  }
-  const fromDir = parentDirOf(fromRelPath);
-  const joined = normalizeRelPath(fromDir ? `${fromDir}/${spec}` : spec);
-  const candidates = [
-    joined,
-    `${joined}.ts`,
-    `${joined}.tsx`,
-    `${joined}.js`,
-    `${joined}.jsx`,
-    `${joined}.mjs`,
-    `${joined}/index.ts`,
-    `${joined}/index.tsx`,
-    `${joined}/index.js`,
-  ];
-  for (const c of candidates) {
-    if (existingPaths.has(c)) {
-      return c;
-    }
-  }
-  return null;
-}
-
-function normalizeRelPath(p: string): string {
-  const parts = p.replace(/\\/g, '/').split('/');
-  const stack: string[] = [];
-  for (const part of parts) {
-    if (!part || part === '.') {
-      continue;
-    }
-    if (part === '..') {
-      stack.pop();
-      continue;
-    }
-    stack.push(part);
-  }
-  return stack.join('/');
-}
-
 const EXPORT_NAME_RE =
   /(?:export\s+(?:async\s+)?(?:function|class|const|let|var|type|interface|enum)\s+)([A-Za-z_$][\w$]*)/g;
 
@@ -326,6 +321,101 @@ function extractExportNames(source: string): string[] {
   return names.slice(0, 20);
 }
 
+function isHtmlPath(relPath: string): boolean {
+  const ext = extOf(relPath);
+  return ext === 'html' || ext === 'htm';
+}
+
+function isCssPath(relPath: string): boolean {
+  const ext = extOf(relPath);
+  return ext === 'css' || ext === 'scss' || ext === 'less';
+}
+
+/** Локальные href/src у link, script, img (без внешних URL). */
+function extractHtmlAssetSpecs(source: string): string[] {
+  const out: string[] = [];
+  const re =
+    /<(?:link|script|img)\b[^>]*?\b(?:href|src)\s*=\s*(["'])([^"']+)\1/gi;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(source))) {
+    if (m[2]) {
+      out.push(m[2]);
+    }
+  }
+  return out;
+}
+
+/** @import и url(...) на файлы (data:/http: пропускаются на резолве). */
+function extractCssAssetSpecs(source: string): string[] {
+  const out: string[] = [];
+  const importRe = /@import\s+(?:url\s*\(\s*)?(["']?)([^"')\s]+)\1\s*\)?/gi;
+  let m: RegExpExecArray | null;
+  while ((m = importRe.exec(source))) {
+    if (m[2]) {
+      out.push(m[2]);
+    }
+  }
+  const urlRe = /url\s*\(\s*(["']?)([^"')]+)\1\s*\)/gi;
+  while ((m = urlRe.exec(source))) {
+    if (m[2]) {
+      out.push(m[2]);
+    }
+  }
+  return out;
+}
+
+/** Резолв относительного asset-пути (`styles.css`, `./a.js`, `/root.css`). */
+export function resolveAssetSpecifier(
+  fromRelPath: string,
+  raw: string,
+  existingPaths: Set<string>,
+): string | null {
+  const trimmed = raw.trim();
+  if (!trimmed) {
+    return null;
+  }
+  if (/^(https?:|data:|blob:|mailto:|#)/i.test(trimmed) || trimmed.startsWith('//')) {
+    return null;
+  }
+  const bare = trimmed.split('#')[0]?.split('?')[0]?.trim() ?? '';
+  if (!bare) {
+    return null;
+  }
+  if (bare.startsWith('/')) {
+    const fromRoot = bare.slice(1).replace(/\\/g, '/');
+    if (!fromRoot) {
+      return null;
+    }
+    if (existingPaths.has(fromRoot)) {
+      return fromRoot;
+    }
+    return resolveWorkspaceSpecifier('_root_', `./${fromRoot}`, existingPaths);
+  }
+  const spec = bare.startsWith('.') ? bare : `./${bare}`;
+  return resolveWorkspaceSpecifier(fromRelPath, spec, existingPaths);
+}
+
+function pushImportEdges(
+  fromRelPath: string,
+  specs: string[],
+  existingPaths: Set<string>,
+  edges: ProjectIndexEdgeRecord[],
+  seen: Set<string>,
+): void {
+  for (const spec of specs) {
+    const toPath = resolveAssetSpecifier(fromRelPath, spec, existingPaths);
+    if (!toPath || toPath === fromRelPath) {
+      continue;
+    }
+    const key = `imports|${fromRelPath}|${toPath}`;
+    if (seen.has(key)) {
+      continue;
+    }
+    seen.add(key);
+    edges.push({ fromPath: fromRelPath, toPath, type: 'imports' });
+  }
+}
+
 export function analyzeTextFile(opts: {
   relPath: string;
   text: string;
@@ -337,8 +427,6 @@ export function analyzeTextFile(opts: {
   edges: ProjectIndexEdgeRecord[];
 } {
   const { relPath, text, existingPaths } = opts;
-  const exportNames = extractExportNames(text);
-  const localRole = localRoleFromPath(relPath, exportNames);
   const chunks: ProjectIndexChunkRecord[] = [
     {
       path: relPath,
@@ -346,6 +434,19 @@ export function analyzeTextFile(opts: {
       text: text.slice(0, 1200),
     },
   ];
+  if (isScriptPath(relPath)) {
+    const structured = analyzeTypeScriptStructure({ relPath, text, existingPaths });
+    return {
+      localRole: localRoleFromPath(
+        relPath,
+        structured.symbols.map((s) => s.symbolName),
+      ),
+      chunks,
+      symbols: structured.symbols,
+      edges: structured.edges,
+    };
+  }
+  const exportNames = extractExportNames(text);
   const symbols: ProjectIndexSymbolRecord[] = exportNames.map((name, i) => ({
     path: relPath,
     symbolName: name,
@@ -354,13 +455,36 @@ export function analyzeTextFile(opts: {
     endLine: i + 1,
   }));
   const edges: ProjectIndexEdgeRecord[] = [];
+  const seen = new Set<string>();
   for (const spec of extractImportSpecs(text)) {
-    const toPath = resolveRelativeImport(relPath, spec, existingPaths);
+    const toPath = resolveWorkspaceSpecifier(relPath, spec, existingPaths);
     if (toPath) {
-      edges.push({ fromPath: relPath, toPath });
+      const key = `imports|${relPath}|${toPath}`;
+      if (!seen.has(key)) {
+        seen.add(key);
+        edges.push({ fromPath: relPath, toPath, type: 'imports' });
+      }
     }
   }
-  return { localRole, chunks, symbols, edges };
+  if (isHtmlPath(relPath)) {
+    pushImportEdges(relPath, extractHtmlAssetSpecs(text), existingPaths, edges, seen);
+  } else if (isCssPath(relPath)) {
+    pushImportEdges(relPath, extractCssAssetSpecs(text), existingPaths, edges, seen);
+  }
+  for (const symbol of symbols) {
+    edges.push({
+      fromPath: relPath,
+      toPath: relPath,
+      type: 'contains',
+      toSymbol: symbol.symbolName,
+    });
+  }
+  return {
+    localRole: localRoleFromPath(relPath, exportNames),
+    chunks,
+    symbols,
+    edges,
+  };
 }
 
 export function analyzeCsv(relPath: string, text: string): {

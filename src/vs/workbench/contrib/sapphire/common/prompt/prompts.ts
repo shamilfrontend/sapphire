@@ -258,6 +258,23 @@ export const builtinTools: {
     },
   },
 
+  diff_impact: {
+    name: 'diff_impact',
+    description: `1-hop impact from the project index for workspace-relative file paths. Uses imports and calls (not node_modules) plus the file's architectural layer. Pass paths separated by commas or newlines.`,
+    params: {
+      paths: {
+        description:
+          'Workspace-relative paths of changed files, separated by commas or newlines. Example: src/cart/Checkout.tsx, src/cart/billing.ts',
+      },
+    },
+  },
+
+  get_project_tour: {
+    name: 'get_project_tour',
+    description: `Return the saved onboarding tour for this workspace (.sapphire/index/tour.json): ordered steps with titles, descriptions, and key file paths. Prefer this when the user asks how the project is structured, for onboarding, or where to start reading. If missing, tell them to generate it from Project Index controls.`,
+    params: {},
+  },
+
   search_for_files: {
     name: 'search_for_files',
     description: `Returns a list of file paths whose content matches the given query (paths only, no line text). Prefer grep_search when you need matching lines. The query can be any substring or regex.`,
@@ -617,6 +634,8 @@ export const READ_ONLY_SUBAGENT_TOOLS: readonly BuiltinToolName[] = [
   'get_dir_tree',
   'search_pathnames_only',
   'search_project_index',
+  'diff_impact',
+  'get_project_tour',
   'search_for_files',
   'search_in_file',
   'read_lint_errors',
@@ -825,7 +844,7 @@ Language (mandatory): If the user's latest message is in Russian, write BOTH the
       `You will OFTEN need to gather context before making a change. Do not immediately make a change unless you have ALL relevant context.`,
     );
     details.push(
-      `If SELECTIONS is missing, thin, or clearly unrelated to the user's request, call search_project_index and/or search_pathnames_only, grep_search, search_symbols (then read_file) before editing. Prefer search_project_index for topic/purpose lookups. Do not guess file paths or edit in the dark.`,
+      `If SELECTIONS is missing, thin, or clearly unrelated to the user's request, call search_project_index and/or search_pathnames_only, grep_search, search_symbols (then read_file) before editing. Prefer search_project_index for topic/purpose lookups. Call diff_impact with the workspace-relative paths you are about to change when you need the blast radius (importers, callers, layers). For onboarding or "how is this project structured / where do I start", call get_project_tour first. Do not guess file paths or edit in the dark.`,
     );
     details.push(
       `Use run_subagent for a focused research or implementation subtask that would clutter this thread. Put ALL context the child needs in prompt (it cannot see this chat). Prefer one clear subtask per call. For independent read-only investigations, prefer run_parallel_subagents (max 4). End your own turn after synthesizing the child's summary — do not re-do the child's work.`,
@@ -888,7 +907,7 @@ Language (mandatory): If the user's latest message is in Russian, write BOTH the
       `You are in Plan mode. Research with read/search tools, ask clarifying questions in plain text when needed, then call create_plan (or update_plan to revise).`,
     );
     details.push(
-      `If SELECTIONS is missing or thin, start with search_project_index / search_pathnames_only / grep_search / search_symbols and read_file before drafting the plan.`,
+      `If SELECTIONS is missing or thin, start with search_project_index / get_project_tour / diff_impact / search_pathnames_only / grep_search / search_symbols and read_file before drafting the plan. Prefer get_project_tour for architecture overviews and onboarding.`,
     );
     details.push(
       `Do NOT edit application source files, create/delete project files (except the plan file via create_plan/update_plan), or run terminal commands.`,
@@ -1325,11 +1344,19 @@ export const gitCommitMessage_userMessage = (
   sampledDiffs: string,
   branch: string,
   log: string,
+  impact?: string,
 ) => {
   const section1 = `Section 1 - Summary of Changes (git diff --stat):`;
   const section2 = `Section 2 - Sampled File Diffs (Top changed files):`;
   const section3 = `Section 3 - Current Git Branch:`;
   const section4 = `Section 4 - Last 5 Commits (excluding merges):`;
+  const section5 = impact
+    ? `
+
+Section 5 - Graph impact (1-hop from the project index). Use this only to understand blast radius. The commit message should still describe intent, not list files.
+
+${impact}`
+    : '';
   return `
 Based on the following Git changes, write a clear, concise commit message that accurately summarizes the intent of the code changes.
 
@@ -1347,5 +1374,5 @@ ${branch}
 
 ${section4}
 
-${log}`.trim();
+${log}${section5}`.trim();
 };

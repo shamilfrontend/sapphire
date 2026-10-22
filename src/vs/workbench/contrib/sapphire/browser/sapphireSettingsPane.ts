@@ -33,9 +33,9 @@ import { registerIcon } from '../../../../platform/theme/common/iconRegistry.js'
 
 // см. preferences.contribution.ts — редактор keybindings
 
-/** Залитая шестерёнка, когда открыты настройки PPR (CSS mask в titlebar). */
+/** Залитая шестерёнка, когда открыты настройки Sapphire (CSS mask в titlebar). */
 const settingsGearOnIcon = registerIcon(
-  'ppr-settings-gear-filled',
+  'sapphire-settings-gear-filled',
   Codicon.settingsGear,
   nls.localize('sapphireSettingsFilledIcon', 'Icon for open Sapphire Settings.'),
 );

@@ -20,7 +20,12 @@ onErrorCaptured((err, _instance, info) => {
   hasError.value = true;
   error.value = err instanceof Error ? err : new Error(String(err));
   errorInfo.value = info;
-  console.error('[sapphire] ErrorBoundary captured render error', err, info);
+  console.error(
+    '[sapphire] ErrorBoundary captured render error',
+    err,
+    info,
+    err instanceof Error ? err.stack : undefined,
+  );
   return false;
 });
 </script>

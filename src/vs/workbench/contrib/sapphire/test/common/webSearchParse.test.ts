@@ -9,7 +9,12 @@ import {
   parseDuckDuckGoHtml,
   wrapUntrustedContent,
 } from '../../common/webSearchParse.js';
-import { assertPublicHttpUrl } from '../../common/webEgressPolicy.js';
+import {
+  assertMcpServerHttpUrl,
+  assertPublicHttpUrl,
+  assertPublicHttpUrlAfterResolve,
+  isBlockedEgressIp,
+} from '../../common/webEgressPolicy.js';
 
 suite('webSearchParse', () => {
   ensureNoDisposablesAreLeakedInTestSuite();
@@ -57,5 +62,31 @@ suite('webEgressPolicy', () => {
     assert.throws(() => assertPublicHttpUrl('http://192.168.1.1/x'));
     assert.throws(() => assertPublicHttpUrl('http://10.0.0.5/x'));
     assert.throws(() => assertPublicHttpUrl('ftp://example.com/x'));
+    assert.throws(() => assertPublicHttpUrl('http://169.254.169.254/latest'));
+    assert.throws(() => assertPublicHttpUrl('http://[::ffff:127.0.0.1]/x'));
+  });
+
+  test('assertMcpServerHttpUrl allows loopback but blocks metadata', () => {
+    assert.strictEqual(assertMcpServerHttpUrl('http://127.0.0.1:3845/mcp').port, '3845');
+    assert.throws(() => assertMcpServerHttpUrl('http://169.254.169.254/latest'));
+    assert.throws(() => assertMcpServerHttpUrl('http://metadata.google.internal/'));
+    assert.throws(() => assertMcpServerHttpUrl('ftp://example.com/'));
+  });
+
+  test('blocks decimal IPv4 loopback literal', () => {
+    assert.strictEqual(isBlockedEgressIp('2130706433'), true);
+    assert.throws(() => assertPublicHttpUrl('http://2130706433/'));
+  });
+
+  test('assertPublicHttpUrlAfterResolve blocks private resolved IPs', async () => {
+    await assert.rejects(
+      () =>
+        assertPublicHttpUrlAfterResolve('https://evil.example', async () => ['10.0.0.1']),
+      /resolves to private/,
+    );
+    const ok = await assertPublicHttpUrlAfterResolve('https://ok.example', async () => [
+      '93.184.216.34',
+    ]);
+    assert.strictEqual(ok.hostname, 'ok.example');
   });
 });

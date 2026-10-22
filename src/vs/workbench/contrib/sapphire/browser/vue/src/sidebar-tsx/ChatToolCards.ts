@@ -3,8 +3,8 @@
  *  Licensed under the Apache License, Version 2.0. See LICENSE.txt for more information.
  *--------------------------------------------------------------------------------------*/
 
-import { Fragment, defineComponent, h, onMounted, onUnmounted, onWatcherCleanup, ref, watch, type PropType, type VNodeChild } from 'vue';
-import { AlertTriangle, Ban, ChevronRight, CircleEllipsis, Hammer } from 'lucide-vue-next';
+import { defineComponent, h, onMounted, onUnmounted, onWatcherCleanup, ref, watch, type PropType, type VNodeChild } from 'vue';
+import { ChevronRight, Hammer } from 'lucide-vue-next';
 import { useAccessor, useChatThreadsState, useChatThreadsStreamState, useSettingsState } from '../util/services.js';
 import { URI } from '../../../../../../../base/common/uri.js';
 import ChatMarkdownRender from '../markdown/ChatMarkdownRender.vue';
@@ -196,6 +196,16 @@ const titleOfBuiltinToolName = {
     done: 'Поиск по индексу проекта',
     proposed: 'Искать в индексе проекта',
     running: loadingTitleWrapper('Поиск по индексу проекта')
+  },
+  diff_impact: {
+    done: 'Оценён охват изменений',
+    proposed: 'Оценить охват изменений',
+    running: loadingTitleWrapper('Оценка охвата изменений')
+  },
+  get_project_tour: {
+    done: 'Тур онбординга',
+    proposed: 'Прочитать тур онбординга',
+    running: loadingTitleWrapper('Чтение тура онбординга')
   },
   search_for_files: {
     done: 'Поиск выполнен',
@@ -413,6 +423,18 @@ const toolNameToDesc = (toolName: BuiltinToolName, _toolParams: BuiltinToolCallP
         desc1: `"${toolParams.query}"`
       };
     },
+    diff_impact: () => {
+      const toolParams = _toolParams as BuiltinToolCallParams['diff_impact'];
+      const paths = toolParams.paths ?? '';
+      return {
+        desc1: paths.split(/[\n,]/).map((part) => part.trim()).filter(Boolean).slice(0, 3).join(', ') || 'paths'
+      };
+    },
+    get_project_tour: () => {
+      return {
+        desc1: 'tour.json'
+      };
+    },
     search_for_files: () => {
       const toolParams = _toolParams as BuiltinToolCallParams['search_for_files'];
       return {
@@ -619,6 +641,7 @@ const toolNameToDesc = (toolName: BuiltinToolName, _toolParams: BuiltinToolCallP
     };
   }
 };
+
 export const ToolRequestAcceptRejectButtons = ({
   toolName
 }: {
@@ -670,13 +693,22 @@ export const ToolRequestAcceptRejectButtons = ({
             `
   }, "\n      Отмена\n    ");
   const approvalType = isABuiltinToolName(toolName) ? approvalTypeOfBuiltinToolName[toolName] : 'MCP tools';
+  const approvalDesc =
+    approvalType === 'edits'
+      ? 'правки'
+      : approvalType === 'terminal'
+        ? 'терминал'
+        : approvalType === 'network'
+          ? 'сеть'
+          : 'MCP';
+
   const approvalToggle = approvalType ? h("div", {
     key: approvalType,
     class: "flex items-center ml-2 gap-x-1"
   }, h(ToolApprovalTypeSwitch, {
     size: "xs",
     approvalType: approvalType,
-    desc: `Автоодобрение: ${approvalType}`
+    desc: `Автоодобрение: ${approvalDesc}`
   })) : null;
   return h("div", {
     class: "flex gap-2 mx-0.5 items-center"
@@ -1438,13 +1470,86 @@ export const builtinToolNameToComponent: { [T in BuiltinToolName]: {
         const {
           result
         } = toolMessage;
-        componentParams.children = h(ToolChildrenWrapper, null, result.hits.map(h => h("div", {
-          key: h.uri.fsPath,
+        const rows = result.hits.map(hit => h("div", {
+          key: hit.uri.fsPath,
           class: "text-xs text-void-fg-2 truncate"
-        }, getBasename(h.uri.fsPath), " — ", (h.purpose || h.localRole).slice(0, 80))));
+        }, getBasename(hit.uri.fsPath), " — ", (hit.purpose || hit.localRole).slice(0, 80)));
+        componentParams.children = h(ToolChildrenWrapper, null, rows);
       } else if (toolMessage.type === 'tool_error') {
         componentParams.bottomChildren = h(BottomChildren, {
           title: "Ошибка"
+        }, h(CodeChildren, null, toolMessage.result));
+      }
+      return toolHeader(componentParams);
+    }
+  },
+  diff_impact: {
+    resultWrapper: ({
+      toolMessage
+    }) => {
+      const accessor = useAccessor();
+      const isRejected = toolMessage.type === 'rejected';
+      const title = getTitle(toolMessage);
+      const {
+        desc1,
+        desc1Info
+      } = toolNameToDesc(toolMessage.name, toolMessage.params, accessor);
+      if (toolMessage.type === 'tool_request') return null;
+      if (toolMessage.type === 'running_now') return null;
+      const componentParams: ToolHeaderParams = {
+        title,
+        desc1,
+        desc1Info,
+        isError: false,
+        icon: null,
+        isRejected
+      };
+      if (toolMessage.type === 'success') {
+        const summary = h(CodeChildren, null, h('pre', {
+          class: 'font-mono whitespace-pre-wrap'
+        }, toolMessage.result.summary));
+        componentParams.children = h(ToolChildrenWrapper, null, summary);
+      } else if (toolMessage.type === 'tool_error') {
+        componentParams.bottomChildren = h(BottomChildren, {
+          title: 'Ошибка'
+        }, h(CodeChildren, null, toolMessage.result));
+      }
+      return toolHeader(componentParams);
+    }
+  },
+  get_project_tour: {
+    resultWrapper: ({
+      toolMessage
+    }) => {
+      const accessor = useAccessor();
+      const isRejected = toolMessage.type === 'rejected';
+      const title = getTitle(toolMessage);
+      const {
+        desc1,
+        desc1Info
+      } = toolNameToDesc(toolMessage.name, toolMessage.params, accessor);
+      if (toolMessage.type === 'tool_request') return null;
+      if (toolMessage.type === 'running_now') return null;
+      const componentParams: ToolHeaderParams = {
+        title,
+        desc1,
+        desc1Info,
+        isError: false,
+        icon: null,
+        isRejected
+      };
+      if (toolMessage.type === 'success') {
+        const {
+          result
+        } = toolMessage;
+        componentParams.info = result.stepCount ? `${result.stepCount} шагов` : undefined;
+        const summary = h(CodeChildren, null, h('pre', {
+          class: 'font-mono whitespace-pre-wrap'
+        }, result.summary.slice(0, 2000)));
+        componentParams.children = h(ToolChildrenWrapper, null, summary);
+      } else if (toolMessage.type === 'tool_error') {
+        componentParams.bottomChildren = h(BottomChildren, {
+          title: 'Ошибка'
         }, h(CodeChildren, null, toolMessage.result));
       }
       return toolHeader(componentParams);

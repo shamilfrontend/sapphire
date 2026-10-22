@@ -1,6 +1,6 @@
 <script setup lang="ts">
 /*--------------------------------------------------------------------------------------
- *  PPR Code — folder tree of chats in the Режим Агент sidebar.
+ *  Sapphire — folder tree of chats in the Режим Агент sidebar.
  *--------------------------------------------------------------------------------------*/
 
 import { computed, nextTick, provide, reactive, ref, watch } from 'vue';
@@ -21,6 +21,7 @@ import {
   agentsTreeKey,
   AgentsTreeApi,
   DATE_LABELS,
+  DRAG_MIME,
   DragPayload,
   DropTarget,
   loadExpanded,
@@ -343,7 +344,7 @@ const startDrag = (event: DragEvent, payload: DragPayload) => {
   if (!event.dataTransfer) return;
   dragging = payload;
   const raw = JSON.stringify(payload);
-  event.dataTransfer.setData('application/x-ppr-chat-node', raw);
+  event.dataTransfer.setData(DRAG_MIME, raw);
   event.dataTransfer.setData('text/plain', raw);
   event.dataTransfer.effectAllowed = 'move';
 };

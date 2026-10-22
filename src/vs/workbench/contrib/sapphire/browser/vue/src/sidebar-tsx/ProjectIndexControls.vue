@@ -8,7 +8,7 @@ import { computed, onMounted, onUnmounted, onWatcherCleanup, ref, watch, type CS
 import { autoUpdate, flip, offset, shift, useFloating, type Placement } from '@floating-ui/vue';
 import { Pause, Play, RefreshCw } from 'lucide-vue-next';
 import { useAccessor, useProjectIndexStatus, useSettingsState } from '../util/services.js';
-import { PPR_REINDEX_WORKSPACE_COMMAND_ID } from '../../../projectIndexService.js';
+import { SAPPHIRE_REINDEX_WORKSPACE_COMMAND_ID } from '../../../projectIndexService.js';
 import type {
   ProjectIndexStatus,
   ProjectIndexStepProgress,
@@ -226,6 +226,29 @@ const showPurposeCta = computed(
     purposeWorkCount.value > 0,
 );
 
+const tourRunning = computed(() => !!status.value.tourRunning);
+const tour = computed(() => status.value.tour);
+const tourStale = computed(() => !!status.value.tourStale);
+const tourError = computed(() => status.value.tourError);
+const showTourCta = computed(
+  () => status.value.isIndexed && !localIndexing.value && !tourRunning.value,
+);
+
+function formatTourDate(ts: number | undefined): string {
+  if (!ts) {
+    return '—';
+  }
+  try {
+    return new Date(ts).toLocaleString();
+  } catch {
+    return '—';
+  }
+}
+
+async function onGenerateTour() {
+  await projectIndexService.generateTour();
+}
+
 const iconBtnClass =
   'inline-flex items-center justify-center rounded border border-void-border-1 bg-void-bg-1 text-void-fg-1 hover:brightness-110 shrink-0';
 const iconBtnStyle = { width: 22, height: 22, ...noDrag } as CSSProperties;
@@ -417,7 +440,7 @@ function onPlayPause() {
             :style="iconBtnStyle"
             title="Переиндексировать заново"
             aria-label="Переиндексировать заново"
-            @click.stop="void commandService.executeCommand(PPR_REINDEX_WORKSPACE_COMMAND_ID)"
+            @click.stop="void commandService.executeCommand(SAPPHIRE_REINDEX_WORKSPACE_COMMAND_ID)"
           >
             <RefreshCw :size="12" :stroke-width="2.5" :style="{ width: 12, height: 12 }" />
           </button>
@@ -445,6 +468,32 @@ function onPlayPause() {
           @click="void onStartPurpose()"
         >
           {{ llmPurposeEnabled ? 'Запустить LLM-описания' : 'Включить и запустить' }}
+        </button>
+      </div>
+
+      <div
+        v-if="showTourCta || tourRunning"
+        class="mb-3 rounded-md border border-void-border-2 bg-void-bg-2 px-2.5 py-2"
+      >
+        <div class="text-[11px] text-void-fg-2 leading-snug mb-1.5">
+          <template v-if="tourRunning">Генерация тура онбординга…</template>
+          <template v-else-if="tour">
+            Тур: {{ tour.steps?.length ?? 0 }} шагов · {{ formatTourDate(tour.generatedAt) }}
+            <span v-if="tourStale" class="text-amber-400"> · устарел — пересоздайте</span>
+          </template>
+          <template v-else>
+            Тур онбординга: один LLM-запрос по графу индекса. Агент читает его через
+            get_project_tour.
+          </template>
+        </div>
+        <div v-if="tourError" class="text-[11px] text-red-400 mb-1.5">{{ tourError }}</div>
+        <button
+          v-if="!tourRunning"
+          type="button"
+          class="text-xs bg-void-bg-1 text-void-fg-1 rounded px-2 py-1.5 text-left font-medium border border-void-border-1 hover:brightness-110 w-full"
+          @click="void onGenerateTour()"
+        >
+          {{ tour ? 'Пересоздать тур онбординга' : 'Сгенерировать тур онбординга' }}
         </button>
       </div>
 

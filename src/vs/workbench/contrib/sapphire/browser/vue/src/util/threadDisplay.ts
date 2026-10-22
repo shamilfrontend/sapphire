@@ -1,5 +1,5 @@
 /*--------------------------------------------------------------------------------------
- *  PPR Code — shared chat title and stream indicator for Режим Агент and tabs.
+ *  Sapphire — shared chat title and stream indicator for Режим Агент and tabs.
  *--------------------------------------------------------------------------------------*/
 
 import { IsRunningType, ThreadType } from '../../../chatThreadService.js';

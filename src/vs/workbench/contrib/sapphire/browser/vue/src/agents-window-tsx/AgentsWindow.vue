@@ -1,6 +1,6 @@
 <script setup lang="ts">
 /*--------------------------------------------------------------------------------------
- *  PPR Code — fullscreen Режим Агент (chat-first shell).
+ *  Sapphire — fullscreen Режим Агент (chat-first shell).
  *--------------------------------------------------------------------------------------*/
 
 import { computed } from 'vue';

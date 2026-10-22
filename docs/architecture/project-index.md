@@ -29,7 +29,7 @@ flowchart TD
 | Фаза        | Что делает                                                                 | LLM |
 | ----------- | -------------------------------------------------------------------------- | --- |
 | scanning    | обход workspace, фильтр skip-директорий и бинарных расширений              | нет |
-| analyzing   | текст/office/csv → чанки, DocumentSymbol, локальный `localRole`, edges     | нет |
+| analyzing   | текст/office/csv → чанки; TS/JS — структура (символы, imports/calls); прочие языки — regex или DocumentSymbol; `layer`, edges | нет |
 | purpose     | короткий JSON: `purpose`, `tags`, `when_useful`                            | да  |
 
 Прогресс UI: scanning ≈ 0–5%, analyzing ≈ 5–80% (или 0–100% без purpose), purpose ≈ 80–100%.
@@ -65,7 +65,7 @@ Pause/Cancel останавливает очередь и блокирует а�
 
 | Поле | Смысл |
 | --- | --- |
-| `schemaVersion` | версия формата (**1**, `PROJECT_INDEX_SCHEMA_VERSION`); при несовпадении индекс пересобирают |
+| `schemaVersion` | версия формата (**3**, `PROJECT_INDEX_SCHEMA_VERSION`); при несовпадении индекс отбрасывается и собирается заново |
 | `root` | корень workspace |
 | `builtAt` / `lastFullAt` / `lastIncrementalAt` | когда индекс строили (полный / инкремент) |
 | `counts` | числа files / chunks / symbols / edges, разбивка `byKind`, счётчики purpose (`done` / `pending` / `failed`) |
@@ -79,6 +79,7 @@ JSONL: одна запись = один файл workspace.
 | Поле | Смысл |
 | --- | --- |
 | `path`, `mtime`, `size`, `kind`, `hash` | идентификация и детект изменений для инкремента |
+| `layer` | слой по пути: `browser`, `electron-main`, `common`, `node`, `test`, `docs`, `other` |
 | `localRole` | эвристика по пути/символам (без LLM) |
 | `purpose` | короткое «зачем файл» от LLM |
 | `tags` | до 8 тегов |
@@ -96,19 +97,41 @@ JSONL: одна запись = один файл workspace.
 
 ### `symbols.jsonl`
 
-Символы language service / DocumentSymbol: `path`, `symbolName`, `kind`, `startLine`, `endLine`.
+Для TS/JS — структурный разбор файла: функции, классы, методы, константы с настоящими `startLine` / `endLine` и опциональным `owner`. Для остальных языков — regex по export, а если модель открылась, outline DocumentSymbol (до 80). Поле `owner` есть у методов.
 
-**Зачем:** поиск по именам классов, функций, методов; дополняет path/purpose, когда запрос про API или конкретную сущность.
+**Зачем:** поиск по именам классов, функций, методов; якорь хита — диапазон строк символа.
 
 ### `edges.jsonl`
 
-Рёбра `fromPath` → `toPath` (импорты и эвристики ссылок между файлами).
+Рёбра с типом:
 
-**Зачем:** граф зависимостей для скоринга и навигации «соседние / связанные файлы» при поиске по проекту.
+| `type` | Смысл |
+| --- | --- |
+| `imports` | файл импортирует другой файл внутри workspace. Относительный спецификатор `.js`/`.jsx`/`.mjs`/`.cjs` резолвится в `.ts`/`.tsx`/`.mts`/`.cts`; префикс `vs/...` — в `src/vs/...`. `import type` / `export type … from` рёбер не дают. Пакеты из `node_modules` ребром не становятся. Для `.html`/`.htm` — локальные `href`/`src` у `link`, `script`, `img`; для `.css`/`.scss`/`.less` — `@import` и `url(...)` на файлы workspace |
+| `contains` | файл содержит символ (`toSymbol`) |
+| `calls` | символ (`fromSymbol`) вызывает символ репозитория (`toSymbol` на `toPath`). Неразрешённый вызов не записывается |
 
-## Поиск
+**Зачем:** граф для `diff_impact` и навигации «кто импортирует / кто вызывает».
 
-`search_project_index` — локальный token-score по path, purpose, localRole, tags, whenUseful, символам и чанкам. Страницы по ~20 hits.
+Схема `PROJECT_INDEX_SCHEMA_VERSION` = **3**. Индекс прошлой версии при загрузке отбрасывается и собирается заново.
+
+## Поиск и охват изменений
+
+`search_project_index` — локальный token-score по path, purpose, localRole, tags, whenUseful, символам и чанкам. Страницы по ~20 hits. Имена и строки символов берутся из структурного разбора.
+
+`diff_impact` — BFS до **2 hops** по `imports` и `calls` от переданных относительных путей: затронутые файлы и символы (`hops`), плюс слои. Тот же расчёт подмешивается в генерацию commit message (секция graph impact). `contains` внутри изменённого файла соседом не считается.
+
+### `tour.json`
+
+Опциональный guided tour онбординга (не часть schemaVersion). Генерируется одним LLM-запросом (модель SCM) из компактной сводки: слои, до ~80 файлов с purpose/localRole, до ~60 рёбер `imports`/`calls`. Кнопка в карточке индекса запускает его вручную. После очереди LLM-purpose, если тура нет или он stale, сервис запускает генерацию один раз на этот purpose-batch.
+
+| Поле | Смысл |
+| --- | --- |
+| `generatedAt` | когда тур собрали |
+| `basedOn` | `{ files, edges, purposeDone }` на момент генерации — для детекта stale |
+| `steps[]` | `order`, `title`, `description`, `paths[]` (1–5 путей из индекса), опционально `symbols[]` |
+
+Агент читает тур tool’ом `get_project_tour`. Полный reindex и несовпадение schema удаляют тур. Инкремент тур не трогает; UI помечает stale, если counts сильно разъехались.
 
 ## Настройки
 
@@ -124,7 +147,10 @@ JSONL: одна запись = один файл workspace.
 | ------------------------------------------------------------ | ----------------------------------- |
 | `browser/projectIndexService.ts`                             | оркестрация, persist, LLM-purpose   |
 | `common/projectIndex/projectIndexTypes.ts`                   | типы, schemaVersion, пути           |
-| `common/projectIndex/projectIndexAnalyze.ts`                 | skip/kind/hash/localRole/чанки      |
+| `common/projectIndex/projectIndexAnalyze.ts`                 | skip/kind/hash/localRole/слой/чанки |
+| `common/projectIndex/projectIndexStructure.ts`               | структурный разбор TS/JS            |
+| `common/projectIndex/projectIndexImpact.ts`                  | diff-impact до 2 hops               |
+| `common/projectIndex/projectIndexTour.ts`                    | промпт/parse тура онбординга        |
 | `common/projectIndex/projectIndexSearch.ts`                  | scoring для tool                    |
 | `browser/vue/.../ProjectIndexControls.vue`                 | UI статуса / детали                 |
 | `browser/projectIndexTitlebarContribution.ts`                | индикатор в titlebar                |

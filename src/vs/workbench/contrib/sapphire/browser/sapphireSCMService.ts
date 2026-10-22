@@ -41,6 +41,11 @@ import {
 } from '../../../../platform/instantiation/common/instantiation.js';
 import { Disposable } from '../../../../base/common/lifecycle.js';
 import { INotificationService } from '../../../../platform/notification/common/notification.js';
+import { IProjectIndexService } from './projectIndexService.js';
+import {
+  buildProjectIndexImpact,
+  formatProjectIndexImpact,
+} from '../common/projectIndex/projectIndexImpact.js';
 
 interface ModelOptions {
   modelSelection: ModelSelection | null;
@@ -82,6 +87,7 @@ class GenerateCommitMessageService extends Disposable implements IGenerateCommit
     @ILLMMessageService private readonly llmMessageService: ILLMMessageService,
     @IContextKeyService private readonly contextKeyService: IContextKeyService,
     @INotificationService private readonly notificationService: INotificationService,
+    @IProjectIndexService private readonly projectIndexService: IProjectIndexService,
   ) {
     super();
     this.loadingContextKey = this.contextKeyService.createKey(loadingContextKey, false);
@@ -103,11 +109,12 @@ class GenerateCommitMessageService extends Disposable implements IGenerateCommit
 
       try {
         const { path, repo } = this.gitRepoInfo();
-        const [stat, sampledDiffs, branch, log] = await Promise.all([
+        const [stat, sampledDiffs, branch, log, changedFiles] = await Promise.all([
           this.sapphireSCM.gitStat(path),
           this.sapphireSCM.gitSampledDiffs(path),
           this.sapphireSCM.gitBranch(path),
           this.sapphireSCM.gitLog(path),
+          this.sapphireSCM.gitChangedFiles(path).catch(() => [] as string[]),
         ]);
 
         if (!this.isCurrentRequest(requestId)) {
@@ -128,7 +135,18 @@ class GenerateCommitMessageService extends Disposable implements IGenerateCommit
           overridesOfModel,
         };
 
-        const prompt = gitCommitMessage_userMessage(stat, sampledDiffs, branch, log);
+        const impact =
+          changedFiles.length > 0
+            ? formatProjectIndexImpact(
+                buildProjectIndexImpact({
+                  changedPaths: changedFiles,
+                  files: this.projectIndexService.getFiles(),
+                  symbols: this.projectIndexService.getSymbols(),
+                  edges: this.projectIndexService.getEdges(),
+                }),
+              )
+            : undefined;
+        const prompt = gitCommitMessage_userMessage(stat, sampledDiffs, branch, log, impact);
 
         const simpleMessages = [{ role: 'user', content: prompt } as const];
         const { messages, separateSystemMessage } =

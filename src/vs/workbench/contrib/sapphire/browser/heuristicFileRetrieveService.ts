@@ -32,8 +32,8 @@ import {
 import { StagingSelectionItem } from '../common/chatThreadServiceTypes.js';
 import { IProjectIndexService } from './projectIndexService.js';
 import {
-  PPR_CHAT_HEURISTIC_TIMEOUT_MS,
-  PPR_CHAT_PREP_TIMEOUT_MS,
+  SAPPHIRE_CHAT_HEURISTIC_TIMEOUT_MS,
+  SAPPHIRE_CHAT_PREP_TIMEOUT_MS,
   racePrepAwait,
 } from '../common/chatPrepGuard.js';
 
@@ -198,7 +198,7 @@ class HeuristicFileRetrieveService implements IHeuristicFileRetrieveService {
           const modelResult = await racePrepAwait(
             this._sapphireModelService.getModelSafe(uri),
             cts.token,
-            Math.min(10_000, PPR_CHAT_PREP_TIMEOUT_MS),
+            Math.min(10_000, SAPPHIRE_CHAT_PREP_TIMEOUT_MS),
           );
           language = modelResult.model?.getLanguageId() || 'plaintext';
         } catch {
@@ -215,7 +215,7 @@ class HeuristicFileRetrieveService implements IHeuristicFileRetrieveService {
     };
 
     try {
-      return await racePrepAwait(work(), cts.token, PPR_CHAT_HEURISTIC_TIMEOUT_MS);
+      return await racePrepAwait(work(), cts.token, SAPPHIRE_CHAT_HEURISTIC_TIMEOUT_MS);
     } catch {
       return fallback();
     } finally {

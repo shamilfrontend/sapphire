@@ -877,11 +877,9 @@ ${planBody}`;
         });
       }
 
-      // 2. Approval: tool_request и выход; у subagent UI нет — auto-approve
-      const skipApprovalUi = this._subagentThreadIds.has(threadId);
-
+      // 2. Approval: tool_request и выход. Subagent наследует ту же matrix (без skip UI).
       const approvalType = isBuiltInTool ? approvalTypeOfBuiltinToolName[toolName] : 'MCP tools';
-      if (approvalType && !skipApprovalUi) {
+      if (approvalType) {
         const autoApprove = this._s._settingsService.state.globalSettings.autoApprove[approvalType];
         // tool_request только при ручном approve; auto-approve сразу → running_now
         if (!autoApprove) {

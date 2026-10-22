@@ -7,7 +7,6 @@ import {
   computed,
   onMounted,
   onUnmounted,
-  reactive,
   ref,
   toValue,
   watch,
@@ -109,113 +108,143 @@ const activeURIListeners: Set<(uri: URI | null) => void> = new Set();
 
 const mcpListeners: Set<() => void> = new Set();
 
-// Вызывается один раз при bootstrap Vue до любых composables ниже.
-// Здесь единственное место без dispose подписок; в остальном коде onDidChange нужно dispose.
-export const _registerServices = (accessor: ServicesAccessor) => {
-  const disposables: IDisposable[] = [];
+/** Сколько Vue-mount'ов держат общие подписки на VS Code-сервисы. */
+let servicesRegisterCount = 0;
+let sharedServiceDisposables: IDisposable[] = [];
 
+// Вызывается из каждого mountFnGenerator. Подписки на сервисы — один раз (refcount),
+// иначе десятки CommandBar/Sidebar дублируют listeners и дают каскад / stack overflow.
+export const _registerServices = (accessor: ServicesAccessor) => {
   _registerAccessor(accessor);
 
-  const stateServices = {
-    chatThreadsStateService: accessor.get(IChatThreadService),
-    settingsStateService: accessor.get(ISapphireSettingsService),
-    refreshModelService: accessor.get(IRefreshModelService),
-    themeService: accessor.get(IThemeService),
-    editCodeService: accessor.get(IEditCodeService),
-    sapphireCommandBarService: accessor.get(ISapphireCommandBarService),
-    modelService: accessor.get(IModelService),
-    mcpService: accessor.get(IMCPService),
-    projectIndexService: accessor.get(IProjectIndexService),
-  };
+  if (servicesRegisterCount === 0) {
+    const disposables: IDisposable[] = [];
 
-  const {
-    settingsStateService,
-    chatThreadsStateService,
-    refreshModelService,
-    themeService,
-    editCodeService,
-    sapphireCommandBarService,
-    mcpService,
-    projectIndexService,
-  } = stateServices;
+    const stateServices = {
+      chatThreadsStateService: accessor.get(IChatThreadService),
+      settingsStateService: accessor.get(ISapphireSettingsService),
+      refreshModelService: accessor.get(IRefreshModelService),
+      themeService: accessor.get(IThemeService),
+      editCodeService: accessor.get(IEditCodeService),
+      sapphireCommandBarService: accessor.get(ISapphireCommandBarService),
+      modelService: accessor.get(IModelService),
+      mcpService: accessor.get(IMCPService),
+      projectIndexService: accessor.get(IProjectIndexService),
+    };
 
-  chatThreadsState = chatThreadsStateService.state;
-  disposables.push(
-    chatThreadsStateService.onDidChangeCurrentThread(() => {
+    const {
+      settingsStateService,
+      chatThreadsStateService,
+      refreshModelService,
+      themeService,
+      editCodeService,
+      sapphireCommandBarService,
+      mcpService,
+      projectIndexService,
+    } = stateServices;
+
+    chatThreadsState = chatThreadsStateService.state;
+    disposables.push(
+      chatThreadsStateService.onDidChangeCurrentThread(() => {
+        chatThreadsState = chatThreadsStateService.state;
+        chatThreadsStateListeners.forEach((l) => l(chatThreadsState));
+      }),
+    );
+
+    // Тот же IChatThreadService, отдельный streamState
+    chatThreadsStreamState = chatThreadsStateService.streamState;
+    disposables.push(
+      chatThreadsStateService.onDidChangeStreamState(({ threadId }) => {
+        chatThreadsStreamState = chatThreadsStateService.streamState;
+        chatThreadsStreamStateListeners.forEach((l) => l(threadId));
+      }),
+    );
+
+    settingsState = settingsStateService.state;
+    disposables.push(
+      settingsStateService.onDidChangeState(() => {
+        settingsState = settingsStateService.state;
+        settingsStateListeners.forEach((l) => l(settingsState));
+      }),
+    );
+
+    refreshModelState = refreshModelService.state;
+    disposables.push(
+      refreshModelService.onDidChangeState((providerName) => {
+        refreshModelState = refreshModelService.state;
+        refreshModelStateListeners.forEach((l) => l(refreshModelState));
+        refreshModelProviderListeners.forEach((l) => l(providerName, refreshModelState)); // per-provider колбэки
+      }),
+    );
+
+    colorThemeState = themeService.getColorTheme().type;
+    disposables.push(
+      themeService.onDidColorThemeChange(({ type }) => {
+        colorThemeState = type;
+        colorThemeStateListeners.forEach((l) => l(colorThemeState));
+      }),
+    );
+
+    // Событие без payload state — только diffareaid + флаг streaming
+    disposables.push(
+      editCodeService.onDidChangeStreamingInCtrlKZone(({ diffareaid }) => {
+        const isStreaming = editCodeService.isCtrlKZoneStreaming({ diffareaid });
+        ctrlKZoneStreamingStateListeners.forEach((l) => l(diffareaid, isStreaming));
+      }),
+    );
+
+    disposables.push(
+      sapphireCommandBarService.onDidChangeState(({ uri }) => {
+        commandBarURIStateListeners.forEach((l) => l(uri));
+      }),
+    );
+
+    disposables.push(
+      sapphireCommandBarService.onDidChangeActiveURI(({ uri }) => {
+        activeURIListeners.forEach((l) => l(uri));
+      }),
+    );
+
+    disposables.push(
+      mcpService.onDidChangeState(() => {
+        mcpListeners.forEach((l) => l());
+      }),
+    );
+
+    projectIndexStatus = projectIndexService.getStatus();
+    disposables.push(
+      projectIndexService.onDidChangeStatus((s) => {
+        projectIndexStatus = s;
+        projectIndexStatusListeners.forEach((l) => l(projectIndexStatus));
+      }),
+    );
+
+    sharedServiceDisposables = disposables;
+  } else {
+    // Уже подписаны — только освежить снимки на случай гонки первого mount.
+    try {
+      const chatThreadsStateService = accessor.get(IChatThreadService);
       chatThreadsState = chatThreadsStateService.state;
-      chatThreadsStateListeners.forEach((l) => l(chatThreadsState));
-    }),
-  );
-
-  // Тот же IChatThreadService, отдельный streamState
-  chatThreadsStreamState = chatThreadsStateService.streamState;
-  disposables.push(
-    chatThreadsStateService.onDidChangeStreamState(({ threadId }) => {
       chatThreadsStreamState = chatThreadsStateService.streamState;
-      chatThreadsStreamStateListeners.forEach((l) => l(threadId));
-    }),
-  );
+      settingsState = accessor.get(ISapphireSettingsService).state;
+      projectIndexStatus = accessor.get(IProjectIndexService).getStatus();
+    } catch {
+      // сервисы ещё не готовы — listeners подтянут state позже
+    }
+  }
 
-  settingsState = settingsStateService.state;
-  disposables.push(
-    settingsStateService.onDidChangeState(() => {
-      settingsState = settingsStateService.state;
-      settingsStateListeners.forEach((l) => l(settingsState));
-    }),
-  );
-
-  refreshModelState = refreshModelService.state;
-  disposables.push(
-    refreshModelService.onDidChangeState((providerName) => {
-      refreshModelState = refreshModelService.state;
-      refreshModelStateListeners.forEach((l) => l(refreshModelState));
-      refreshModelProviderListeners.forEach((l) => l(providerName, refreshModelState)); // per-provider колбэки
-    }),
-  );
-
-  colorThemeState = themeService.getColorTheme().type;
-  disposables.push(
-    themeService.onDidColorThemeChange(({ type }) => {
-      colorThemeState = type;
-      colorThemeStateListeners.forEach((l) => l(colorThemeState));
-    }),
-  );
-
-  // Событие без payload state — только diffareaid + флаг streaming
-  disposables.push(
-    editCodeService.onDidChangeStreamingInCtrlKZone(({ diffareaid }) => {
-      const isStreaming = editCodeService.isCtrlKZoneStreaming({ diffareaid });
-      ctrlKZoneStreamingStateListeners.forEach((l) => l(diffareaid, isStreaming));
-    }),
-  );
-
-  disposables.push(
-    sapphireCommandBarService.onDidChangeState(({ uri }) => {
-      commandBarURIStateListeners.forEach((l) => l(uri));
-    }),
-  );
-
-  disposables.push(
-    sapphireCommandBarService.onDidChangeActiveURI(({ uri }) => {
-      activeURIListeners.forEach((l) => l(uri));
-    }),
-  );
-
-  disposables.push(
-    mcpService.onDidChangeState(() => {
-      mcpListeners.forEach((l) => l());
-    }),
-  );
-
-  projectIndexStatus = projectIndexService.getStatus();
-  disposables.push(
-    projectIndexService.onDidChangeStatus((s) => {
-      projectIndexStatus = s;
-      projectIndexStatusListeners.forEach((l) => l(projectIndexStatus));
-    }),
-  );
-
-  return disposables;
+  servicesRegisterCount += 1;
+  return [
+    {
+      dispose: () => {
+        servicesRegisterCount = Math.max(0, servicesRegisterCount - 1);
+        if (servicesRegisterCount === 0) {
+          sharedServiceDisposables.forEach((d) => d.dispose());
+          sharedServiceDisposables = [];
+        }
+      },
+    },
+  ];
 };
 
 const getVueAccessor = (accessor: ServicesAccessor) => {
@@ -491,11 +520,12 @@ export const useActiveURI = () => {
       activeURIListeners.delete(listener);
     },
   );
-  return reactive({
+  // Plain getter (не reactive): чтение s.value остаётся trackable для watch.
+  return {
     get uri() {
       return s.value;
     },
-  });
+  };
 };
 
 export const useMCPServiceState = () => {

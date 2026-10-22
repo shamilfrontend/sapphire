@@ -223,6 +223,7 @@ import { SapphireSCMService } from '../../workbench/contrib/sapphire/electron-ma
 import { ISapphireSCMService } from '../../workbench/contrib/sapphire/common/sapphireSCMTypes.js';
 import { MCPChannel } from '../../workbench/contrib/sapphire/electron-main/mcpChannel.js';
 import { OfficeExtractChannel } from '../../workbench/contrib/sapphire/electron-main/officeExtractChannel.js';
+import { WebEgressChannel } from '../../workbench/contrib/sapphire/electron-main/webEgressChannel.js';
 /**
  * The main VS Code application. There will only ever be one instance,
  * even if the user starts many instances (e.g. from the command line).
@@ -1701,6 +1702,9 @@ export class CodeApplication extends Disposable {
 
     const officeExtractChannel = new OfficeExtractChannel();
     mainProcessElectronServer.registerChannel('sapphire-channel-officeExtract', officeExtractChannel);
+
+    const webEgressChannel = new WebEgressChannel();
+    mainProcessElectronServer.registerChannel('sapphire-channel-webEgress', webEgressChannel);
 
     // Extension Host Debug Broadcasting
     const electronExtensionHostDebugBroadcastChannel =

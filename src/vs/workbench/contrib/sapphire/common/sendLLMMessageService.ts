@@ -145,7 +145,7 @@ class LLMMessageService extends Disposable implements ILLMMessageService {
 
     // нет modelSelection — UI обычно не даёт дойти; дублируем проверку на backend (Apply и т.п.)
     if (modelSelection === null) {
-      // PPR AI: обычно означает, что у пользователя не сохранён валидный токен —
+      // Sapphire: обычно означает, что у пользователя не сохранён валидный токен —
       // онбординг перекроет workbench, пока провайдер не настроен.
       const message = `Не выбрана модель. Подключите провайдера в Settings → Провайдеры.`;
       onError({ message, fullError: null });

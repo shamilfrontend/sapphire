@@ -39,8 +39,24 @@ export class ServerInstallError extends Error {
   }
 }
 
-const DEFAULT_DOWNLOAD_URL_TEMPLATE =
-  'https://github.com/voideditor/binaries/releases/download/${version}/void-reh-${os}-${arch}-${version}.tar.gz';
+/** Sapphire: no Void REH fallback — require an explicit download template. */
+function resolveServerDownloadUrlTemplate(
+  fromSetting: string | undefined,
+  fromProduct: string | undefined,
+): string {
+  const template = (fromSetting || fromProduct || '').trim();
+  if (!template) {
+    throw new ServerInstallError(
+      'Remote server download URL is not configured. Set remote.WSL.serverDownloadUrlTemplate to a Sapphire/VS Code REH tarball URL (Sapphire does not download voideditor binaries).',
+    );
+  }
+  if (/voideditor\/binaries/i.test(template)) {
+    throw new ServerInstallError(
+      'Refusing to download REH from voideditor/binaries. Configure remote.WSL.serverDownloadUrlTemplate to a trusted Sapphire/VS Code server URL.',
+    );
+  }
+  return template;
+}
 
 export async function installCodeServer(
   wslManager: WSLManager,
@@ -63,10 +79,10 @@ export async function installCodeServer(
     envVariables,
     serverApplicationName: vscodeServerConfig.serverApplicationName,
     serverDataFolderName: vscodeServerConfig.serverDataFolderName,
-    serverDownloadUrlTemplate:
-      serverDownloadUrlTemplate ??
-      vscodeServerConfig.serverDownloadUrlTemplate ??
-      DEFAULT_DOWNLOAD_URL_TEMPLATE,
+    serverDownloadUrlTemplate: resolveServerDownloadUrlTemplate(
+      serverDownloadUrlTemplate,
+      vscodeServerConfig.serverDownloadUrlTemplate,
+    ),
   };
 
   const installServerScript = generateBashInstallScript(installOptions);

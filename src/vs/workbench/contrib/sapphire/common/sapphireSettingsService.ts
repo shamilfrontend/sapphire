@@ -12,6 +12,7 @@ import {
   InstantiationType,
 } from '../../../../platform/instantiation/common/extensions.js';
 import { createDecorator } from '../../../../platform/instantiation/common/instantiation.js';
+import { ISecretStorageService } from '../../../../platform/secrets/common/secrets.js';
 import {
   IStorageService,
   StorageScope,
@@ -22,6 +23,12 @@ import {
   getModelCapabilities,
   ModelOverrides,
 } from './modelCapabilities.js';
+import {
+  mergeApiKeysIntoSettingsOfProvider,
+  secretStorageKeyForProviderApiKey,
+  settingsOfProviderHaveEmbeddedApiKeys,
+  stripApiKeysFromSettingsOfProvider,
+} from './providerApiKeySecrets.js';
 import { SAPPHIRE_SETTINGS_STORAGE_KEY } from './storageKeys.js';
 import {
   defaultSettingsOfProvider,
@@ -330,8 +337,7 @@ class SapphireSettingsService extends Disposable implements ISapphireSettingsSer
   constructor(
     @IStorageService private readonly _storageService: IStorageService,
     @IEncryptionService private readonly _encryptionService: IEncryptionService,
-    // @ISecretStorageService — намеренно не используем
-    // @ISecretStorageService private readonly _secretStorageService: ISecretStorageService,
+    @ISecretStorageService private readonly _secretStorageService: ISecretStorageService,
   ) {
     super();
 
@@ -364,7 +370,7 @@ class SapphireSettingsService extends Disposable implements ISapphireSettingsSer
       if (readS.globalSettings.includeToolLintErrors === undefined)
         readS.globalSettings.includeToolLintErrors = defaultGlobalSettings.includeToolLintErrors;
 
-      // PPR AI: подставляем дефолты для незаданных типов (edits on, terminal/MCP off)
+      // Подставляем дефолты для незаданных типов approval (edits/terminal/MCP/network off)
       readS.globalSettings.autoApprove = {
         ...defaultGlobalSettings.autoApprove,
         ...((typeof readS.globalSettings.autoApprove === 'object' &&
@@ -389,13 +395,19 @@ class SapphireSettingsService extends Disposable implements ISapphireSettingsSer
       if (readS.globalSettings.playChatNotificationSound === undefined)
         readS.globalSettings.playChatNotificationSound = true;
 
-      // auto-attach редактора в SELECTIONS
+      // privacy-by-default: не подмешивать файлы в контекст без явного opt-in
       if (readS.globalSettings.autoAttachActiveFile === undefined)
-        readS.globalSettings.autoAttachActiveFile = true;
+        readS.globalSettings.autoAttachActiveFile = defaultGlobalSettings.autoAttachActiveFile;
 
-      // эвристический поиск файлов в SELECTIONS
       if (readS.globalSettings.autoRetrieveRelevantFiles === undefined)
-        readS.globalSettings.autoRetrieveRelevantFiles = true;
+        readS.globalSettings.autoRetrieveRelevantFiles =
+          defaultGlobalSettings.autoRetrieveRelevantFiles;
+
+      if (readS.globalSettings.enableAutocomplete === undefined)
+        readS.globalSettings.enableAutocomplete = defaultGlobalSettings.enableAutocomplete;
+
+      if (readS.globalSettings.chatMode === undefined)
+        readS.globalSettings.chatMode = defaultGlobalSettings.chatMode;
 
       if (readS.globalSettings.projectIndexEnabled === undefined)
         readS.globalSettings.projectIndexEnabled = true;
@@ -403,6 +415,9 @@ class SapphireSettingsService extends Disposable implements ISapphireSettingsSer
         readS.globalSettings.projectIndexIncludeOffice = true;
       if (readS.globalSettings.projectIndexLlmPurpose === undefined)
         readS.globalSettings.projectIndexLlmPurpose = false;
+
+      if (readS.globalSettings.allowAgentPathsOutsideWorkspace === undefined)
+        readS.globalSettings.allowAgentPathsOutsideWorkspace = false;
 
       // layoutShell: unknown → IDE
       if (readS.globalSettings.layoutMode !== 'ide' && readS.globalSettings.layoutMode !== 'agents')
@@ -498,22 +513,88 @@ class SapphireSettingsService extends Disposable implements ISapphireSettingsSer
     this._onDidChangeState.fire();
   }
 
+  private async _readApiKeysFromSecretStorage(): Promise<
+    Partial<Record<ProviderName, string>>
+  > {
+    const keys: Partial<Record<ProviderName, string>> = {};
+    for (const providerName of providerNames) {
+      try {
+        const value = await this._secretStorageService.get(
+          secretStorageKeyForProviderApiKey(providerName),
+        );
+        if (typeof value === 'string' && value.length > 0) {
+          keys[providerName] = value;
+        }
+      } catch {
+        // SecretStorage недоступен — оставляем пустым
+      }
+    }
+    return keys;
+  }
+
+  private async _writeApiKeysToSecretStorage(
+    keys: Partial<Record<ProviderName, string>>,
+  ): Promise<void> {
+    for (const providerName of providerNames) {
+      const storageKey = secretStorageKeyForProviderApiKey(providerName);
+      const value = keys[providerName];
+      try {
+        if (typeof value === 'string' && value.length > 0) {
+          await this._secretStorageService.set(storageKey, value);
+        } else {
+          await this._secretStorageService.delete(storageKey);
+        }
+      } catch {
+        // не блокируем persist settings при сбое keychain
+      }
+    }
+  }
+
   private async _readState(): Promise<SapphireSettingsState> {
     const encryptedState = this._storageService.get(
       SAPPHIRE_SETTINGS_STORAGE_KEY,
       StorageScope.APPLICATION,
     );
 
-    if (!encryptedState) return defaultState();
+    if (!encryptedState) {
+      return defaultState();
+    }
 
     const stateStr = await this._encryptionService.decrypt(encryptedState);
-    const state = JSON.parse(stateStr);
-    return state;
+    const state = JSON.parse(stateStr) as SapphireSettingsState;
+
+    const hadEmbeddedKeys = settingsOfProviderHaveEmbeddedApiKeys(state.settingsOfProvider);
+    const fromSecrets = await this._readApiKeysFromSecretStorage();
+    const { stripped, keys: fromBlob } = stripApiKeysFromSettingsOfProvider(state.settingsOfProvider);
+    // SecretStorage имеет приоритет; blob — миграция legacy.
+    const mergedKeys = { ...fromBlob, ...fromSecrets };
+    const settingsOfProvider = mergeApiKeysIntoSettingsOfProvider(stripped, mergedKeys);
+    const resolved: SapphireSettingsState = { ...state, settingsOfProvider };
+
+    if (hadEmbeddedKeys) {
+      // Одноразовая миграция: ключи → SecretStorage, blob без apiKey.
+      await this._writeApiKeysToSecretStorage(mergedKeys);
+      const encryptedClean = await this._encryptionService.encrypt(
+        JSON.stringify({ ...resolved, settingsOfProvider: stripped }),
+      );
+      this._storageService.store(
+        SAPPHIRE_SETTINGS_STORAGE_KEY,
+        encryptedClean,
+        StorageScope.APPLICATION,
+        StorageTarget.USER,
+      );
+    }
+
+    return resolved;
   }
 
   private async _storeState() {
     const state = this.state;
-    const encryptedState = await this._encryptionService.encrypt(JSON.stringify(state));
+    const { stripped, keys } = stripApiKeysFromSettingsOfProvider(state.settingsOfProvider);
+    await this._writeApiKeysToSecretStorage(keys);
+    const encryptedState = await this._encryptionService.encrypt(
+      JSON.stringify({ ...state, settingsOfProvider: stripped }),
+    );
     this._storageService.store(
       SAPPHIRE_SETTINGS_STORAGE_KEY,
       encryptedState,

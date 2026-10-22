@@ -26,8 +26,8 @@ import { getErrorMessage } from '../common/sendLLMMessageTypes.js';
 import { ISapphireSettingsService } from '../common/sapphireSettingsService.js';
 import {
   isChatPrepTimeoutError,
-  PPR_CHAT_HEURISTIC_TIMEOUT_MS,
-  PPR_CHAT_PREP_TIMEOUT_MS,
+  SAPPHIRE_CHAT_HEURISTIC_TIMEOUT_MS,
+  SAPPHIRE_CHAT_PREP_TIMEOUT_MS,
   racePrepAwait,
 } from '../common/chatPrepGuard.js';
 import { chatTrace } from '../common/chatSendTrace.js';
@@ -77,6 +77,7 @@ import {
 import { truncate } from '../../../../base/common/strings.js';
 import { THREAD_STORAGE_KEY } from '../common/storageKeys.js';
 import { normalizeThreadsFromStorage } from '../common/normalizeChatThreads.js';
+import { sanitizeThreadsForPersist } from '../common/sanitizePersistedThreads.js';
 import { IConvertToLLMMessageService } from './convertToLLMMessageService.js';
 import { IWorkspaceContextService } from '../../../../platform/workspace/common/workspace.js';
 import { IDirectoryStrService } from '../common/directoryStrService.js';
@@ -300,6 +301,11 @@ class ChatThreadService extends Disposable implements IChatThreadService {
   // Checkpoint: снимок текста до первой ручной правки файла (до следующего checkpoint)
   private readonly _userModifiedFilesToCheckInCheckpoints = new LRUCache<string, string>(50);
 
+  /** Throttle persist тредов — не JSON.stringify на каждое сообщение. */
+  private _persistTimer: ReturnType<typeof setTimeout> | undefined;
+  private _pendingPersistPayload: PersistedThreadsState | null = null;
+  private static readonly THREAD_PERSIST_DEBOUNCE_MS = 400;
+
   constructor(
     @IStorageService private readonly _storageService: IStorageService,
     @ISapphireModelService private readonly _sapphireModelService: ISapphireModelService,
@@ -378,6 +384,16 @@ class ChatThreadService extends Disposable implements IChatThreadService {
         );
       }),
     );
+
+    this._register({
+      dispose: () => {
+        if (this._persistTimer !== undefined) {
+          clearTimeout(this._persistTimer);
+          this._persistTimer = undefined;
+        }
+        this._flushThreadPersist();
+      },
+    });
   }
 
   async focusCurrentChat() {
@@ -499,15 +515,28 @@ class ChatThreadService extends Disposable implements IChatThreadService {
         allThreads[id] = thread;
       }
     }
-    const payload: PersistedThreadsState = {
-      allThreads,
+    this._pendingPersistPayload = {
+      allThreads: sanitizeThreadsForPersist(allThreads),
       openThreadIds: openThreadIds.filter((id) => !this._ephemeralThreadIds.has(id)),
       folders,
     };
-    const serializedThreads = JSON.stringify(payload);
+    if (this._persistTimer === undefined) {
+      this._persistTimer = setTimeout(() => {
+        this._persistTimer = undefined;
+        this._flushThreadPersist();
+      }, ChatThreadService.THREAD_PERSIST_DEBOUNCE_MS);
+    }
+  }
+
+  private _flushThreadPersist() {
+    const payload = this._pendingPersistPayload;
+    if (!payload) {
+      return;
+    }
+    this._pendingPersistPayload = null;
     this._storageService.store(
       THREAD_STORAGE_KEY,
-      serializedThreads,
+      JSON.stringify(payload),
       StorageScope.APPLICATION,
       StorageTarget.USER,
     );
@@ -858,7 +887,7 @@ class ChatThreadService extends Disposable implements IChatThreadService {
                 },
               ),
               prepCts.token,
-              PPR_CHAT_HEURISTIC_TIMEOUT_MS,
+              SAPPHIRE_CHAT_HEURISTIC_TIMEOUT_MS,
             );
             chatTrace(threadId, 'prep.heuristic.done', `selns=${selns.length}`);
           } catch (e) {
@@ -886,9 +915,9 @@ class ChatThreadService extends Disposable implements IChatThreadService {
       };
 
       let userMessageContent: string;
-      chatTrace(threadId, 'prep.local.start', `timeoutMs=${PPR_CHAT_PREP_TIMEOUT_MS}`);
+      chatTrace(threadId, 'prep.local.start', `timeoutMs=${SAPPHIRE_CHAT_PREP_TIMEOUT_MS}`);
       try {
-        const local = await racePrepAwait(runLocalPrep(), prepCts.token, PPR_CHAT_PREP_TIMEOUT_MS);
+        const local = await racePrepAwait(runLocalPrep(), prepCts.token, SAPPHIRE_CHAT_PREP_TIMEOUT_MS);
         currSelns = local.selns;
         userMessageContent = local.userMessageContent;
         chatTrace(threadId, 'prep.local.done');

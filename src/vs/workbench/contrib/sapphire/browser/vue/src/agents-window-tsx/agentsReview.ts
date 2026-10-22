@@ -1,5 +1,5 @@
 /*--------------------------------------------------------------------------------------
- *  PPR Code — pending file diffs beside the chat in Режим Агент.
+ *  Sapphire — pending file diffs beside the chat in Режим Агент.
  *--------------------------------------------------------------------------------------*/
 
 import type { DiffZone } from '../../../../common/editCodeServiceTypes.js';

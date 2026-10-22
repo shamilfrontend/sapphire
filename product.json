@@ -7,8 +7,8 @@
 	"dataFolderName": ".sapphire",
 	"win32MutexName": "sapphire",
 	"licenseName": "MIT",
-	"licenseUrl": "https://github.com/voideditor/void/blob/main/LICENSE.txt",
-	"serverLicenseUrl": "https://github.com/voideditor/void/blob/main/LICENSE.txt",
+	"licenseUrl": "https://github.com/shamilfrontend/sapphire/blob/main/LICENSE.txt",
+	"serverLicenseUrl": "https://github.com/shamilfrontend/sapphire/blob/main/LICENSE.txt",
 	"serverGreeting": [],
 	"serverLicense": [],
 	"serverLicensePrompt": "",
@@ -29,7 +29,7 @@
 	"darwinBundleIdentifier": "com.sapphire.editor",
 	"linuxIconName": "sapphire",
 	"licenseFileName": "LICENSE.txt",
-	"reportIssueUrl": "",
+	"reportIssueUrl": "https://github.com/shamilfrontend/sapphire/issues/new",
 	"nodejsRepository": "https://nodejs.org",
 	"urlProtocol": "sapphire",
 	"extensionsGallery": {
@@ -37,5 +37,8 @@
 		"itemUrl": "https://marketplace.visualstudio.com/items"
 	},
 	"builtInExtensions": [],
-	"linkProtectionTrustedDomains": []
+	"linkProtectionTrustedDomains": [
+		"https://github.com/shamilfrontend/sapphire",
+		"https://github.com"
+	]
 }

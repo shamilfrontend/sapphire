@@ -66,7 +66,7 @@ const panelOffIcon = registerIcon(
 );
 /** Filled terminal when the panel is visible (styled via titlebar CSS mask). */
 const panelOnIcon = registerIcon(
-  'ppr-terminal-filled',
+  'sapphire-terminal-filled',
   Codicon.terminal,
   localize('togglePanelOffIcon', 'Icon to toggle the panel off when it is on.'),
 );

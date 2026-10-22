@@ -75,7 +75,7 @@
   min-height: 120px;
   flex-shrink: 0;
   aspect-ratio: 1/1;
-  background-image: url('./sapphire_cube_noshadow.png'); /* PPR cube watermark */
+  background-image: url('./sapphire_cube_noshadow.png'); /* Sapphire cube watermark */
   background-size: contain;
   background-position: center;
   background-repeat: no-repeat;
@@ -88,7 +88,7 @@
   .editor-group-container
   .editor-group-watermark
   > .letterpress {
-  background-image: url('./sapphire_cube_noshadow.png'); /* PPR cube watermark */
+  background-image: url('./sapphire_cube_noshadow.png'); /* Sapphire cube watermark */
 }
 
 .sapphire-icon,
@@ -98,7 +98,7 @@
   .editor-group-container
   .editor-group-watermark
   > .letterpress {
-  background-image: url('./sapphire_cube_noshadow.png'); /* PPR cube watermark */
+  background-image: url('./sapphire_cube_noshadow.png'); /* Sapphire cube watermark */
 }
 
 .sapphire-icon,
@@ -108,7 +108,7 @@
   .editor-group-container
   .editor-group-watermark
   > .letterpress {
-  background-image: url('./sapphire_cube_noshadow.png'); /* PPR cube watermark */
+  background-image: url('./sapphire_cube_noshadow.png'); /* Sapphire cube watermark */
 }
 
 .monaco-workbench

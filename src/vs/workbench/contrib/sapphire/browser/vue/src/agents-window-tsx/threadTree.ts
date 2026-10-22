@@ -1,5 +1,5 @@
 /*--------------------------------------------------------------------------------------
- *  PPR Code — folder tree of chats in the Режим Агент sidebar.
+ *  Sapphire — folder tree of chats in the Режим Агент sidebar.
  *--------------------------------------------------------------------------------------*/
 
 import type { InjectionKey } from 'vue';
@@ -9,8 +9,9 @@ import {
 } from '../../../../common/chatFolders.js';
 import { ThreadType, ThreadStreamState } from '../../../chatThreadService.js';
 
-export const EXPANDED_KEY = 'ppr.agentsExpandedFolders';
-export const DRAG_MIME = 'application/x-ppr-chat-node';
+export const EXPANDED_KEY = 'sapphire.agentsExpandedFolders';
+const LEGACY_EXPANDED_KEY = 'ppr.agentsExpandedFolders';
+export const DRAG_MIME = 'application/x-sapphire-chat-node';
 
 export const DATE_LABELS: Record<ChatDateGroup, string> = {
   today: 'Сегодня',
@@ -77,7 +78,15 @@ export const readDrag = (dataTransfer: DataTransfer): DragPayload | null => {
 
 export const loadExpanded = (): Set<string> | null => {
   try {
-    const raw = localStorage.getItem(EXPANDED_KEY);
+    let raw = localStorage.getItem(EXPANDED_KEY);
+    if (raw === null) {
+      const legacy = localStorage.getItem(LEGACY_EXPANDED_KEY);
+      if (legacy !== null) {
+        localStorage.setItem(EXPANDED_KEY, legacy);
+        localStorage.removeItem(LEGACY_EXPANDED_KEY);
+        raw = legacy;
+      }
+    }
     if (raw === null) return null;
     const parsed: unknown = JSON.parse(raw);
     if (!Array.isArray(parsed)) return null;
@@ -90,6 +99,7 @@ export const loadExpanded = (): Set<string> | null => {
 export const persistExpanded = (ids: Set<string>) => {
   try {
     localStorage.setItem(EXPANDED_KEY, JSON.stringify([...ids]));
+    localStorage.removeItem(LEGACY_EXPANDED_KEY);
   } catch {
     // localStorage недоступен (квота / приватный режим)
   }

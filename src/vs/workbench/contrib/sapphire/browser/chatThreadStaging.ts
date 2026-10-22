@@ -10,7 +10,7 @@ import {
   StagingSelectionItem,
 } from '../common/chatThreadServiceTypes.js';
 import { mergeActiveFileSelection } from '../common/activeFileAttach.js';
-import { PPR_CHAT_PREP_TIMEOUT_MS, racePrepAwait } from '../common/chatPrepGuard.js';
+import { SAPPHIRE_CHAT_PREP_TIMEOUT_MS, racePrepAwait } from '../common/chatPrepGuard.js';
 import {
   ChatThreadCollaboratorHost,
   defaultMessageState,
@@ -231,7 +231,7 @@ export class ChatThreadStaging {
         const modelSafe = this._s._sapphireModelService.getModelSafe(activeUri) as Promise<{
           model: { getLanguageId(): string } | null;
         }>;
-        const modelResult = await racePrepAwait(modelSafe, token, PPR_CHAT_PREP_TIMEOUT_MS);
+        const modelResult = await racePrepAwait(modelSafe, token, SAPPHIRE_CHAT_PREP_TIMEOUT_MS);
         language = modelResult.model?.getLanguageId() || 'plaintext';
       } catch {
         // fail-open: Stop / таймаут — без languageId, plaintext

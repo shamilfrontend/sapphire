@@ -37,6 +37,11 @@ import {
   WebSearchHit,
 } from '../common/toolsServiceTypes.js';
 import { assertPublicHttpUrl } from '../common/webEgressPolicy.js';
+import { IWebEgressService } from '../common/webEgressService.js';
+import {
+  assertNotSecretToolUri,
+  assertUriInsideWorkspace,
+} from '../common/agentSecurityPolicy.js';
 import { parseDuckDuckGoHtml, wrapUntrustedContent } from '../common/webSearchParse.js';
 import { IMemoriesService } from '../common/memoriesService.js';
 import {
@@ -100,6 +105,11 @@ import { IOfficeExtractService } from '../common/officeExtractService.js';
 import { formatOfficePage, officePlainText } from '../common/office/officeDocument.js';
 import { onlineMcpServerNames } from '../common/prompt/mcpToolDisclosure.js';
 import { IProjectIndexService } from './projectIndexService.js';
+import {
+  buildProjectIndexImpact,
+  formatProjectIndexImpact,
+} from '../common/projectIndex/projectIndexImpact.js';
+import { formatTourForAgent, isTourStale } from '../common/projectIndex/projectIndexTour.js';
 
 const MAX_GREP_MATCHES = 300;
 const MAX_DIAGNOSTICS = 500;
@@ -109,12 +119,14 @@ const MAX_SYMBOL_HITS = 50;
 type ValidateBuiltinParams = {
   [T in BuiltinToolName]: (p: RawToolParamsObj) => BuiltinToolCallParams[T];
 };
+
 type CallBuiltinTool = {
   [T in BuiltinToolName]: (p: BuiltinToolCallParams[T]) => Promise<{
     result: BuiltinToolResultType[T] | Promise<BuiltinToolResultType[T]>;
     interruptTool?: () => void;
   }>;
 };
+
 type BuiltinToolResultToString = {
   [T in BuiltinToolName]: (
     p: BuiltinToolCallParams[T],
@@ -136,6 +148,7 @@ const validateStr = (argName: string, value: unknown) => {
 /** Убирает одну пару внешних кавычек, если LLM обернул всю команду в них. */
 const stripOuterQuotes = (s: string) => {
   const t = s.trim();
+
   if (t.length >= 2) {
     const a = t[0];
     const b = t[t.length - 1];
@@ -143,17 +156,24 @@ const stripOuterQuotes = (s: string) => {
       return t.slice(1, -1);
     }
   }
+
   return s;
 };
 
-// Не проверяем, что путь лежит внутри workspace (доверяем LLM)
-const validateURI = (uriStr: unknown, workspaceFolderUri?: URI) => {
+type ValidateUriOpts = {
+  folderUris: readonly URI[];
+  allowOutsideWorkspace: boolean;
+};
+
+/** Парсит URI и применяет path sandbox + secret-path policy (см. agentSecurityPolicy). */
+const validateURI = (uriStr: unknown, workspaceFolderUri: URI | undefined, opts: ValidateUriOpts) => {
   if (uriStr === null) throw new Error(`Invalid LLM output: uri was null.`);
   if (typeof uriStr !== 'string')
     throw new Error(
       `Invalid LLM output format: Provided uri must be a string, but it's a(n) ${typeof uriStr}. Full value: ${JSON.stringify(uriStr)}.`,
     );
 
+  let uri: URI;
   // Уже полный URI со схемой (vscode-remote://, file:// и т.д.) — ищем ://
   // Примеры:
   // - vscode-remote://wsl+Ubuntu/home/user/file.txt (WSL)
@@ -163,8 +183,7 @@ const validateURI = (uriStr: unknown, workspaceFolderUri?: URI) => {
   // - C:\Users\file.txt → file:// на Windows
   if (uriStr.includes('://')) {
     try {
-      const uri = URI.parse(uriStr);
-      return uri;
+      uri = URI.parse(uriStr);
     } catch (e) {
       throw new Error(`Invalid URI format: ${uriStr}. Error: ${e}`);
     }
@@ -172,25 +191,32 @@ const validateURI = (uriStr: unknown, workspaceFolderUri?: URI) => {
     const pathStr = uriStr.trim();
     if (!pathStr) {
       if (workspaceFolderUri) {
-        return workspaceFolderUri;
+        uri = workspaceFolderUri;
+      } else {
+        throw new Error(`Invalid LLM output: uri was empty.`);
       }
-      throw new Error(`Invalid LLM output: uri was empty.`);
+    } else if (isAbsolute(pathStr) || /^[a-zA-Z]:[\\/]/.test(pathStr)) {
+      uri = URI.file(pathStr);
+    } else if (workspaceFolderUri) {
+      uri = joinPath(workspaceFolderUri, pathStr);
+    } else {
+      uri = URI.file(pathStr);
     }
-    // Абсолютный локальный путь
-    if (isAbsolute(pathStr) || /^[a-zA-Z]:[\\/]/.test(pathStr)) {
-      return URI.file(pathStr);
-    }
-    // Относительный путь — от корня workspace
-    if (workspaceFolderUri) {
-      return joinPath(workspaceFolderUri, pathStr);
-    }
-    return URI.file(pathStr);
   }
+
+  assertUriInsideWorkspace(uri, opts.folderUris, opts.allowOutsideWorkspace);
+  assertNotSecretToolUri(uri, opts.folderUris);
+
+  return uri;
 };
 
-const validateOptionalURI = (uriStr: unknown, workspaceFolderUri?: URI) => {
+const validateOptionalURI = (
+  uriStr: unknown,
+  workspaceFolderUri: URI | undefined,
+  opts: ValidateUriOpts,
+) => {
   if (isFalsy(uriStr)) return null;
-  return validateURI(uriStr, workspaceFolderUri);
+  return validateURI(uriStr, workspaceFolderUri, opts);
 };
 
 const validateOptionalStr = (argName: string, str: unknown) => {
@@ -233,6 +259,7 @@ const looksLikeCwdWithCommandLeak = (cwd: string): boolean => {
 const validateOptionalCwd = (
   cwdUnknown: unknown,
   workspaceFolders: readonly { uri: URI }[],
+  allowOutsideWorkspace: boolean,
 ): string | null => {
   if (isFalsy(cwdUnknown)) return null;
   const raw = validateStr('cwd', cwdUnknown).trim();
@@ -271,6 +298,11 @@ const validateOptionalCwd = (
     }
   }
 
+  if (!allowOutsideWorkspace) {
+    throw new Error(
+      `cwd is outside the open workspace: ${abs}. Enable allowAgentPathsOutsideWorkspace to elevate.`,
+    );
+  }
   return abs;
 };
 
@@ -449,11 +481,18 @@ class ToolsService implements IToolsService {
     private readonly webContentExtractorService: IWebContentExtractorService,
     @IProjectIndexService private readonly projectIndexService: IProjectIndexService,
     @IMemoriesService private readonly memoriesService: IMemoriesService,
+    @IWebEgressService private readonly webEgressService: IWebEgressService,
   ) {
     const queryBuilder = instantiationService.createInstance(QueryBuilder);
-    const wsUri = () => workspaceContextService.getWorkspace().folders[0]?.uri;
-    const vURI = (s: unknown) => validateURI(s, wsUri());
-    const vOptURI = (s: unknown) => validateOptionalURI(s, wsUri());
+    const wsFolders = () => workspaceContextService.getWorkspace().folders;
+    const wsUri = () => wsFolders()[0]?.uri;
+    const uriOpts = (): ValidateUriOpts => ({
+      folderUris: wsFolders().map((f) => f.uri),
+      allowOutsideWorkspace:
+        sapphireSettingsService.state.globalSettings.allowAgentPathsOutsideWorkspace === true,
+    });
+    const vURI = (s: unknown) => validateURI(s, wsUri(), uriOpts());
+    const vOptURI = (s: unknown) => validateOptionalURI(s, wsUri(), uriOpts());
 
     // Кэш web_search / browse_url (TTL 1 ч, не более 100 ключей)
     type CacheEntry<T> = { at: number; value: T };
@@ -528,6 +567,13 @@ class ToolsService implements IToolsService {
         const query = validateStr('query', queryUnknown);
         const pageNumber = validatePageNum(pageNumberUnknown);
         return { query, pageNumber };
+      },
+      diff_impact: (params: RawToolParamsObj) => {
+        const paths = validateOptionalStr('paths', params.paths);
+        return { paths };
+      },
+      get_project_tour: (_params: RawToolParamsObj) => {
+        return {};
       },
       search_for_files: (params: RawToolParamsObj) => {
         const {
@@ -657,6 +703,7 @@ class ToolsService implements IToolsService {
 
       browse_url: (params: RawToolParamsObj) => {
         const url = validateStr('url', params.url).trim();
+        // sync precheck; full DNS resolve — в callTool через IWebEgressService
         assertPublicHttpUrl(url);
         return { url };
       },
@@ -783,7 +830,11 @@ class ToolsService implements IToolsService {
       run_command: (params: RawToolParamsObj) => {
         const { command: commandUnknown, cwd: cwdUnknown } = params;
         const command = stripOuterQuotes(validateStr('command', commandUnknown));
-        const cwd = validateOptionalCwd(cwdUnknown, workspaceContextService.getWorkspace().folders);
+        const cwd = validateOptionalCwd(
+          cwdUnknown,
+          workspaceContextService.getWorkspace().folders,
+          uriOpts().allowOutsideWorkspace,
+        );
         const terminalId = generateUuid();
         return { command, cwd, terminalId };
       },
@@ -796,7 +847,11 @@ class ToolsService implements IToolsService {
       },
       open_persistent_terminal: (params: RawToolParamsObj) => {
         const { cwd: cwdUnknown } = params;
-        const cwd = validateOptionalCwd(cwdUnknown, workspaceContextService.getWorkspace().folders);
+        const cwd = validateOptionalCwd(
+          cwdUnknown,
+          workspaceContextService.getWorkspace().folders,
+          uriOpts().allowOutsideWorkspace,
+        );
         // Доп. параметров нет — откроется новый фоновый терминал
         return { cwd };
       },
@@ -897,6 +952,62 @@ class ToolsService implements IToolsService {
               kind: h.kind,
             })),
             hasNextPage,
+          },
+        };
+      },
+
+      diff_impact: async ({ paths }) => {
+        const changedPaths = (paths ?? '')
+          .split(/[\n,]/)
+          .map((part) => part.trim().replace(/\\/g, '/').replace(/^\.\//, ''))
+          .filter(Boolean);
+        if (changedPaths.length === 0) {
+          return {
+            result: {
+              summary: 'No paths given. Pass workspace-relative paths of the files that changed.',
+              changedPaths: [],
+              affected: [],
+              layers: [],
+            },
+          };
+        }
+        const impact = buildProjectIndexImpact({
+          changedPaths,
+          files: this.projectIndexService.getFiles(),
+          symbols: this.projectIndexService.getSymbols(),
+          edges: this.projectIndexService.getEdges(),
+        });
+        return {
+          result: {
+            summary: formatProjectIndexImpact(impact),
+            changedPaths: impact.changedPaths,
+            affected: impact.affected.map((hit) => ({
+              path: hit.path,
+              symbol: hit.symbol ?? null,
+              via: hit.via,
+              hops: hit.hops,
+            })),
+            layers: impact.layers,
+          },
+        };
+      },
+
+      get_project_tour: async () => {
+        const tour = this.projectIndexService.getTour();
+        const status = this.projectIndexService.getStatus();
+        const summary = formatTourForAgent(tour);
+        const stale =
+          status.tourStale ||
+          isTourStale(tour, status.manifest?.counts);
+        const body =
+          tour && stale
+            ? `${summary}\n\n(Note: tour may be stale vs current index — ask user to regenerate from Project Index if needed.)`
+            : summary;
+        return {
+          result: {
+            summary: body,
+            stepCount: tour?.steps.length ?? 0,
+            stale,
           },
         };
       },
@@ -1038,33 +1149,39 @@ class ToolsService implements IToolsService {
       },
 
       go_to_definition: async ({ uri, line, symbol }) => {
-        const { locations, message } = await this._runCodeNav({
+        const cts = new CancellationTokenSource();
+        const resultPromise = this._runCodeNav({
           kind: 'definition',
           uri,
           line,
           symbol,
           workspaceContextService,
           sapphireModelService,
-        });
-        return { result: { locations, message } };
+          token: cts.token,
+        }).then(({ locations, message }) => ({ locations, message }));
+        return { result: resultPromise, interruptTool: () => cts.cancel() };
       },
 
       find_references: async ({ uri, line, symbol }) => {
-        const result = await this._runCodeNav({
+        const cts = new CancellationTokenSource();
+        const resultPromise = this._runCodeNav({
           kind: 'references',
           uri,
           line,
           symbol,
           workspaceContextService,
           sapphireModelService,
+          token: cts.token,
         });
-        return { result };
+        return { result: resultPromise, interruptTool: () => cts.cancel() };
       },
 
       search_symbols: async ({ query, uri }) => {
+        const cts = new CancellationTokenSource();
         const queryLower = query.toLowerCase();
         const symbols: SymbolSearchHit[] = [];
 
+        const resultPromise = (async () => {
         if (uri) {
           await sapphireModelService.initializeModel(uri);
           const { model } = await sapphireModelService.getModelSafe(uri);
@@ -1088,7 +1205,7 @@ class ToolsService implements IToolsService {
             }
           };
           for (const provider of providers) {
-            const docSymbols = await provider.provideDocumentSymbols(model, CancellationToken.None);
+            const docSymbols = await provider.provideDocumentSymbols(model, cts.token);
             if (!docSymbols) {
               continue;
             }
@@ -1097,7 +1214,7 @@ class ToolsService implements IToolsService {
             }
           }
         } else {
-          const items = await getWorkspaceSymbols(query, CancellationToken.None);
+          const items = await getWorkspaceSymbols(query, cts.token);
           for (const item of items) {
             const range = item.symbol.location.range;
             symbols.push({
@@ -1112,23 +1229,25 @@ class ToolsService implements IToolsService {
 
         const truncated = symbols.length > MAX_SYMBOL_HITS;
         return {
-          result: {
-            symbols: symbols.slice(0, MAX_SYMBOL_HITS),
-            truncated,
-          },
+          symbols: symbols.slice(0, MAX_SYMBOL_HITS),
+          truncated,
         };
+        })();
+        return { result: resultPromise, interruptTool: () => cts.cancel() };
       },
 
       rename_symbol: async ({ uri, line, symbol, newName }) => {
-        const result = await this._executeRenameSymbol({
+        const cts = new CancellationTokenSource();
+        const resultPromise = this._executeRenameSymbol({
           uri,
           line,
           symbol,
           newName,
           sapphireModelService,
           workspaceContextService,
+          token: cts.token,
         });
-        return { result };
+        return { result: resultPromise, interruptTool: () => cts.cancel() };
       },
 
       glob_files: async ({ pattern, limit }) => {
@@ -1214,7 +1333,7 @@ class ToolsService implements IToolsService {
                 {
                   type: 'GET',
                   url: `https://html.duckduckgo.com/html/?q=${encodeURIComponent(query)}`,
-                  headers: { 'User-Agent': 'Mozilla/5.0 (compatible; PPRCodeBot/1.0)' },
+                  headers: { 'User-Agent': 'Mozilla/5.0 (compatible; SapphireCodeBot/1.0)' },
                 },
                 cts.token,
               );
@@ -1242,7 +1361,7 @@ class ToolsService implements IToolsService {
       },
 
       browse_url: async ({ url }) => {
-        assertPublicHttpUrl(url);
+        await this.webEgressService.assertPublicHttpUrl(url);
         const cached = getCached(browseCache, `browse:${url}`);
         if (cached) {
           return { result: cached };
@@ -1262,7 +1381,7 @@ class ToolsService implements IToolsService {
               {
                 type: 'GET',
                 url,
-                headers: { 'User-Agent': 'Mozilla/5.0 (compatible; PPRCodeBot/1.0)' },
+                headers: { 'User-Agent': 'Mozilla/5.0 (compatible; SapphireCodeBot/1.0)' },
               },
               cts.token,
             );
@@ -1497,6 +1616,8 @@ class ToolsService implements IToolsService {
           .join('\n');
         return body + nextPageStr(result.hasNextPage);
       },
+      diff_impact: (_params, result) => result.summary,
+      get_project_tour: (_params, result) => result.summary,
       search_for_files: (params, result) =>
         result.uris.map((uri) => uri.fsPath).join('\n') + nextPageStr(result.hasNextPage),
       search_in_file: (params, result) => {
@@ -1687,12 +1808,21 @@ class ToolsService implements IToolsService {
     symbol: string | null;
     workspaceContextService: IWorkspaceContextService;
     sapphireModelService: ISapphireModelService;
+    token?: CancellationToken;
   }): Promise<{
     locations: CodeNavLocation[];
     truncated: boolean;
     message: string | null;
   }> {
-    const { kind, uri, line, symbol, workspaceContextService, sapphireModelService } = args;
+    const {
+      kind,
+      uri,
+      line,
+      symbol,
+      workspaceContextService,
+      sapphireModelService,
+      token = CancellationToken.None,
+    } = args;
 
     await sapphireModelService.initializeModel(uri);
     const { model } = await sapphireModelService.getModelSafe(uri);
@@ -1717,7 +1847,7 @@ class ToolsService implements IToolsService {
         };
       }
       for (const provider of providers) {
-        const result = await provider.provideDefinition(model, position, CancellationToken.None);
+        const result = await provider.provideDefinition(model, position, token);
         if (result) {
           raw = result;
           break;
@@ -1744,7 +1874,7 @@ class ToolsService implements IToolsService {
           model,
           position,
           { includeDeclaration: true },
-          CancellationToken.None,
+          token,
         );
         if (result && result.length > 0) {
           raw = result;
@@ -1808,8 +1938,16 @@ class ToolsService implements IToolsService {
     newName: string;
     sapphireModelService: ISapphireModelService;
     workspaceContextService: IWorkspaceContextService;
+    token?: CancellationToken;
   }): Promise<BuiltinToolResultType['rename_symbol']> {
-    const { uri, line, symbol, newName, sapphireModelService, workspaceContextService } = args;
+    const {
+      uri,
+      line,
+      symbol,
+      newName,
+      sapphireModelService,
+      workspaceContextService,
+    } = args;
 
     await sapphireModelService.initializeModel(uri);
     const { model } = await sapphireModelService.getModelSafe(uri);
@@ -1835,9 +1973,18 @@ class ToolsService implements IToolsService {
       if (!renameResult.edits?.length) {
         throw new Error(`No rename edits produced for the symbol at ${uri.fsPath}:${line}.`);
       }
-      workspaceEdit = { edits: renameResult.edits };
+      const inWorkspaceEdits = renameResult.edits.filter((edit) => {
+        if (!ResourceTextEdit.is(edit)) {
+          return false;
+        }
+        return workspaceContextService.isInsideWorkspace(edit.resource);
+      });
+      if (!inWorkspaceEdits.length) {
+        throw new Error('Rename produced no edits inside the open workspace.');
+      }
+      workspaceEdit = { edits: inWorkspaceEdits };
       if (!oldName) {
-        for (const edit of renameResult.edits) {
+        for (const edit of inWorkspaceEdits) {
           if (!ResourceTextEdit.is(edit)) {
             continue;
           }
@@ -1864,13 +2011,14 @@ class ToolsService implements IToolsService {
         throw new Error('No rename provider or reference provider for this file.');
       }
 
+      const token = args.token ?? CancellationToken.None;
       let references: Location[] | null = null;
       for (const provider of referenceProviders) {
         const refs = await provider.provideReferences(
           model,
           position,
           { includeDeclaration: true },
-          CancellationToken.None,
+          token,
         );
         if (refs && refs.length > 0) {
           references = refs;

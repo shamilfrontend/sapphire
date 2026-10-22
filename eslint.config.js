@@ -1236,7 +1236,7 @@ export default tseslint.config(
               when: 'hasBrowser',
               pattern: 'vs/workbench/services/*/~',
             },
-            // PPR / Sapphire: electron-main app wires sapphire services
+            // Sapphire: electron-main app wires sapphire services
             {
               when: 'hasElectron',
               pattern: 'vs/workbench/contrib/sapphire/~',

@@ -31,18 +31,18 @@ import { IViewSize } from '../../../../base/browser/ui/grid/grid.js';
 import { SAPPHIRE_MAXIMIZE_CHAT_ACTION_ID } from '../../../contrib/sapphire/browser/actionIDs.js';
 /* eslint-enable */
 
-/** Outline chat bubbles when PPR Assistant is hidden. */
+/** Outline chat bubbles when Sapphire Assistant is hidden. */
 const auxiliaryBarOffIcon = registerIcon(
   'auxiliarybar-chat-off-layout-icon',
   Codicon.commentDiscussion,
-  localize('toggleAuxiliaryIconOff', 'Icon to show the PPR Assistant side bar.'),
+  localize('toggleAuxiliaryIconOff', 'Icon to show the Sapphire Assistant side bar.'),
 );
 
-/** Filled chat bubble when PPR Assistant is visible (styled via titlebar CSS mask). */
+/** Filled chat bubble when Sapphire Assistant is visible (styled via titlebar CSS mask). */
 const auxiliaryBarOnIcon = registerIcon(
-  'ppr-chat-filled',
+  'sapphire-chat-filled',
   Codicon.commentDiscussion,
-  localize('toggleAuxiliaryIconOn', 'Icon to hide the PPR Assistant side bar.'),
+  localize('toggleAuxiliaryIconOn', 'Icon to hide the Sapphire Assistant side bar.'),
 );
 
 export class ToggleAuxiliaryBarAction extends Action2 {
