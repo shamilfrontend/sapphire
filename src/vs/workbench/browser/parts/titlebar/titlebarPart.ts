@@ -776,6 +776,14 @@ export class BrowserTitlebarPart extends Part implements ITitlebarPart {
 				actions.primary.push(GLOBAL_ACTIVITY_TITLE_ACTION);
 			}
 
+			// «Режим Агент» — последний элемент справа, после шестерёнки.
+			const sapphireAgentsWindowActionId = 'sapphire.setLayoutMode';
+			const agentsWindowActionIndex = actions.primary.findIndex(action => action.id === sapphireAgentsWindowActionId);
+			if (agentsWindowActionIndex >= 0) {
+				const [agentsWindowAction] = actions.primary.splice(agentsWindowActionIndex, 1);
+				actions.primary.push(agentsWindowAction);
+			}
+
 			this.actionToolBar.setActions(prepareActions(actions.primary), prepareActions(actions.secondary));
 		};
 

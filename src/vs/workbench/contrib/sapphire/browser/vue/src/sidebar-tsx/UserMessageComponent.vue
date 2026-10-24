@@ -60,6 +60,8 @@ const textAreaRefState = ref<HTMLTextAreaElement | null>(null);
 const textAreaFnsRef: { current: TextAreaFns | null } = { current: null };
 const textAreaRef: { current: HTMLTextAreaElement | null } = { current: null };
 const editImages = ref<ChatImageAttachment[]>(props.chatMessage.images ?? []);
+const messagePlainText = () => props.chatMessage.displayContent || props.chatMessage.content || '';
+const editText = ref(messagePlainText());
 const editFileInputRef = ref<HTMLInputElement | null>(null);
 const supportsVision = useChatSupportsVision();
 // синхронизация поля при входе в режим edit
@@ -82,10 +84,12 @@ watch(
     if (canInitialize && shouldInitialize) {
       setStagingSelections(props.chatMessage.selections || []);
       editImages.value = props.chatMessage.images ?? [];
+      const text = editText.value || messagePlainText();
+      editText.value = text;
+      isDisabled.value = !text && editImages.value.length === 0;
 
-      if (textAreaFnsRef.current)
-        textAreaFnsRef.current.setValue(props.chatMessage.displayContent || '');
-
+      if (!textAreaFnsRef.current) return;
+      textAreaFnsRef.current.setValue(text);
       textAreaRefState.value?.focus();
 
       _justEnabledEdit.current = false;
@@ -102,6 +106,10 @@ watch(supportsVision, (vision) => {
 });
 
 const onOpenEdit = () => {
+  const text = messagePlainText();
+  const images = props.chatMessage.images ?? [];
+  editText.value = text;
+  isDisabled.value = !text && images.length === 0;
   setIsBeingEdited(true);
   chatThreadsService.setCurrentlyFocusedMessageIdx(props.messageIdx);
   _justEnabledEdit.current = true;
@@ -231,6 +239,7 @@ const setEditImages = (imgs: ChatImageAttachment[]) => {
 };
 
 const onEditChangeText = (text: string) => {
+  editText.value = text;
   isDisabled.value = !text && editImages.value.length === 0;
 };
 
@@ -343,6 +352,7 @@ const onEditSymbolClick = () => {
             :textAreaRef="textAreaRef"
             class="min-h-[81px] max-h-[500px] px-0.5"
             placeholder="Редактировать сообщение..."
+            :initValue="editText || chatMessage.displayContent || chatMessage.content || ''"
             :onChangeText="onEditChangeText"
             :onFocus="onEditFocus"
             :onBlur="onEditBlur"

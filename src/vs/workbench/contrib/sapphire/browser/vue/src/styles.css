@@ -48,23 +48,23 @@
   --void-danger-muted: color-mix(in srgb, var(--void-danger) 12%, transparent);
   --void-danger-border: color-mix(in srgb, var(--void-danger) 35%, transparent);
 
-  /* DeepSeek dark palette. Класс на корне — void-dark (префикс Tailwind), не dark. */
+  /* Cursor dark. Класс на корне — void-dark (префикс Tailwind), не dark. */
   &.void-dark {
-    --void-bg-3: #121212;
-    --void-bg-2: #1a1a1a;
-    --void-bg-1: #2b2b2b;
+    --void-bg-3: #1e1e1e;
+    --void-bg-2: #181818;
+    --void-bg-1: #2a2a2a;
     --void-bg-1-alt: #262626;
-    --void-bg-2-alt: #2a2a2a;
+    --void-bg-2-alt: #242424;
     --void-bg-2-hover: #242424;
 
-    --void-header-bg: #3c3c3c;
+    --void-header-bg: #181818;
     --void-content-bg: #1e1e1e;
-    --void-chat-field-bg: #393939;
+    --void-chat-field-bg: #2a2a2a;
 
     --void-fg-0: #f5f5f5;
-    --void-fg-1: #ececec;
-    --void-fg-2: #d4d4d4;
-    --void-fg-3: #8e8e8e;
+    --void-fg-1: #cccccc;
+    --void-fg-2: #cccccc;
+    --void-fg-3: #8a8a8a;
     --void-fg-4: #6a6a6a;
 
     --void-warning: #c9a227;
@@ -73,20 +73,29 @@
     --void-danger-muted: color-mix(in srgb, var(--void-danger) 12%, transparent);
     --void-danger-border: color-mix(in srgb, var(--void-danger) 35%, transparent);
 
-    --void-border-1: #3a3a3a;
-    --void-border-2: #2a2a2a;
-    --void-border-3: #3a3a3a;
-    --void-border-4: #242424;
+    --void-border-1: #3c3c3c;
+    --void-border-2: #2b2b2b;
+    --void-border-3: #3c3c3c;
+    --void-border-4: #2b2b2b;
 
-    --void-ring-color: #0e639c;
-    --void-link-color: #0e639c;
+    --void-ring-color: #007acc;
+    --void-link-color: #007acc;
   }
 
   /* scope-tailwind prefixes the `dark` class to `void-dark` */
   &.sapphire-dark {
-    --void-header-bg: #3c3c3c;
+    --void-bg-2: #181818;
+    --void-bg-1: #2a2a2a;
+    --void-bg-3: #1e1e1e;
+    --void-header-bg: #181818;
     --void-content-bg: #1e1e1e;
-    --void-chat-field-bg: #393939;
+    --void-chat-field-bg: #2a2a2a;
+    --void-border-1: #3c3c3c;
+    --void-border-2: #2b2b2b;
+    --void-border-3: #3c3c3c;
+    --void-border-4: #2b2b2b;
+    --void-ring-color: #007acc;
+    --void-link-color: #007acc;
   }
 }
 

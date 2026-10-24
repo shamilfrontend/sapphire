@@ -50,8 +50,9 @@ registerAction2(
               ContextKeyExpr.equals('config.workbench.layoutControl.type', 'toggles'),
               ContextKeyExpr.equals('config.workbench.layoutControl.type', 'both'),
             ),
-            group: 'z_end',
-            order: 100,
+            // navigation — единственная группа, которую titlebar кладёт в видимый тулбар.
+            group: 'navigation',
+            order: -1,
           },
         ],
       });

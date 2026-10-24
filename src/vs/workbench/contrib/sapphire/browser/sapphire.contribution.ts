@@ -1,7 +1,9 @@
-/*--------------------------------------------------------------------------------------
- *  Copyright 2025 Glass Devtools, Inc. All rights reserved.
- *  Licensed under the Apache License, Version 2.0. See LICENSE.txt for more information.
- *--------------------------------------------------------------------------------------*/
+/*---------------------------------------------------------------------------------------------
+ *  Copyright (c) Microsoft Corporation. All rights reserved.
+ *  Licensed under the MIT License. See License.txt in the project root for license information.
+ *--------------------------------------------------------------------------------------------*/
+
+// allow-any-unicode-comment-file
 
 // inline diff в редакторе
 import './editCodeService.js';
@@ -22,8 +24,9 @@ import './sapphireSettingsPane.js';
 // редактор .plan.md (Preview / Markdown)
 import './planEditor.js';
 
-// стили void
+// стили void и цвета хрома под Cursor
 import './media/sapphire.css';
+import './sapphireCursorChrome.js';
 
 // обновления (UI; main — platform/)
 import './sapphireUpdateActions.js';
@@ -62,6 +65,9 @@ import './sapphireAgentsWindowService.js';
 // прочие contribution
 import './miscWokrbenchContrib.js';
 
+// один раз прячет Outline и Timeline в уже сохранённом профиле
+import './sapphireExplorerViews.js';
+
 // контекстное меню проводника (копировать prompt)
 import './fileService.js';
 
@@ -82,5 +88,6 @@ import '../common/sapphireModelService.js';
 
 // office (xlsx, docx, pptx, pdf) для чата и tools
 import '../common/officeExtractService.js';
+
 // DNS egress checks for browse_url / web tools
 import '../common/webEgressService.js';

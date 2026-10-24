@@ -156,6 +156,7 @@ class SapphireCommandBarService extends Disposable implements ISapphireCommandBa
     const disposablesOfEditorId: { [editorId: string]: IDisposable[] } = {};
     const onCodeEditorAdd = (editor: ICodeEditor) => {
       const id = editor.getId();
+      if (disposablesOfEditorId[id]) return;
       disposablesOfEditorId[id] = [];
 
       // React command bar
@@ -186,9 +187,16 @@ class SapphireCommandBarService extends Disposable implements ISapphireCommandBa
         onCodeEditorRemove(editor);
       }),
     );
-    this._codeEditorService.listCodeEditors().forEach((editor) => {
-      onCodeEditorAdd(editor);
-    });
+    // Виджеты монтируют Vue, а setup сразу берёт ISapphireCommandBarService.
+    // Синхронный проход внутри конструктора зацикливает создание singleton и роняет чат
+    // (Maximum call stack → TypeError reading 'length' в композере).
+    const existingEditors = this._codeEditorService.listCodeEditors().slice();
+    const initialMount = setTimeout(() => {
+      for (const editor of existingEditors) {
+        onCodeEditorAdd(editor);
+      }
+    }, 0);
+    this._register(toDisposable(() => clearTimeout(initialMount)));
 
     // подписки на diff events
     this._register(

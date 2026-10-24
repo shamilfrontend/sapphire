@@ -100,9 +100,22 @@ const prepareSrc2 = async () => {
   fs.writeFileSync(cssPath, result.css);
 };
 
+/** Скомпилированный workbench грузит бандл из out/vs/.../vue/out, не из src. */
+const syncRuntimeBundle = () => {
+  const sourceOut = path.join(__dirname, 'out');
+  const runtimeOut = path.resolve(
+    __dirname,
+    '../../../../../../../out/vs/workbench/contrib/sapphire/browser/vue/out',
+  );
+  if (!fs.existsSync(path.dirname(runtimeOut))) return;
+  fs.cpSync(sourceOut, runtimeOut, { recursive: true });
+  console.log(`[vue] synced bundle → ${runtimeOut}`);
+};
+
 const runPipeline = async () => {
   await prepareSrc2();
   execSync('npx tsup', { cwd: __dirname, stdio: 'inherit' });
+  syncRuntimeBundle();
 };
 
 const args = process.argv.slice(2);

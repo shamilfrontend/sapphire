@@ -139,3 +139,111 @@
   * {
   -webkit-app-region: no-drag;
 }
+
+/*
+ * Cursor-like shell for the dark theme. Dark 2026 paints a dark status bar and a
+ * command center that matches the title bar. These variables win over the theme
+ * stylesheet. Parts that set an inline background read the same colors from
+ * sapphireCursorChrome.ts. Syntax highlighting stays on the selected theme.
+ */
+.monaco-workbench.vs-dark {
+  --vscode-editor-background: #1e1e1e !important;
+  --vscode-editorGutter-background: #1e1e1e !important;
+  --vscode-editorStickyScroll-background: #1e1e1e !important;
+  --vscode-breadcrumb-background: #1e1e1e !important;
+  --vscode-editorGroup-emptyBackground: #1e1e1e !important;
+
+  --vscode-titleBar-activeBackground: #181818 !important;
+  --vscode-titleBar-inactiveBackground: #181818 !important;
+  --vscode-titleBar-activeForeground: #cccccc !important;
+  --vscode-titleBar-inactiveForeground: #9d9d9d !important;
+  --vscode-titleBar-border: #2b2b2b !important;
+
+  --vscode-activityBar-background: #181818 !important;
+  --vscode-activityBar-foreground: #d7d7d7 !important;
+  --vscode-activityBar-inactiveForeground: #868686 !important;
+  --vscode-activityBar-border: #2b2b2b !important;
+  --vscode-activityBar-activeBorder: #007acc !important;
+  --vscode-activityBar-activeBackground: #181818 !important;
+  --vscode-activityBarBadge-background: #007acc !important;
+  --vscode-activityBarBadge-foreground: #ffffff !important;
+
+  --vscode-sideBar-background: #181818 !important;
+  --vscode-sideBar-border: #2b2b2b !important;
+  --vscode-sideBarSectionHeader-background: #181818 !important;
+  --vscode-sideBarSectionHeader-border: #2b2b2b !important;
+
+  --vscode-panel-background: #181818 !important;
+  --vscode-panel-border: #2b2b2b !important;
+  --vscode-panelTitle-activeBorder: #007acc !important;
+
+  --vscode-editorGroup-border: #2b2b2b !important;
+  --vscode-editorGroupHeader-tabsBackground: #181818 !important;
+  --vscode-editorGroupHeader-tabsBorder: #2b2b2b !important;
+  --vscode-editorGroupHeader-noTabsBackground: #181818 !important;
+
+  --vscode-tab-activeBackground: #1e1e1e !important;
+  --vscode-tab-inactiveBackground: #181818 !important;
+  --vscode-tab-hoverBackground: #1e1e1e !important;
+  --vscode-tab-unfocusedActiveBackground: #1e1e1e !important;
+  --vscode-tab-unfocusedInactiveBackground: #181818 !important;
+  --vscode-tab-activeForeground: #ffffff !important;
+  --vscode-tab-inactiveForeground: #9d9d9d !important;
+  --vscode-tab-border: #2b2b2b !important;
+  --vscode-tab-activeBorder: #1e1e1e !important;
+  --vscode-tab-activeBorderTop: #007acc !important;
+
+  --vscode-statusBar-background: #007acc !important;
+  --vscode-statusBar-foreground: #ffffff !important;
+  --vscode-statusBar-border: transparent !important;
+  --vscode-statusBar-noFolderBackground: #007acc !important;
+  --vscode-statusBar-noFolderForeground: #ffffff !important;
+  --vscode-statusBar-noFolderBorder: transparent !important;
+  --vscode-statusBar-focusBorder: #ffffff !important;
+  --vscode-statusBarItem-hoverBackground: rgba(255, 255, 255, 0.12) !important;
+  --vscode-statusBarItem-hoverForeground: #ffffff !important;
+  --vscode-statusBarItem-activeBackground: rgba(255, 255, 255, 0.18) !important;
+  --vscode-statusBarItem-focusBorder: #ffffff !important;
+  --vscode-statusBarItem-remoteBackground: #1688d0 !important;
+  --vscode-statusBarItem-remoteForeground: #ffffff !important;
+
+  --vscode-commandCenter-background: #2a2a2a !important;
+  --vscode-commandCenter-foreground: #cccccc !important;
+  --vscode-commandCenter-border: #3c3c3c !important;
+  --vscode-commandCenter-activeBackground: #333333 !important;
+  --vscode-commandCenter-activeForeground: #ffffff !important;
+  --vscode-commandCenter-activeBorder: #3c3c3c !important;
+  --vscode-commandCenter-inactiveForeground: #9d9d9d !important;
+  --vscode-commandCenter-inactiveBorder: #3c3c3c !important;
+
+  --vscode-button-background: #007acc !important;
+  --vscode-button-foreground: #ffffff !important;
+  --vscode-button-hoverBackground: #1a8ad4 !important;
+  --vscode-button-border: #007acc !important;
+  --vscode-focusBorder: #007acc !important;
+  --vscode-progressBar-background: #007acc !important;
+  --vscode-textLink-foreground: #4daafc !important;
+  --vscode-textLink-activeForeground: #6cb6ff !important;
+}
+
+.monaco-workbench.vs-dark .part.statusbar.status-border-top::after {
+  background-color: transparent !important;
+}
+
+/* Капсула поиска: явный фон и рамка, чтобы она читалась на #181818 title bar. */
+.monaco-workbench.vs-dark .part.titlebar .command-center .action-item.command-center-center {
+  background-color: #2a2a2a !important;
+  border: 1px solid #3c3c3c !important;
+  border-radius: 6px !important;
+  height: 26px !important;
+}
+
+.monaco-workbench.vs-dark .part.titlebar .command-center .action-item.command-center-center:hover {
+  background-color: #333333 !important;
+  border-color: #3c3c3c !important;
+}
+
+.monaco-workbench .part.titlebar > .titlebar-container > .titlebar-right > .action-toolbar-container .monaco-action-bar .action-item:has(.codicon-sapphire-agents-window) {
+  width: auto;
+  overflow: visible;
+}

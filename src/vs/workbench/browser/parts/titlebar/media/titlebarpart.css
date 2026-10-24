@@ -584,7 +584,7 @@
 	margin-left: 8px;
 	padding: 0 10px 0 12px !important;
 	border-radius: 999px;
-	background-color: #0e639c !important;
+	background-color: #007acc !important;
 	color: #fff !important;
 	font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif !important;
 	font-size: 12px !important;
@@ -594,7 +594,7 @@
 }
 
 .monaco-workbench .part.titlebar > .titlebar-container > .titlebar-right > .action-toolbar-container .monaco-action-bar .action-item .action-label.codicon-sapphire-agents-window:hover {
-	background-color: #1177bb !important;
+	background-color: #1a8ad4 !important;
 }
 
 .monaco-workbench .part.titlebar > .titlebar-container > .titlebar-right > .action-toolbar-container .monaco-action-bar .action-item .action-label.codicon-sapphire-agents-window::before {

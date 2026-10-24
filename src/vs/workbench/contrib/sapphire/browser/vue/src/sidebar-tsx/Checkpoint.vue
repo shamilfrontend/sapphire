@@ -41,26 +41,23 @@ const onClick = () => {
 </script>
 
 <template>
-  <div class="flex items-center justify-center px-2 ">
-    <div
-      :class="`
-                    text-xs
-                    text-void-fg-3
-                    select-none
-                    ${isCheckpointGhost ? 'opacity-50' : 'opacity-100'}
-					${isDisabled ? 'cursor-default' : 'cursor-pointer'}
-                `"
-      :style="{ position: 'relative', display: 'inline-block' }"
-      :data-tooltip-id="isDisabled ? 'sapphire-tooltip' : undefined"
-      :data-tooltip-content="
-        isDisabled
-          ? `Недоступно ${isRunning ? 'во время выполнения' : 'пока выполняется другой чат'}`
-          : undefined
-      "
-      :data-tooltip-place="isDisabled ? 'top' : undefined"
-      @click="onClick"
+  <div
+    class="group flex items-center justify-center px-2 h-3"
+    :class="isDisabled ? 'cursor-default' : 'cursor-pointer'"
+    :data-tooltip-id="isDisabled ? 'sapphire-tooltip' : undefined"
+    :data-tooltip-content="
+      isDisabled
+        ? `Недоступно ${isRunning ? 'во время выполнения' : 'пока выполняется другой чат'}`
+        : undefined
+    "
+    :data-tooltip-place="isDisabled ? 'top' : undefined"
+    @click="onClick"
+  >
+    <span
+      class="text-xs text-void-fg-4 select-none opacity-0"
+      :class="isCheckpointGhost ? 'group-hover:opacity-50' : 'group-hover:opacity-100'"
     >
-      Контрольная точка
-    </div>
+      Восстановить
+    </span>
   </div>
 </template>
