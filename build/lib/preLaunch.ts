@@ -37,6 +37,8 @@ async function getElectron() {
 	if (shouldDownloadElectron(rootDir)) {
 		await runProcess(npm, ['run', 'electron']);
 	}
+	const { ensureDarwinDevAdhocSignature } = await import('./darwinDevSign.ts');
+	await ensureDarwinDevAdhocSignature(rootDir);
 }
 
 async function ensureCompiled() {

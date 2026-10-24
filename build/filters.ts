@@ -71,6 +71,7 @@ export const unicodeFilter = Object.freeze<string[]>([
 	'!extensions/copilot/**',
 
 	// Sapphire files below keep a third-party copyright and 2-space style.
+	'!src/vs/workbench/contrib/sapphire/browser/vue/**',
 	'!src/vs/workbench/contrib/sapphire/browser/autocompleteService.ts',
 	'!src/vs/workbench/contrib/sapphire/browser/planEditor.ts',
 	'!src/vs/workbench/contrib/sapphire/browser/sapphireUpdateActions.ts',
@@ -151,6 +152,7 @@ export const indentationFilter = Object.freeze<string[]>([
 	'!extensions/copilot/**',
 
 	// Sapphire files below keep a third-party copyright and 2-space style.
+	'!src/vs/workbench/contrib/sapphire/browser/vue/**',
 	'!src/vs/workbench/contrib/sapphire/browser/autocompleteService.ts',
 	'!src/vs/workbench/contrib/sapphire/browser/planEditor.ts',
 	'!src/vs/workbench/contrib/sapphire/browser/sapphireUpdateActions.ts',
@@ -246,6 +248,7 @@ export const copyrightFilter = Object.freeze<string[]>([
 	'!extensions/copilot/**',
 
 	// Sapphire files below keep a third-party copyright and 2-space style.
+	'!src/vs/workbench/contrib/sapphire/browser/vue/**',
 	'!src/vs/workbench/contrib/sapphire/browser/autocompleteService.ts',
 	'!src/vs/workbench/contrib/sapphire/browser/planEditor.ts',
 	'!src/vs/workbench/contrib/sapphire/browser/sapphireUpdateActions.ts',

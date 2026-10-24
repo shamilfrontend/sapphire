@@ -9,6 +9,7 @@ import { Readable } from 'stream';
 import vfs from 'vinyl-fs';
 import { filter, jsonEditor } from './gulp/facade.ts';
 import * as util from './util.ts';
+import { ensureDarwinDevAdhocSignature } from './darwinDevSign.ts';
 import { getElectronVersion } from './electronVersion.ts';
 import { getVersion } from './getVersion.ts';
 import { downloadFeedPackage } from './azureFeed.ts';
@@ -268,6 +269,7 @@ async function main(arch: string = process.arch): Promise<void> {
 	const electronPath = path.join(root, '.build', 'electron');
 	await util.rimraf(electronPath)();
 	await util.streamToPromise(getElectron(arch)());
+	await ensureDarwinDevAdhocSignature(root);
 }
 
 if (import.meta.main) {
