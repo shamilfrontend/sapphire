@@ -12,25 +12,37 @@ import { EditorWorkerHost } from './common/services/editorWorkerHost.js';
  * @skipMangle
  * @internal
  */
-export function start<THost extends object, TClient extends object>(
-  client: TClient,
-): IWorkerContext<THost> {
-  const webWorkerServer = initialize(() => new EditorWorker(client));
-  const editorWorkerHost = EditorWorkerHost.getChannel(webWorkerServer);
-  const host = new Proxy(
-    {},
-    {
-      get(target, prop, receiver) {
-        if (typeof prop !== 'string') {
-          throw new Error(`Not supported`);
-        }
-        return (...args: any[]) => editorWorkerHost.$fhr(prop, args);
-      },
-    },
-  );
+export function start<THost extends object, TClient extends object>(createClient: (ctx: IWorkerContext<THost>) => TClient): TClient {
+	let client: TClient | undefined;
+	const webWorkerServer = initialize((workerServer) => {
+		const editorWorkerHost = EditorWorkerHost.getChannel(workerServer);
 
-  return {
-    host: host as THost,
-    getMirrorModels: () => webWorkerServer.requestHandler.getModels(),
-  };
+		const host = new Proxy({}, {
+			get(target, prop, receiver) {
+				if (prop === 'then') {
+					// Don't forward the call when the proxy is returned in an async function and the runtime tries to .then it.
+					return undefined;
+				}
+				if (typeof prop !== 'string') {
+					throw new Error(`Not supported`);
+				}
+				return (...args: unknown[]) => {
+					return editorWorkerHost.$fhr(prop, args);
+				};
+			}
+		});
+
+		const ctx: IWorkerContext<THost> = {
+			host: host as THost,
+			getMirrorModels: () => {
+				return webWorkerServer.requestHandler.getModels();
+			}
+		};
+
+		client = createClient(ctx);
+
+		return new EditorWorker(client);
+	});
+
+	return client!;
 }

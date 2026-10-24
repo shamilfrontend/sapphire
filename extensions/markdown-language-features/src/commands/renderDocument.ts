@@ -8,11 +8,17 @@ import { MarkdownItEngine } from '../markdownEngine';
 import { ITextDocument } from '../types/textDocument';
 
 export class RenderDocument implements Command {
-  public readonly id = 'markdown.api.render';
+	public readonly id = 'markdown.api.render';
 
-  public constructor(private readonly _engine: MarkdownItEngine) {}
+	readonly #engine: MarkdownItEngine;
 
-  public async execute(document: ITextDocument | string): Promise<string> {
-    return (await this._engine.render(document)).html;
-  }
+	public constructor(
+		engine: MarkdownItEngine
+	) {
+		this.#engine = engine;
+	}
+
+	public async execute(document: ITextDocument | string): Promise<string> {
+		return (await (this.#engine.render(document))).html;
+	}
 }

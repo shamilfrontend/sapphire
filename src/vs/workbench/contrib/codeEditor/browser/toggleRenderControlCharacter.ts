@@ -11,40 +11,33 @@ import { Categories } from '../../../../platform/action/common/actionCommonCateg
 import { ServicesAccessor } from '../../../../platform/instantiation/common/instantiation.js';
 
 export class ToggleRenderControlCharacterAction extends Action2 {
-  static readonly ID = 'editor.action.toggleRenderControlCharacter';
 
-  constructor() {
-    super({
-      id: ToggleRenderControlCharacterAction.ID,
-      title: {
-        ...localize2('toggleRenderControlCharacters', 'Toggle Control Characters'),
-        mnemonicTitle: localize(
-          { key: 'miToggleRenderControlCharacters', comment: ['&& denotes a mnemonic'] },
-          'Render &&Control Characters',
-        ),
-      },
-      category: Categories.View,
-      f1: true,
-      toggled: ContextKeyExpr.equals('config.editor.renderControlCharacters', true),
-      menu: {
-        id: MenuId.MenubarAppearanceMenu,
-        group: '4_editor',
-        order: 5,
-      },
-    });
-  }
+	static readonly ID = 'editor.action.toggleRenderControlCharacter';
 
-  override run(accessor: ServicesAccessor): Promise<void> {
-    const configurationService = accessor.get(IConfigurationService);
+	constructor() {
+		super({
+			id: ToggleRenderControlCharacterAction.ID,
+			title: {
+				...localize2('toggleRenderControlCharacters', "Toggle Control Characters"),
+				mnemonicTitle: localize({ key: 'miToggleRenderControlCharacters', comment: ['&& denotes a mnemonic'] }, "Render &&Control Characters"),
+			},
+			category: Categories.View,
+			f1: true,
+			toggled: ContextKeyExpr.equals('config.editor.renderControlCharacters', true),
+			menu: {
+				id: MenuId.MenubarAppearanceMenu,
+				group: '4_editor',
+				order: 5
+			}
+		});
+	}
 
-    const newRenderControlCharacters = !configurationService.getValue<boolean>(
-      'editor.renderControlCharacters',
-    );
-    return configurationService.updateValue(
-      'editor.renderControlCharacters',
-      newRenderControlCharacters,
-    );
-  }
+	override run(accessor: ServicesAccessor): Promise<void> {
+		const configurationService = accessor.get(IConfigurationService);
+
+		const newRenderControlCharacters = !configurationService.getValue<boolean>('editor.renderControlCharacters');
+		return configurationService.updateValue('editor.renderControlCharacters', newRenderControlCharacters);
+	}
 }
 
 registerAction2(ToggleRenderControlCharacterAction);

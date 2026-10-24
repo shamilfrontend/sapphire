@@ -6,242 +6,231 @@
 import { Emitter } from '../../base/common/event.js';
 import { IDisposable, toDisposable } from '../../base/common/lifecycle.js';
 import { ITextModel, shouldSynchronizeModel } from './model.js';
-import { LanguageFilter, LanguageSelector, score } from './languageSelector.js';
+import { LanguageFilter, LanguageSelector, score, selectLanguageIds } from './languageSelector.js';
 import { URI } from '../../base/common/uri.js';
 
 interface Entry<T> {
-  readonly selector: LanguageSelector;
-  readonly provider: T;
-  _score: number;
-  readonly _time: number;
+	readonly selector: LanguageSelector;
+	readonly provider: T;
+	_score: number;
+	readonly _time: number;
 }
 
 function isExclusive(selector: LanguageSelector): boolean {
-  if (typeof selector === 'string') {
-    return false;
-  }
-  if (Array.isArray(selector)) {
-    return selector.every(isExclusive);
-  }
-  return !!(selector as LanguageFilter).exclusive; // TODO: microsoft/TypeScript#42768
+	if (typeof selector === 'string') {
+		return false;
+	} else if (Array.isArray(selector)) {
+		return selector.every(isExclusive);
+	} else {
+		return !!(selector as LanguageFilter).exclusive; // TODO: microsoft/TypeScript#42768
+	}
 }
 
 export interface NotebookInfo {
-  readonly uri: URI;
-  readonly type: string;
+	readonly uri: URI;
+	readonly type: string;
 }
 
 export interface NotebookInfoResolver {
-  (uri: URI): NotebookInfo | undefined;
+	(uri: URI): NotebookInfo | undefined;
 }
 
 class MatchCandidate {
-  constructor(
-    readonly uri: URI,
-    readonly languageId: string,
-    readonly notebookUri: URI | undefined,
-    readonly notebookType: string | undefined,
-    readonly recursive: boolean,
-  ) {}
+	constructor(
+		readonly uri: URI,
+		readonly languageId: string,
+		readonly notebookUri: URI | undefined,
+		readonly notebookType: string | undefined,
+		readonly recursive: boolean,
+	) { }
 
-  equals(other: MatchCandidate): boolean {
-    return (
-      this.notebookType === other.notebookType &&
-      this.languageId === other.languageId &&
-      this.uri.toString() === other.uri.toString() &&
-      this.notebookUri?.toString() === other.notebookUri?.toString() &&
-      this.recursive === other.recursive
-    );
-  }
+	equals(other: MatchCandidate): boolean {
+		return this.notebookType === other.notebookType
+			&& this.languageId === other.languageId
+			&& this.uri.toString() === other.uri.toString()
+			&& this.notebookUri?.toString() === other.notebookUri?.toString()
+			&& this.recursive === other.recursive;
+	}
 }
 
 export class LanguageFeatureRegistry<T> {
-  private _clock: number = 0;
 
-  private readonly _entries: Entry<T>[] = [];
+	private _clock: number = 0;
+	private readonly _entries: Entry<T>[] = [];
 
-  private readonly _onDidChange = new Emitter<number>();
+	private readonly _onDidChange = new Emitter<number>();
+	get onDidChange() { return this._onDidChange.event; }
 
-  readonly onDidChange = this._onDidChange.event;
+	constructor(private readonly _notebookInfoResolver?: NotebookInfoResolver) { }
 
-  constructor(private readonly _notebookInfoResolver?: NotebookInfoResolver) {}
+	register(selector: LanguageSelector, provider: T): IDisposable {
 
-  register(selector: LanguageSelector, provider: T): IDisposable {
-    let entry: Entry<T> | undefined = {
-      selector,
-      provider,
-      _score: -1,
-      _time: this._clock++,
-    };
+		let entry: Entry<T> | undefined = {
+			selector,
+			provider,
+			_score: -1,
+			_time: this._clock++
+		};
 
-    this._entries.push(entry);
-    this._lastCandidate = undefined;
-    this._onDidChange.fire(this._entries.length);
+		this._entries.push(entry);
+		this._lastCandidate = undefined;
+		this._onDidChange.fire(this._entries.length);
 
-    return toDisposable(() => {
-      if (entry) {
-        const idx = this._entries.indexOf(entry);
-        if (idx >= 0) {
-          this._entries.splice(idx, 1);
-          this._lastCandidate = undefined;
-          this._onDidChange.fire(this._entries.length);
-          entry = undefined;
-        }
-      }
-    });
-  }
+		return toDisposable(() => {
+			if (entry) {
+				const idx = this._entries.indexOf(entry);
+				if (idx >= 0) {
+					this._entries.splice(idx, 1);
+					this._lastCandidate = undefined;
+					this._onDidChange.fire(this._entries.length);
+					entry = undefined;
+				}
+			}
+		});
+	}
 
-  has(model: ITextModel): boolean {
-    return this.all(model).length > 0;
-  }
+	has(model: ITextModel): boolean {
+		return this.all(model).length > 0;
+	}
 
-  all(model: ITextModel): T[] {
-    if (!model) {
-      return [];
-    }
+	all(model: ITextModel): T[] {
+		if (!model) {
+			return [];
+		}
 
-    this._updateScores(model, false);
-    const result: T[] = [];
+		this._updateScores(model, false);
+		const result: T[] = [];
 
-    // from registry
-    for (const entry of this._entries) {
-      if (entry._score > 0) {
-        result.push(entry.provider);
-      }
-    }
+		// from registry
+		for (const entry of this._entries) {
+			if (entry._score > 0) {
+				result.push(entry.provider);
+			}
+		}
 
-    return result;
-  }
+		return result;
+	}
 
-  allNoModel(): T[] {
-    return this._entries.map((entry) => entry.provider);
-  }
+	allNoModel(): T[] {
+		return this._entries.map(entry => entry.provider);
+	}
 
-  ordered(model: ITextModel, recursive = false): T[] {
-    const result: T[] = [];
-    this._orderedForEach(model, recursive, (entry) => result.push(entry.provider));
-    return result;
-  }
+	get registeredLanguageIds(): ReadonlySet<string> {
+		const result = new Set<string>();
+		for (const entry of this._entries) {
+			selectLanguageIds(entry.selector, result);
+		}
+		return result;
+	}
 
-  orderedGroups(model: ITextModel): T[][] {
-    const result: T[][] = [];
-    let lastBucket: T[];
-    let lastBucketScore: number;
+	ordered(model: ITextModel, recursive = false): T[] {
+		const result: T[] = [];
+		this._orderedForEach(model, recursive, entry => result.push(entry.provider));
+		return result;
+	}
 
-    this._orderedForEach(model, false, (entry) => {
-      if (lastBucket && lastBucketScore === entry._score) {
-        lastBucket.push(entry.provider);
-      } else {
-        lastBucketScore = entry._score;
-        lastBucket = [entry.provider];
-        result.push(lastBucket);
-      }
-    });
+	orderedGroups(model: ITextModel): T[][] {
+		const result: T[][] = [];
+		let lastBucket: T[];
+		let lastBucketScore: number;
 
-    return result;
-  }
+		this._orderedForEach(model, false, entry => {
+			if (lastBucket && lastBucketScore === entry._score) {
+				lastBucket.push(entry.provider);
+			} else {
+				lastBucketScore = entry._score;
+				lastBucket = [entry.provider];
+				result.push(lastBucket);
+			}
+		});
 
-  private _orderedForEach(
-    model: ITextModel,
-    recursive: boolean,
-    callback: (provider: Entry<T>) => any,
-  ): void {
-    this._updateScores(model, recursive);
+		return result;
+	}
 
-    for (const entry of this._entries) {
-      if (entry._score > 0) {
-        callback(entry);
-      }
-    }
-  }
+	private _orderedForEach(model: ITextModel, recursive: boolean, callback: (provider: Entry<T>) => void): void {
 
-  private _lastCandidate: MatchCandidate | undefined;
+		this._updateScores(model, recursive);
 
-  private _updateScores(model: ITextModel, recursive: boolean): void {
-    const notebookInfo = this._notebookInfoResolver?.(model.uri);
+		for (const entry of this._entries) {
+			if (entry._score > 0) {
+				callback(entry);
+			}
+		}
+	}
 
-    // use the uri (scheme, pattern) of the notebook info iff we have one
-    // otherwise it's the model's/document's uri
-    const candidate = notebookInfo
-      ? new MatchCandidate(
-          model.uri,
-          model.getLanguageId(),
-          notebookInfo.uri,
-          notebookInfo.type,
-          recursive,
-        )
-      : new MatchCandidate(model.uri, model.getLanguageId(), undefined, undefined, recursive);
+	private _lastCandidate: MatchCandidate | undefined;
 
-    if (this._lastCandidate?.equals(candidate)) {
-      // nothing has changed
-      return;
-    }
+	private _updateScores(model: ITextModel, recursive: boolean): void {
 
-    this._lastCandidate = candidate;
+		const notebookInfo = this._notebookInfoResolver?.(model.uri);
 
-    for (const entry of this._entries) {
-      entry._score = score(
-        entry.selector,
-        candidate.uri,
-        candidate.languageId,
-        shouldSynchronizeModel(model),
-        candidate.notebookUri,
-        candidate.notebookType,
-      );
+		// use the uri (scheme, pattern) of the notebook info iff we have one
+		// otherwise it's the model's/document's uri
+		const candidate = notebookInfo
+			? new MatchCandidate(model.uri, model.getLanguageId(), notebookInfo.uri, notebookInfo.type, recursive)
+			: new MatchCandidate(model.uri, model.getLanguageId(), undefined, undefined, recursive);
 
-      if (isExclusive(entry.selector) && entry._score > 0) {
-        if (recursive) {
-          entry._score = 0;
-        } else {
-          // support for one exclusive selector that overwrites
-          // any other selector
-          for (const entry of this._entries) {
-            entry._score = 0;
-          }
-          entry._score = 1000;
-          break;
-        }
-      }
-    }
+		if (this._lastCandidate?.equals(candidate)) {
+			// nothing has changed
+			return;
+		}
 
-    // needs sorting
-    this._entries.sort(LanguageFeatureRegistry._compareByScoreAndTime);
-  }
+		this._lastCandidate = candidate;
 
-  private static _compareByScoreAndTime(a: Entry<any>, b: Entry<any>): number {
-    if (a._score < b._score) {
-      return 1;
-    }
-    if (a._score > b._score) {
-      return -1;
-    }
+		for (const entry of this._entries) {
+			entry._score = score(entry.selector, candidate.uri, candidate.languageId, shouldSynchronizeModel(model), candidate.notebookUri, candidate.notebookType);
 
-    // De-prioritize built-in providers
-    if (isBuiltinSelector(a.selector) && !isBuiltinSelector(b.selector)) {
-      return 1;
-    }
-    if (!isBuiltinSelector(a.selector) && isBuiltinSelector(b.selector)) {
-      return -1;
-    }
+			if (isExclusive(entry.selector) && entry._score > 0) {
+				if (recursive) {
+					entry._score = 0;
+				} else {
+					// support for one exclusive selector that overwrites
+					// any other selector
+					for (const entry of this._entries) {
+						entry._score = 0;
+					}
+					entry._score = 1000;
+					break;
+				}
+			}
+		}
 
-    if (a._time < b._time) {
-      return 1;
-    }
-    if (a._time > b._time) {
-      return -1;
-    }
-    return 0;
-  }
+		// needs sorting
+		this._entries.sort(LanguageFeatureRegistry._compareByScoreAndTime);
+	}
+
+	private static _compareByScoreAndTime(a: Entry<unknown>, b: Entry<unknown>): number {
+		if (a._score < b._score) {
+			return 1;
+		} else if (a._score > b._score) {
+			return -1;
+		}
+
+		// De-prioritize built-in providers
+		if (isBuiltinSelector(a.selector) && !isBuiltinSelector(b.selector)) {
+			return 1;
+		} else if (!isBuiltinSelector(a.selector) && isBuiltinSelector(b.selector)) {
+			return -1;
+		}
+
+		if (a._time < b._time) {
+			return 1;
+		} else if (a._time > b._time) {
+			return -1;
+		} else {
+			return 0;
+		}
+	}
 }
 
 function isBuiltinSelector(selector: LanguageSelector): boolean {
-  if (typeof selector === 'string') {
-    return false;
-  }
+	if (typeof selector === 'string') {
+		return false;
+	}
 
-  if (Array.isArray(selector)) {
-    return selector.some(isBuiltinSelector);
-  }
+	if (Array.isArray(selector)) {
+		return selector.some(isBuiltinSelector);
+	}
 
-  return Boolean((selector as LanguageFilter).isBuiltin);
+	return Boolean((selector as LanguageFilter).isBuiltin);
 }

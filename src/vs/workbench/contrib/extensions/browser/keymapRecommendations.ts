@@ -8,25 +8,27 @@ import { IProductService } from '../../../../platform/product/common/productServ
 import { ExtensionRecommendationReason } from '../../../services/extensionRecommendations/common/extensionRecommendations.js';
 
 export class KeymapRecommendations extends ExtensionRecommendations {
-  private _recommendations: ExtensionRecommendation[] = [];
 
-  get recommendations(): ReadonlyArray<ExtensionRecommendation> {
-    return this._recommendations;
-  }
+	private _recommendations: ExtensionRecommendation[] = [];
+	get recommendations(): ReadonlyArray<ExtensionRecommendation> { return this._recommendations; }
 
-  constructor(@IProductService private readonly productService: IProductService) {
-    super();
-  }
+	constructor(
+		@IProductService private readonly productService: IProductService,
+	) {
+		super();
+	}
 
-  protected async doActivate(): Promise<void> {
-    if (this.productService.keymapExtensionTips) {
-      this._recommendations = this.productService.keymapExtensionTips.map((extensionId) => ({
-        extension: extensionId.toLowerCase(),
-        reason: {
-          reasonId: ExtensionRecommendationReason.Application,
-          reasonText: '',
-        },
-      }));
-    }
-  }
+	protected async doActivate(): Promise<void> {
+		if (this.productService.keymapExtensionTips) {
+			this._recommendations = this.productService.keymapExtensionTips.map(extensionId => ({
+				extension: extensionId.toLowerCase(),
+				reason: {
+					reasonId: ExtensionRecommendationReason.Application,
+					reasonText: ''
+				}
+			}));
+		}
+	}
+
 }
+

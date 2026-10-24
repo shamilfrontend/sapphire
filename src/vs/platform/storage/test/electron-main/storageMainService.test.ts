@@ -3,7 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { notStrictEqual, strictEqual } from 'assert';
+import { deepStrictEqual, notStrictEqual, strictEqual } from 'assert';
 import { Schemas } from '../../../../base/common/network.js';
 import { joinPath } from '../../../../base/common/resources.js';
 import { URI } from '../../../../base/common/uri.js';
@@ -17,16 +17,11 @@ import product from '../../../product/common/product.js';
 import { IProductService } from '../../../product/common/productService.js';
 import { SaveStrategy, StateService } from '../../../state/node/stateService.js';
 import { IS_NEW_KEY, StorageScope } from '../../common/storage.js';
-import {
-  IStorageChangeEvent,
-  IStorageMain,
-  IStorageMainOptions,
-} from '../../electron-main/storageMain.js';
+import { IBaseSerializableStorageRequest, ISerializableCompareAndSwapRequest, ISerializableCompareAndSwapResult, ISerializableUpdateRequest } from '../../common/storageIpc.js';
+import { IStorageChangeEvent, IStorageMain, IStorageMainOptions } from '../../electron-main/storageMain.js';
+import { StorageDatabaseChannel } from '../../electron-main/storageIpc.js';
 import { StorageMainService } from '../../electron-main/storageMainService.js';
-import {
-  currentSessionDateStorageKey,
-  firstSessionDateStorageKey,
-} from '../../../telemetry/common/telemetry.js';
+import { currentSessionDateStorageKey, firstSessionDateStorageKey } from '../../../telemetry/common/telemetry.js';
 import { UriIdentityService } from '../../../uriIdentity/common/uriIdentityService.js';
 import { IUserDataProfile } from '../../../userDataProfile/common/userDataProfile.js';
 import { UserDataProfilesMainService } from '../../../userDataProfile/electron-main/userDataProfile.js';
@@ -34,283 +29,356 @@ import { TestLifecycleMainService } from '../../../test/electron-main/workbenchT
 import { ensureNoDisposablesAreLeakedInTestSuite } from '../../../../base/test/common/utils.js';
 import { DisposableStore } from '../../../../base/common/lifecycle.js';
 
-suite('StorageMainService', () => {
-  const disposables = new DisposableStore();
+suite('StorageMainService', function () {
 
-  const productService: IProductService = { _serviceBrand: undefined, ...product };
+	const disposables = new DisposableStore();
 
-  const inMemoryProfileRoot = URI.file('/location').with({ scheme: Schemas.inMemory });
-  const inMemoryProfile: IUserDataProfile = {
-    id: 'id',
-    name: 'inMemory',
-    isDefault: false,
-    location: inMemoryProfileRoot,
-    globalStorageHome: joinPath(inMemoryProfileRoot, 'globalStorageHome'),
-    settingsResource: joinPath(inMemoryProfileRoot, 'settingsResource'),
-    keybindingsResource: joinPath(inMemoryProfileRoot, 'keybindingsResource'),
-    tasksResource: joinPath(inMemoryProfileRoot, 'tasksResource'),
-    snippetsHome: joinPath(inMemoryProfileRoot, 'snippetsHome'),
-    promptsHome: joinPath(inMemoryProfileRoot, 'promptsHome'),
-    extensionsResource: joinPath(inMemoryProfileRoot, 'extensionsResource'),
-    cacheHome: joinPath(inMemoryProfileRoot, 'cache'),
-  };
+	const productService: IProductService = { _serviceBrand: undefined, ...product };
 
-  class TestStorageMainService extends StorageMainService {
-    protected override getStorageOptions(): IStorageMainOptions {
-      return {
-        useInMemoryStorage: true,
-      };
-    }
-  }
+	const inMemoryProfileRoot = URI.file('/location').with({ scheme: Schemas.inMemory });
+	const inMemoryProfile: IUserDataProfile = {
+		id: 'id',
+		name: 'inMemory',
+		isDefault: false,
+		location: inMemoryProfileRoot,
+		globalStorageHome: joinPath(inMemoryProfileRoot, 'globalStorageHome'),
+		settingsResource: joinPath(inMemoryProfileRoot, 'settingsResource'),
+		keybindingsResource: joinPath(inMemoryProfileRoot, 'keybindingsResource'),
+		tasksResource: joinPath(inMemoryProfileRoot, 'tasksResource'),
+		mcpResource: joinPath(inMemoryProfileRoot, 'mcp.json'),
+		languageModelsResource: joinPath(inMemoryProfileRoot, 'chatLanguageModels.json'),
+		snippetsHome: joinPath(inMemoryProfileRoot, 'snippetsHome'),
+		promptsHome: joinPath(inMemoryProfileRoot, 'promptsHome'),
+		extensionsResource: joinPath(inMemoryProfileRoot, 'extensionsResource'),
+		cacheHome: joinPath(inMemoryProfileRoot, 'cache'),
+		agentPluginsHome: joinPath(inMemoryProfileRoot, 'agentPluginsHome'),
+	};
 
-  async function testStorage(storage: IStorageMain, scope: StorageScope): Promise<void> {
-    strictEqual(storage.isInMemory(), true);
+	class TestStorageMainService extends StorageMainService {
 
-    // Telemetry: added after init unless workspace/profile scoped
-    if (scope === StorageScope.APPLICATION) {
-      strictEqual(storage.items.size, 0);
-      await storage.init();
-      strictEqual(typeof storage.get(firstSessionDateStorageKey), 'string');
-      strictEqual(typeof storage.get(currentSessionDateStorageKey), 'string');
-    } else {
-      await storage.init();
-    }
+		protected override getStorageOptions(): IStorageMainOptions {
+			return {
+				useInMemoryStorage: true
+			};
+		}
+	}
 
-    let storageChangeEvent: IStorageChangeEvent | undefined;
-    disposables.add(
-      storage.onDidChangeStorage((e) => {
-        storageChangeEvent = e;
-      }),
-    );
+	async function testStorage(storage: IStorageMain, scope: StorageScope): Promise<void> {
+		strictEqual(storage.isInMemory(), true);
 
-    let storageDidClose = false;
-    disposables.add(storage.onDidCloseStorage(() => (storageDidClose = true)));
+		// Telemetry: added after init unless workspace/profile scoped
+		if (scope === StorageScope.APPLICATION) {
+			strictEqual(storage.items.size, 0);
+			await storage.init();
+			strictEqual(typeof storage.get(firstSessionDateStorageKey), 'string');
+			strictEqual(typeof storage.get(currentSessionDateStorageKey), 'string');
+		} else {
+			await storage.init();
+		}
 
-    // Basic store/get/remove
-    const size = storage.items.size;
+		let storageChangeEvent: IStorageChangeEvent | undefined = undefined;
+		disposables.add(storage.onDidChangeStorage(e => {
+			storageChangeEvent = e;
+		}));
 
-    storage.set('bar', 'foo');
-    strictEqual(storageChangeEvent!.key, 'bar');
-    storage.set('barNumber', 55);
-    storage.set('barBoolean', true);
+		let storageDidClose = false;
+		disposables.add(storage.onDidCloseStorage(() => storageDidClose = true));
 
-    strictEqual(storage.get('bar'), 'foo');
-    strictEqual(storage.get('barNumber'), '55');
-    strictEqual(storage.get('barBoolean'), 'true');
+		// Basic store/get/remove
+		const size = storage.items.size;
 
-    strictEqual(storage.items.size, size + 3);
+		storage.set('bar', 'foo');
+		strictEqual(storageChangeEvent!.key, 'bar');
+		storage.set('barNumber', 55);
+		storage.set('barBoolean', true);
 
-    storage.delete('bar');
-    strictEqual(storage.get('bar'), undefined);
+		strictEqual(storage.get('bar'), 'foo');
+		strictEqual(storage.get('barNumber'), '55');
+		strictEqual(storage.get('barBoolean'), 'true');
 
-    strictEqual(storage.items.size, size + 2);
+		strictEqual(storage.items.size, size + 3);
 
-    // IS_NEW
-    strictEqual(storage.get(IS_NEW_KEY), 'true');
+		storage.delete('bar');
+		strictEqual(storage.get('bar'), undefined);
 
-    // Close
-    await storage.close();
+		strictEqual(storage.items.size, size + 2);
 
-    strictEqual(storageDidClose, true);
-  }
+		// IS_NEW
+		strictEqual(storage.get(IS_NEW_KEY), 'true');
 
-  teardown(() => {
-    disposables.clear();
-  });
+		// Close
+		await storage.close();
 
-  function createStorageService(
-    lifecycleMainService: ILifecycleMainService = new TestLifecycleMainService(),
-  ): TestStorageMainService {
-    const environmentService = new NativeEnvironmentService(
-      parseArgs(process.argv, OPTIONS),
-      productService,
-    );
-    const fileService = disposables.add(new FileService(new NullLogService()));
-    const uriIdentityService = disposables.add(new UriIdentityService(fileService));
-    const testStorageService = disposables.add(
-      new TestStorageMainService(
-        new NullLogService(),
-        environmentService,
-        disposables.add(
-          new UserDataProfilesMainService(
-            disposables.add(
-              new StateService(
-                SaveStrategy.DELAYED,
-                environmentService,
-                new NullLogService(),
-                fileService,
-              ),
-            ),
-            disposables.add(uriIdentityService),
-            environmentService,
-            fileService,
-            new NullLogService(),
-          ),
-        ),
-        lifecycleMainService,
-        fileService,
-        uriIdentityService,
-      ),
-    );
+		strictEqual(storageDidClose, true);
+	}
 
-    disposables.add(testStorageService.applicationStorage);
+	const storageMainServices: TestStorageMainService[] = [];
 
-    return testStorageService;
-  }
+	teardown(async () => {
 
-  test('basics (application)', () => {
-    const storageMainService = createStorageService();
+		// The storage main service warms up application storage in the background once
+		// a window has opened, which `TestLifecycleMainService` reports immediately. Await
+		// that warm-up before disposing, otherwise it can complete after the service is
+		// disposed and leak disposables into whatever test runs next.
+		await Promise.all(storageMainServices.splice(0).flatMap(service => [service.applicationStorage.init(), service.applicationSharedStorage.init()]));
 
-    return testStorage(storageMainService.applicationStorage, StorageScope.APPLICATION);
-  });
+		disposables.clear();
+	});
 
-  test('basics (profile)', () => {
-    const storageMainService = createStorageService();
-    const profile = inMemoryProfile;
+	function createStorageService(lifecycleMainService: ILifecycleMainService = new TestLifecycleMainService()): TestStorageMainService {
+		const environmentService = new NativeEnvironmentService(parseArgs(process.argv, OPTIONS), productService);
+		const fileService = disposables.add(new FileService(new NullLogService()));
+		const uriIdentityService = disposables.add(new UriIdentityService(fileService));
+		const testStorageService = disposables.add(new TestStorageMainService(new NullLogService(), environmentService, disposables.add(new UserDataProfilesMainService(disposables.add(new StateService(SaveStrategy.DELAYED, environmentService, new NullLogService(), fileService)), disposables.add(uriIdentityService), environmentService, fileService, new NullLogService(), productService)), lifecycleMainService, fileService, uriIdentityService));
+		storageMainServices.push(testStorageService);
 
-    return testStorage(storageMainService.profileStorage(profile), StorageScope.PROFILE);
-  });
+		disposables.add(testStorageService.applicationStorage);
 
-  test('basics (workspace)', () => {
-    const workspace = { id: generateUuid() };
-    const storageMainService = createStorageService();
+		return testStorageService;
+	}
 
-    return testStorage(storageMainService.workspaceStorage(workspace), StorageScope.WORKSPACE);
-  });
+	test('basics (application)', function () {
+		const storageMainService = createStorageService();
 
-  test('storage closed onWillShutdown', async () => {
-    const lifecycleMainService = new TestLifecycleMainService();
-    const storageMainService = createStorageService(lifecycleMainService);
+		return testStorage(storageMainService.applicationStorage, StorageScope.APPLICATION);
+	});
 
-    const profile = inMemoryProfile;
-    const workspace = { id: generateUuid() };
+	test('basics (profile)', function () {
+		const storageMainService = createStorageService();
+		const profile = inMemoryProfile;
 
-    const workspaceStorage = storageMainService.workspaceStorage(workspace);
-    let didCloseWorkspaceStorage = false;
-    disposables.add(
-      workspaceStorage.onDidCloseStorage(() => {
-        didCloseWorkspaceStorage = true;
-      }),
-    );
+		return testStorage(storageMainService.profileStorage(profile), StorageScope.PROFILE);
+	});
 
-    const profileStorage = storageMainService.profileStorage(profile);
-    let didCloseProfileStorage = false;
-    disposables.add(
-      profileStorage.onDidCloseStorage(() => {
-        didCloseProfileStorage = true;
-      }),
-    );
+	test('basics (application shared)', function () {
+		const storageMainService = createStorageService();
 
-    const applicationStorage = storageMainService.applicationStorage;
-    let didCloseApplicationStorage = false;
-    disposables.add(
-      applicationStorage.onDidCloseStorage(() => {
-        didCloseApplicationStorage = true;
-      }),
-    );
+		return testStorage(storageMainService.applicationSharedStorage, StorageScope.APPLICATION_SHARED);
+	});
 
-    strictEqual(applicationStorage, storageMainService.applicationStorage); // same instance as long as not closed
-    strictEqual(profileStorage, storageMainService.profileStorage(profile)); // same instance as long as not closed
-    strictEqual(workspaceStorage, storageMainService.workspaceStorage(workspace)); // same instance as long as not closed
+	test('basics (workspace)', function () {
+		const workspace = { id: generateUuid() };
+		const storageMainService = createStorageService();
 
-    await applicationStorage.init();
-    await profileStorage.init();
-    await workspaceStorage.init();
+		return testStorage(storageMainService.workspaceStorage(workspace), StorageScope.WORKSPACE);
+	});
 
-    await lifecycleMainService.fireOnWillShutdown();
+	test('storage channel compareAndSwap isolates keys and storage scopes', async function () {
+		const storageMainService = createStorageService();
+		const channel = disposables.add(new StorageDatabaseChannel(new NullLogService(), storageMainService));
+		const workspace = { id: generateUuid() };
+		const applicationSharedStorage = disposables.add(storageMainService.applicationSharedStorage);
+		const profileStorage = disposables.add(storageMainService.profileStorage(inMemoryProfile));
+		const workspaceStorage = disposables.add(storageMainService.workspaceStorage(workspace));
+		const cases: Array<{ readonly name: string; readonly request: IBaseSerializableStorageRequest; readonly storage: IStorageMain }> = [
+			{
+				name: 'application',
+				request: { profile: undefined, workspace: undefined },
+				storage: storageMainService.applicationStorage,
+			},
+			{
+				name: 'applicationShared',
+				request: { profile: undefined, workspace: undefined, applicationShared: true },
+				storage: applicationSharedStorage,
+			},
+			{
+				name: 'profile',
+				request: { profile: inMemoryProfile, workspace: undefined },
+				storage: profileStorage,
+			},
+			{
+				name: 'workspace',
+				request: { profile: undefined, workspace },
+				storage: workspaceStorage,
+			},
+		];
+		for (const testCase of cases) {
+			const request: ISerializableUpdateRequest = {
+				...testCase.request,
+				insert: [
+					['key', `${testCase.name}-first`],
+					['unrelated', `${testCase.name}-sentinel`],
+				],
+			};
+			await channel.call(undefined, 'updateItems', request);
+		}
 
-    strictEqual(didCloseApplicationStorage, true);
-    strictEqual(didCloseProfileStorage, true);
-    strictEqual(didCloseWorkspaceStorage, true);
+		const compareAndSwap = (request: ISerializableCompareAndSwapRequest): Promise<ISerializableCompareAndSwapResult> => channel.call(undefined, 'compareAndSwap', request);
+		const results: ISerializableCompareAndSwapResult[] = [];
+		for (const testCase of cases) {
+			const request: ISerializableCompareAndSwapRequest = {
+				...testCase.request,
+				key: 'key',
+				expectedValue: `${testCase.name}-first`,
+				newValue: `${testCase.name}-second`,
+			};
+			results.push(await compareAndSwap(request));
+		}
+		const rejectedRequest: ISerializableCompareAndSwapRequest = {
+			...cases[0].request,
+			key: 'key',
+			expectedValue: 'stale',
+			newValue: 'should-not-write',
+		};
+		const rejected = await compareAndSwap(rejectedRequest);
+		const stored = cases.map(testCase => ({
+			name: testCase.name,
+			value: testCase.storage.get('key'),
+			unrelated: testCase.storage.get('unrelated'),
+		}));
+		await Promise.all([
+			applicationSharedStorage.close(),
+			profileStorage.close(),
+			workspaceStorage.close(),
+		]);
 
-    const profileStorage2 = storageMainService.profileStorage(profile);
-    notStrictEqual(profileStorage, profileStorage2);
+		deepStrictEqual({
+			results,
+			rejected,
+			stored,
+		}, {
+			results: cases.map(testCase => ({ swapped: true, currentValue: `${testCase.name}-second` })),
+			rejected: { swapped: false, currentValue: 'application-second' },
+			stored: cases.map(testCase => ({
+				name: testCase.name,
+				value: `${testCase.name}-second`,
+				unrelated: `${testCase.name}-sentinel`,
+			})),
+		});
+	});
 
-    const workspaceStorage2 = storageMainService.workspaceStorage(workspace);
-    notStrictEqual(workspaceStorage, workspaceStorage2);
+	test('storage closed onWillShutdown', async function () {
+		const lifecycleMainService = new TestLifecycleMainService();
+		const storageMainService = createStorageService(lifecycleMainService);
 
-    await workspaceStorage2.close();
-  });
+		const profile = inMemoryProfile;
+		const workspace = { id: generateUuid() };
 
-  test('storage closed before init works', async () => {
-    const storageMainService = createStorageService();
-    const profile = inMemoryProfile;
-    const workspace = { id: generateUuid() };
+		const workspaceStorage = storageMainService.workspaceStorage(workspace);
+		let didCloseWorkspaceStorage = false;
+		disposables.add(workspaceStorage.onDidCloseStorage(() => {
+			didCloseWorkspaceStorage = true;
+		}));
 
-    const workspaceStorage = storageMainService.workspaceStorage(workspace);
-    let didCloseWorkspaceStorage = false;
-    disposables.add(
-      workspaceStorage.onDidCloseStorage(() => {
-        didCloseWorkspaceStorage = true;
-      }),
-    );
+		const profileStorage = storageMainService.profileStorage(profile);
+		let didCloseProfileStorage = false;
+		disposables.add(profileStorage.onDidCloseStorage(() => {
+			didCloseProfileStorage = true;
+		}));
 
-    const profileStorage = storageMainService.profileStorage(profile);
-    let didCloseProfileStorage = false;
-    disposables.add(
-      profileStorage.onDidCloseStorage(() => {
-        didCloseProfileStorage = true;
-      }),
-    );
+		const applicationStorage = storageMainService.applicationStorage;
+		let didCloseApplicationStorage = false;
+		disposables.add(applicationStorage.onDidCloseStorage(() => {
+			didCloseApplicationStorage = true;
+		}));
 
-    const applicationStorage = storageMainService.applicationStorage;
-    let didCloseApplicationStorage = false;
-    disposables.add(
-      applicationStorage.onDidCloseStorage(() => {
-        didCloseApplicationStorage = true;
-      }),
-    );
+		strictEqual(applicationStorage, storageMainService.applicationStorage); // same instance as long as not closed
+		strictEqual(profileStorage, storageMainService.profileStorage(profile)); // same instance as long as not closed
+		strictEqual(workspaceStorage, storageMainService.workspaceStorage(workspace)); // same instance as long as not closed
 
-    await applicationStorage.close();
-    await profileStorage.close();
-    await workspaceStorage.close();
+		await applicationStorage.init();
+		await profileStorage.init();
+		await workspaceStorage.init();
 
-    strictEqual(didCloseApplicationStorage, true);
-    strictEqual(didCloseProfileStorage, true);
-    strictEqual(didCloseWorkspaceStorage, true);
-  });
+		await lifecycleMainService.fireOnWillShutdown();
 
-  test('storage closed before init awaits works', async () => {
-    const storageMainService = createStorageService();
-    const profile = inMemoryProfile;
-    const workspace = { id: generateUuid() };
+		strictEqual(didCloseApplicationStorage, true);
+		strictEqual(didCloseProfileStorage, true);
+		strictEqual(didCloseWorkspaceStorage, true);
 
-    const workspaceStorage = storageMainService.workspaceStorage(workspace);
-    let didCloseWorkspaceStorage = false;
-    disposables.add(
-      workspaceStorage.onDidCloseStorage(() => {
-        didCloseWorkspaceStorage = true;
-      }),
-    );
+		const profileStorage2 = storageMainService.profileStorage(profile);
+		notStrictEqual(profileStorage, profileStorage2);
 
-    const profileStorage = storageMainService.profileStorage(profile);
-    let didCloseProfileStorage = false;
-    disposables.add(
-      profileStorage.onDidCloseStorage(() => {
-        didCloseProfileStorage = true;
-      }),
-    );
+		const workspaceStorage2 = storageMainService.workspaceStorage(workspace);
+		notStrictEqual(workspaceStorage, workspaceStorage2);
 
-    const applicationtorage = storageMainService.applicationStorage;
-    let didCloseApplicationStorage = false;
-    disposables.add(
-      applicationtorage.onDidCloseStorage(() => {
-        didCloseApplicationStorage = true;
-      }),
-    );
+		await profileStorage2.close();
+		await workspaceStorage2.close();
+	});
 
-    applicationtorage.init();
-    profileStorage.init();
-    workspaceStorage.init();
+	test('storage closed before init works', async function () {
+		const storageMainService = createStorageService();
+		const profile = inMemoryProfile;
+		const workspace = { id: generateUuid() };
 
-    await applicationtorage.close();
-    await profileStorage.close();
-    await workspaceStorage.close();
+		const workspaceStorage = storageMainService.workspaceStorage(workspace);
+		let didCloseWorkspaceStorage = false;
+		disposables.add(workspaceStorage.onDidCloseStorage(() => {
+			didCloseWorkspaceStorage = true;
+		}));
 
-    strictEqual(didCloseApplicationStorage, true);
-    strictEqual(didCloseProfileStorage, true);
-    strictEqual(didCloseWorkspaceStorage, true);
-  });
+		const profileStorage = storageMainService.profileStorage(profile);
+		let didCloseProfileStorage = false;
+		disposables.add(profileStorage.onDidCloseStorage(() => {
+			didCloseProfileStorage = true;
+		}));
 
-  ensureNoDisposablesAreLeakedInTestSuite();
+		const applicationStorage = storageMainService.applicationStorage;
+		let didCloseApplicationStorage = false;
+		disposables.add(applicationStorage.onDidCloseStorage(() => {
+			didCloseApplicationStorage = true;
+		}));
+
+		await applicationStorage.close();
+		await profileStorage.close();
+		await workspaceStorage.close();
+
+		strictEqual(didCloseApplicationStorage, true);
+		strictEqual(didCloseProfileStorage, true);
+		strictEqual(didCloseWorkspaceStorage, true);
+	});
+
+	test('storage closed before init awaits works', async function () {
+		const storageMainService = createStorageService();
+		const profile = inMemoryProfile;
+		const workspace = { id: generateUuid() };
+
+		const workspaceStorage = storageMainService.workspaceStorage(workspace);
+		let didCloseWorkspaceStorage = false;
+		disposables.add(workspaceStorage.onDidCloseStorage(() => {
+			didCloseWorkspaceStorage = true;
+		}));
+
+		const profileStorage = storageMainService.profileStorage(profile);
+		let didCloseProfileStorage = false;
+		disposables.add(profileStorage.onDidCloseStorage(() => {
+			didCloseProfileStorage = true;
+		}));
+
+		const applicationtorage = storageMainService.applicationStorage;
+		let didCloseApplicationStorage = false;
+		disposables.add(applicationtorage.onDidCloseStorage(() => {
+			didCloseApplicationStorage = true;
+		}));
+
+		applicationtorage.init();
+		profileStorage.init();
+		workspaceStorage.init();
+
+		await applicationtorage.close();
+		await profileStorage.close();
+		await workspaceStorage.close();
+
+		strictEqual(didCloseApplicationStorage, true);
+		strictEqual(didCloseProfileStorage, true);
+		strictEqual(didCloseWorkspaceStorage, true);
+	});
+
+	test('application shared storage closed onWillShutdown', async function () {
+		const lifecycleMainService = new TestLifecycleMainService();
+		const storageMainService = createStorageService(lifecycleMainService);
+
+		const applicationSharedStorage = storageMainService.applicationSharedStorage;
+		let didCloseApplicationSharedStorage = false;
+		disposables.add(applicationSharedStorage.onDidCloseStorage(() => {
+			didCloseApplicationSharedStorage = true;
+		}));
+
+		await applicationSharedStorage.init();
+		await lifecycleMainService.fireOnWillShutdown();
+
+		strictEqual(didCloseApplicationSharedStorage, true);
+	});
+
+	ensureNoDisposablesAreLeakedInTestSuite();
 });

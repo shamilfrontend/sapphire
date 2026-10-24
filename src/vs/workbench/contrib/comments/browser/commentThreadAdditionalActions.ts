@@ -19,91 +19,80 @@ import { IKeybindingService } from '../../../../platform/keybinding/common/keybi
 import { IContextMenuService } from '../../../../platform/contextview/browser/contextView.js';
 
 export class CommentThreadAdditionalActions<T extends IRange | ICellRange> extends Disposable {
-  private _container: HTMLElement | null;
+	private _container: HTMLElement | null;
+	private _buttonBar: HTMLElement | null;
+	private _commentFormActions!: CommentFormActions;
 
-  private _buttonBar: HTMLElement | null;
+	constructor(
+		container: HTMLElement,
+		private _commentThread: languages.CommentThread<T>,
+		private _contextKeyService: IContextKeyService,
+		private _commentMenus: CommentMenus,
+		private _actionRunDelegate: (() => void) | null,
+		@IKeybindingService private _keybindingService: IKeybindingService,
+		@IContextMenuService private _contextMenuService: IContextMenuService,
+	) {
+		super();
 
-  private _commentFormActions!: CommentFormActions;
+		this._container = dom.append(container, dom.$('.comment-additional-actions'));
+		dom.append(this._container, dom.$('.section-separator'));
 
-  constructor(
-    container: HTMLElement,
-    private _commentThread: languages.CommentThread<T>,
-    private _contextKeyService: IContextKeyService,
-    private _commentMenus: CommentMenus,
-    private _actionRunDelegate: (() => void) | null,
-    @IKeybindingService private _keybindingService: IKeybindingService,
-    @IContextMenuService private _contextMenuService: IContextMenuService,
-  ) {
-    super();
+		this._buttonBar = dom.append(this._container, dom.$('.button-bar'));
+		this._createAdditionalActions(this._buttonBar);
+	}
 
-    this._container = dom.append(container, dom.$('.comment-additional-actions'));
-    dom.append(this._container, dom.$('.section-separator'));
+	private _showMenu() {
+		this._container?.classList.remove('hidden');
+	}
 
-    this._buttonBar = dom.append(this._container, dom.$('.button-bar'));
-    this._createAdditionalActions(this._buttonBar);
-  }
+	private _hideMenu() {
+		this._container?.classList.add('hidden');
+	}
 
-  private _showMenu() {
-    this._container?.classList.remove('hidden');
-  }
+	private _enableDisableMenu(menu: IMenu) {
+		const groups = menu.getActions({ shouldForwardArgs: true });
 
-  private _hideMenu() {
-    this._container?.classList.add('hidden');
-  }
+		// Show the menu if at least one action is enabled.
+		for (const group of groups) {
+			const [, actions] = group;
+			for (const action of actions) {
+				if (action.enabled) {
+					this._showMenu();
+					return;
+				}
 
-  private _enableDisableMenu(menu: IMenu) {
-    const groups = menu.getActions({ shouldForwardArgs: true });
+				for (const subAction of (action as SubmenuItemAction).actions ?? []) {
+					if (subAction.enabled) {
+						this._showMenu();
+						return;
+					}
+				}
+			}
+		}
 
-    // Show the menu if at least one action is enabled.
-    for (const group of groups) {
-      const [, actions] = group;
-      for (const action of actions) {
-        if (action.enabled) {
-          this._showMenu();
-          return;
-        }
+		this._hideMenu();
+	}
 
-        for (const subAction of (action as SubmenuItemAction).actions ?? []) {
-          if (subAction.enabled) {
-            this._showMenu();
-            return;
-          }
-        }
-      }
-    }
 
-    this._hideMenu();
-  }
+	private _createAdditionalActions(container: HTMLElement) {
+		const menu = this._commentMenus.getCommentThreadAdditionalActions(this._contextKeyService);
+		this._register(menu);
+		this._register(menu.onDidChange(() => {
+			this._commentFormActions.setActions(menu, /*hasOnlySecondaryActions*/ true);
+			this._enableDisableMenu(menu);
+		}));
 
-  private _createAdditionalActions(container: HTMLElement) {
-    const menu = this._commentMenus.getCommentThreadAdditionalActions(this._contextKeyService);
-    this._register(menu);
-    this._register(
-      menu.onDidChange(() => {
-        this._commentFormActions.setActions(menu, /* hasOnlySecondaryActions */ true);
-        this._enableDisableMenu(menu);
-      }),
-    );
+		this._commentFormActions = new CommentFormActions(this._keybindingService, this._contextKeyService, this._contextMenuService, container, async (action: IAction) => {
+			this._actionRunDelegate?.();
 
-    this._commentFormActions = new CommentFormActions(
-      this._keybindingService,
-      this._contextKeyService,
-      this._contextMenuService,
-      container,
-      async (action: IAction) => {
-        this._actionRunDelegate?.();
+			action.run({
+				thread: this._commentThread,
+				$mid: MarshalledId.CommentThreadInstance
+			});
+		}, 4, true);
 
-        action.run({
-          thread: this._commentThread,
-          $mid: MarshalledId.CommentThreadInstance,
-        });
-      },
-      4,
-      true,
-    );
-
-    this._register(this._commentFormActions);
-    this._commentFormActions.setActions(menu, /* hasOnlySecondaryActions */ true);
-    this._enableDisableMenu(menu);
-  }
+		this._register(this._commentFormActions);
+		this._commentFormActions.setActions(menu, /*hasOnlySecondaryActions*/ true);
+		this._enableDisableMenu(menu);
+	}
 }

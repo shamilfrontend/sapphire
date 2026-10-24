@@ -4,29 +4,34 @@
  *--------------------------------------------------------------------------------------------*/
 
 import * as eslint from 'eslint';
+import type * as ESTree from 'estree';
 import { TSESTree } from '@typescript-eslint/utils';
 
-export = new (class ApiInterfaceNaming implements eslint.Rule.RuleModule {
-  private static _nameRegExp = /^I[A-Z]/;
+export default new class ApiInterfaceNaming implements eslint.Rule.RuleModule {
 
-  readonly meta: eslint.Rule.RuleMetaData = {
-    messages: {
-      naming: 'Interfaces must not be prefixed with uppercase `I`',
-    },
-    schema: false,
-  };
+	private static _nameRegExp = /^I[A-Z]/;
 
-  create(context: eslint.Rule.RuleContext): eslint.Rule.RuleListener {
-    return {
-      'TSInterfaceDeclaration Identifier': (node: any) => {
-        const name = (<TSESTree.Identifier>node).name;
-        if (ApiInterfaceNaming._nameRegExp.test(name)) {
-          context.report({
-            node,
-            messageId: 'naming',
-          });
-        }
-      },
-    };
-  }
-})();
+	readonly meta: eslint.Rule.RuleMetaData = {
+		messages: {
+			naming: 'Interfaces must not be prefixed with uppercase `I`',
+		},
+		schema: false,
+	};
+
+	create(context: eslint.Rule.RuleContext): eslint.Rule.RuleListener {
+
+		return {
+			['TSInterfaceDeclaration Identifier']: (node: ESTree.Identifier) => {
+
+				const name = (node as TSESTree.Identifier).name;
+				if (ApiInterfaceNaming._nameRegExp.test(name)) {
+					context.report({
+						node,
+						messageId: 'naming'
+					});
+				}
+			}
+		};
+	}
+};
+

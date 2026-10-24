@@ -11,235 +11,213 @@ import { IConfigurationService } from '../../../../../platform/configuration/com
 import { IMarkerService } from '../../../../../platform/markers/common/markers.js';
 import { IActiveNotebookEditor, INotebookEditor } from '../notebookBrowser.js';
 import { CellKind } from '../../common/notebookCommon.js';
-import {
-  OutlineChangeEvent,
-  OutlineConfigKeys,
-} from '../../../../services/outline/browser/outline.js';
+import { OutlineChangeEvent, OutlineConfigKeys } from '../../../../services/outline/browser/outline.js';
 import { OutlineEntry } from './OutlineEntry.js';
 import { CancellationToken } from '../../../../../base/common/cancellation.js';
-import {
-  INotebookOutlineEntryFactory,
-  NotebookOutlineEntryFactory,
-} from './notebookOutlineEntryFactory.js';
+import { INotebookOutlineEntryFactory, NotebookOutlineEntryFactory } from './notebookOutlineEntryFactory.js';
 
 export interface INotebookCellOutlineDataSource {
-  readonly activeElement: OutlineEntry | undefined;
-  readonly entries: OutlineEntry[];
+	readonly activeElement: OutlineEntry | undefined;
+	readonly entries: OutlineEntry[];
 }
 
 export class NotebookCellOutlineDataSource implements INotebookCellOutlineDataSource {
-  private readonly _disposables = new DisposableStore();
 
-  private readonly _onDidChange = new Emitter<OutlineChangeEvent>();
+	private readonly _disposables = new DisposableStore();
 
-  readonly onDidChange: Event<OutlineChangeEvent> = this._onDidChange.event;
+	private readonly _onDidChange = new Emitter<OutlineChangeEvent>();
+	readonly onDidChange: Event<OutlineChangeEvent> = this._onDidChange.event;
 
-  private _uri: URI | undefined;
+	private _uri: URI | undefined;
+	private _entries: OutlineEntry[] = [];
+	private _activeEntry?: OutlineEntry;
 
-  private _entries: OutlineEntry[] = [];
+	constructor(
+		private readonly _editor: INotebookEditor,
+		@IMarkerService private readonly _markerService: IMarkerService,
+		@IConfigurationService private readonly _configurationService: IConfigurationService,
+		@INotebookOutlineEntryFactory private readonly _outlineEntryFactory: NotebookOutlineEntryFactory
+	) {
+		this.recomputeState();
+	}
 
-  private _activeEntry?: OutlineEntry;
+	get activeElement(): OutlineEntry | undefined {
+		return this._activeEntry;
+	}
+	get entries(): OutlineEntry[] {
+		return this._entries;
+	}
+	get isEmpty(): boolean {
+		return this._entries.length === 0;
+	}
+	get uri() {
+		return this._uri;
+	}
 
-  constructor(
-    private readonly _editor: INotebookEditor,
-    @IMarkerService private readonly _markerService: IMarkerService,
-    @IConfigurationService private readonly _configurationService: IConfigurationService,
-    @INotebookOutlineEntryFactory
-    private readonly _outlineEntryFactory: NotebookOutlineEntryFactory,
-  ) {
-    this.recomputeState();
-  }
+	public async computeFullSymbols(cancelToken: CancellationToken) {
+		try {
+			const notebookEditorWidget = this._editor;
 
-  get activeElement(): OutlineEntry | undefined {
-    return this._activeEntry;
-  }
+			const notebookCells = notebookEditorWidget?.getViewModel()?.viewCells.filter((cell) => cell.cellKind === CellKind.Code);
 
-  get entries(): OutlineEntry[] {
-    return this._entries;
-  }
+			if (notebookCells) {
+				const promises: Promise<void>[] = [];
+				// limit the number of cells so that we don't resolve an excessive amount of text models
+				for (const cell of notebookCells.slice(0, 50)) {
+					// gather all symbols asynchronously
+					promises.push(this._outlineEntryFactory.cacheSymbols(cell, cancelToken));
+				}
+				await Promise.allSettled(promises);
+			}
+			this.recomputeState();
+		} catch (err) {
+			console.error('Failed to compute notebook outline symbols:', err);
+			// Still recompute state with whatever symbols we have
+			this.recomputeState();
+		}
+	}
 
-  get isEmpty(): boolean {
-    return this._entries.length === 0;
-  }
+	public recomputeState(): void {
+		this._disposables.clear();
+		this._activeEntry = undefined;
+		this._uri = undefined;
 
-  get uri() {
-    return this._uri;
-  }
+		if (!this._editor.hasModel()) {
+			return;
+		}
 
-  public async computeFullSymbols(cancelToken: CancellationToken) {
-    try {
-      const notebookEditorWidget = this._editor;
+		this._uri = this._editor.textModel.uri;
 
-      const notebookCells = notebookEditorWidget
-        ?.getViewModel()
-        ?.viewCells.filter((cell) => cell.cellKind === CellKind.Code);
+		const notebookEditorWidget: IActiveNotebookEditor = this._editor;
 
-      if (notebookCells) {
-        const promises: Promise<void>[] = [];
-        // limit the number of cells so that we don't resolve an excessive amount of text models
-        for (const cell of notebookCells.slice(0, 50)) {
-          // gather all symbols asynchronously
-          promises.push(this._outlineEntryFactory.cacheSymbols(cell, cancelToken));
-        }
-        await Promise.allSettled(promises);
-      }
-      this.recomputeState();
-    } catch (err) {
-      console.error('Failed to compute notebook outline symbols:', err);
-      // Still recompute state with whatever symbols we have
-      this.recomputeState();
-    }
-  }
+		if (notebookEditorWidget.getLength() === 0) {
+			return;
+		}
 
-  public recomputeState(): void {
-    this._disposables.clear();
-    this._activeEntry = undefined;
-    this._uri = undefined;
+		const notebookCells = notebookEditorWidget.getViewModel().viewCells;
 
-    if (!this._editor.hasModel()) {
-      return;
-    }
+		const entries: OutlineEntry[] = [];
+		for (const cell of notebookCells) {
+			entries.push(...this._outlineEntryFactory.getOutlineEntries(cell, entries.length));
+		}
 
-    this._uri = this._editor.textModel.uri;
+		// build a tree from the list of entries
+		if (entries.length > 0) {
+			const result: OutlineEntry[] = [entries[0]];
+			const parentStack: OutlineEntry[] = [entries[0]];
 
-    const notebookEditorWidget: IActiveNotebookEditor = this._editor;
+			for (let i = 1; i < entries.length; i++) {
+				const entry = entries[i];
 
-    if (notebookEditorWidget.getLength() === 0) {
-      return;
-    }
+				while (true) {
+					const len = parentStack.length;
+					if (len === 0) {
+						// root node
+						result.push(entry);
+						parentStack.push(entry);
+						break;
 
-    const notebookCells = notebookEditorWidget.getViewModel().viewCells;
+					} else {
+						const parentCandidate = parentStack[len - 1];
+						if (parentCandidate.level < entry.level) {
+							parentCandidate.addChild(entry);
+							parentStack.push(entry);
+							break;
+						} else {
+							parentStack.pop();
+						}
+					}
+				}
+			}
+			this._entries = result;
+		}
 
-    const entries: OutlineEntry[] = [];
-    for (const cell of notebookCells) {
-      entries.push(...this._outlineEntryFactory.getOutlineEntries(cell, entries.length));
-    }
+		// feature: show markers with each cell
+		const markerServiceListener = new MutableDisposable();
+		this._disposables.add(markerServiceListener);
+		const updateMarkerUpdater = () => {
+			if (notebookEditorWidget.isDisposed) {
+				return;
+			}
 
-    // build a tree from the list of entries
-    if (entries.length > 0) {
-      const result: OutlineEntry[] = [entries[0]];
-      const parentStack: OutlineEntry[] = [entries[0]];
+			const doUpdateMarker = (clear: boolean) => {
+				for (const entry of this._entries) {
+					if (clear) {
+						entry.clearMarkers();
+					} else {
+						entry.updateMarkers(this._markerService);
+					}
+				}
+			};
+			const problem = this._configurationService.getValue('problems.visibility');
+			if (problem === undefined) {
+				return;
+			}
 
-      for (let i = 1; i < entries.length; i++) {
-        const entry = entries[i];
+			const config = this._configurationService.getValue(OutlineConfigKeys.problemsEnabled);
 
-        while (true) {
-          const len = parentStack.length;
-          if (len === 0) {
-            // root node
-            result.push(entry);
-            parentStack.push(entry);
-            break;
-          } else {
-            const parentCandidate = parentStack[len - 1];
-            if (parentCandidate.level < entry.level) {
-              parentCandidate.addChild(entry);
-              parentStack.push(entry);
-              break;
-            } else {
-              parentStack.pop();
-            }
-          }
-        }
-      }
-      this._entries = result;
-    }
+			if (problem && config) {
+				markerServiceListener.value = this._markerService.onMarkerChanged(e => {
+					if (notebookEditorWidget.isDisposed) {
+						console.error('notebook editor is disposed');
+						return;
+					}
 
-    // feature: show markers with each cell
-    const markerServiceListener = new MutableDisposable();
-    this._disposables.add(markerServiceListener);
-    const updateMarkerUpdater = () => {
-      if (notebookEditorWidget.isDisposed) {
-        return;
-      }
+					if (e.some(uri => notebookEditorWidget.getCellsInRange().some(cell => isEqual(cell.uri, uri)))) {
+						doUpdateMarker(false);
+						this._onDidChange.fire({});
+					}
+				});
+				doUpdateMarker(false);
+			} else {
+				markerServiceListener.clear();
+				doUpdateMarker(true);
+			}
+		};
+		updateMarkerUpdater();
+		this._disposables.add(this._configurationService.onDidChangeConfiguration(e => {
+			if (e.affectsConfiguration('problems.visibility') || e.affectsConfiguration(OutlineConfigKeys.problemsEnabled)) {
+				updateMarkerUpdater();
+				this._onDidChange.fire({});
+			}
+		}));
 
-      const doUpdateMarker = (clear: boolean) => {
-        for (const entry of this._entries) {
-          if (clear) {
-            entry.clearMarkers();
-          } else {
-            entry.updateMarkers(this._markerService);
-          }
-        }
-      };
-      const problem = this._configurationService.getValue('problems.visibility');
-      if (problem === undefined) {
-        return;
-      }
+		const { changeEventTriggered } = this.recomputeActive();
+		if (!changeEventTriggered) {
+			this._onDidChange.fire({});
+		}
+	}
 
-      const config = this._configurationService.getValue(OutlineConfigKeys.problemsEnabled);
+	public recomputeActive(): { changeEventTriggered: boolean } {
+		let newActive: OutlineEntry | undefined;
+		const notebookEditorWidget = this._editor;
 
-      if (problem && config) {
-        markerServiceListener.value = this._markerService.onMarkerChanged((e) => {
-          if (notebookEditorWidget.isDisposed) {
-            console.error('notebook editor is disposed');
-            return;
-          }
+		if (notebookEditorWidget) {//TODO don't check for widget, only here if we do have
+			if (notebookEditorWidget.hasModel() && notebookEditorWidget.getLength() > 0) {
+				const cell = notebookEditorWidget.cellAt(notebookEditorWidget.getFocus().start);
+				if (cell) {
+					for (const entry of this._entries) {
+						newActive = entry.find(cell, []);
+						if (newActive) {
+							break;
+						}
+					}
+				}
+			}
+		}
 
-          if (
-            e.some((uri) =>
-              notebookEditorWidget.getCellsInRange().some((cell) => isEqual(cell.uri, uri)),
-            )
-          ) {
-            doUpdateMarker(false);
-            this._onDidChange.fire({});
-          }
-        });
-        doUpdateMarker(false);
-      } else {
-        markerServiceListener.clear();
-        doUpdateMarker(true);
-      }
-    };
-    updateMarkerUpdater();
-    this._disposables.add(
-      this._configurationService.onDidChangeConfiguration((e) => {
-        if (
-          e.affectsConfiguration('problems.visibility') ||
-          e.affectsConfiguration(OutlineConfigKeys.problemsEnabled)
-        ) {
-          updateMarkerUpdater();
-          this._onDidChange.fire({});
-        }
-      }),
-    );
+		if (newActive !== this._activeEntry) {
+			this._activeEntry = newActive;
+			this._onDidChange.fire({ affectOnlyActiveElement: true });
+			return { changeEventTriggered: true };
+		}
+		return { changeEventTriggered: false };
+	}
 
-    const { changeEventTriggered } = this.recomputeActive();
-    if (!changeEventTriggered) {
-      this._onDidChange.fire({});
-    }
-  }
-
-  public recomputeActive(): { changeEventTriggered: boolean } {
-    let newActive: OutlineEntry | undefined;
-    const notebookEditorWidget = this._editor;
-
-    if (notebookEditorWidget) {
-      // TODO don't check for widget, only here if we do have
-      if (notebookEditorWidget.hasModel() && notebookEditorWidget.getLength() > 0) {
-        const cell = notebookEditorWidget.cellAt(notebookEditorWidget.getFocus().start);
-        if (cell) {
-          for (const entry of this._entries) {
-            newActive = entry.find(cell, []);
-            if (newActive) {
-              break;
-            }
-          }
-        }
-      }
-    }
-
-    if (newActive !== this._activeEntry) {
-      this._activeEntry = newActive;
-      this._onDidChange.fire({ affectOnlyActiveElement: true });
-      return { changeEventTriggered: true };
-    }
-    return { changeEventTriggered: false };
-  }
-
-  dispose(): void {
-    this._entries.length = 0;
-    this._activeEntry = undefined;
-    this._disposables.dispose();
-  }
+	dispose(): void {
+		this._entries.length = 0;
+		this._activeEntry = undefined;
+		this._disposables.dispose();
+		this._onDidChange.dispose();
+	}
 }

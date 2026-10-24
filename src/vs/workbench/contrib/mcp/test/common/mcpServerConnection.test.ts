@@ -4,400 +4,604 @@
  *--------------------------------------------------------------------------------------------*/
 
 import * as assert from 'assert';
-import { timeout } from '../../../../../base/common/async.js';
+import { raceTimeout, timeout } from '../../../../../base/common/async.js';
 import { Disposable } from '../../../../../base/common/lifecycle.js';
 import { autorun, observableValue } from '../../../../../base/common/observable.js';
 import { upcast } from '../../../../../base/common/types.js';
-import { URI } from '../../../../../base/common/uri.js';
 import { ensureNoDisposablesAreLeakedInTestSuite } from '../../../../../base/test/common/utils.js';
 import { ServiceCollection } from '../../../../../platform/instantiation/common/serviceCollection.js';
 import { TestInstantiationService } from '../../../../../platform/instantiation/test/common/instantiationServiceMock.js';
-import {
-  ILogger,
-  ILoggerService,
-  LogLevel,
-  NullLogger,
-} from '../../../../../platform/log/common/log.js';
+import { ILogger, ILoggerService, LogLevel, NullLogger } from '../../../../../platform/log/common/log.js';
 import { IProductService } from '../../../../../platform/product/common/productService.js';
 import { IStorageService, StorageScope } from '../../../../../platform/storage/common/storage.js';
 import { IOutputService } from '../../../../services/output/common/output.js';
-import {
-  TestLoggerService,
-  TestProductService,
-  TestStorageService,
-} from '../../../../test/common/workbenchTestServices.js';
+import { TestLoggerService, TestProductService, TestStorageService } from '../../../../test/common/workbenchTestServices.js';
 import { IMcpHostDelegate, IMcpMessageTransport } from '../../common/mcpRegistryTypes.js';
 import { McpServerConnection } from '../../common/mcpServerConnection.js';
-import {
-  McpCollectionDefinition,
-  McpConnectionState,
-  McpServerDefinition,
-  McpServerTransportType,
-} from '../../common/mcpTypes.js';
+import { McpCollectionDefinition, McpConnectionState, McpServerDefinition, McpServerLaunch, McpServerTransportType, McpServerTrust } from '../../common/mcpTypes.js';
 import { TestMcpMessageTransport } from './mcpRegistryTypes.js';
+import { ConfigurationTarget } from '../../../../../platform/configuration/common/configuration.js';
+import { Event } from '../../../../../base/common/event.js';
+import { McpTaskManager } from '../../common/mcpTaskManager.js';
 
 class TestMcpHostDelegate extends Disposable implements IMcpHostDelegate {
-  private readonly _transport: TestMcpMessageTransport;
+	private readonly _transport: TestMcpMessageTransport;
+	private _canStartValue = true;
 
-  private _canStartValue = true;
+	priority = 0;
 
-  priority = 0;
+	constructor() {
+		super();
+		this._transport = this._register(new TestMcpMessageTransport());
+	}
 
-  constructor() {
-    super();
-    this._transport = this._register(new TestMcpMessageTransport());
-  }
+	substituteVariables(serverDefinition: McpServerDefinition, launch: McpServerLaunch): Promise<McpServerLaunch> {
+		return Promise.resolve(launch);
+	}
 
-  canStart(): boolean {
-    return this._canStartValue;
-  }
+	expandEnvironmentVariables(serverDefinition: McpServerDefinition, launch: McpServerLaunch): Promise<McpServerLaunch> {
+		return Promise.resolve(launch);
+	}
 
-  start(): IMcpMessageTransport {
-    if (!this._canStartValue) {
-      throw new Error('Cannot start server');
-    }
-    return this._transport;
-  }
+	canStart(): boolean {
+		return this._canStartValue;
+	}
 
-  getTransport(): TestMcpMessageTransport {
-    return this._transport;
-  }
+	start(): IMcpMessageTransport {
+		if (!this._canStartValue) {
+			throw new Error('Cannot start server');
+		}
+		return this._transport;
+	}
 
-  setCanStart(value: boolean): void {
-    this._canStartValue = value;
-  }
+	getTransport(): TestMcpMessageTransport {
+		return this._transport;
+	}
 
-  waitForInitialProviderPromises(): Promise<void> {
-    return Promise.resolve();
-  }
+	setCanStart(value: boolean): void {
+		this._canStartValue = value;
+	}
+
+	waitForInitialProviderPromises(): Promise<void> {
+		return Promise.resolve();
+	}
 }
 
 suite('Workbench - MCP - ServerConnection', () => {
-  const store = ensureNoDisposablesAreLeakedInTestSuite();
+	const store = ensureNoDisposablesAreLeakedInTestSuite();
 
-  let instantiationService: TestInstantiationService;
-  let delegate: TestMcpHostDelegate;
-  let transport: TestMcpMessageTransport;
-  let collection: McpCollectionDefinition;
-  let serverDefinition: McpServerDefinition;
+	let instantiationService: TestInstantiationService;
+	let delegate: TestMcpHostDelegate;
+	let transport: TestMcpMessageTransport;
+	let collection: McpCollectionDefinition;
+	let serverDefinition: McpServerDefinition;
 
-  setup(() => {
-    delegate = store.add(new TestMcpHostDelegate());
-    transport = delegate.getTransport();
+	setup(() => {
+		delegate = store.add(new TestMcpHostDelegate());
+		transport = delegate.getTransport();
 
-    // Setup test services
-    const services = new ServiceCollection(
-      [ILoggerService, store.add(new TestLoggerService())],
-      [IOutputService, upcast({ showChannel: () => {} })],
-      [IStorageService, store.add(new TestStorageService())],
-      [IProductService, TestProductService],
-    );
+		// Setup test services
+		const services = new ServiceCollection(
+			[ILoggerService, store.add(new TestLoggerService())],
+			[IOutputService, upcast({ showChannel: () => { } })],
+			[IStorageService, store.add(new TestStorageService())],
+			[IProductService, TestProductService],
+		);
 
-    instantiationService = store.add(new TestInstantiationService(services));
+		instantiationService = store.add(new TestInstantiationService(services));
 
-    // Create test collection
-    collection = {
-      id: 'test-collection',
-      label: 'Test Collection',
-      remoteAuthority: null,
-      serverDefinitions: observableValue('serverDefs', []),
-      isTrustedByDefault: true,
-      scope: StorageScope.APPLICATION,
-    };
+		// Create test collection
+		collection = {
+			id: 'test-collection',
+			label: 'Test Collection',
+			remoteAuthority: null,
+			serverDefinitions: observableValue('serverDefs', []),
+			trustBehavior: McpServerTrust.Kind.Trusted,
+			scope: StorageScope.APPLICATION,
+			configTarget: ConfigurationTarget.USER,
+			order: 0,
+		};
 
-    // Create server definition
-    serverDefinition = {
-      id: 'test-server',
-      label: 'Test Server',
-      launch: {
-        type: McpServerTransportType.Stdio,
-        command: 'test-command',
-        args: [],
-        env: {},
-        envFile: undefined,
-        cwd: URI.parse('file:///test'),
-      },
-    };
-  });
+		// Create server definition
+		serverDefinition = {
+			id: 'test-server',
+			label: 'Test Server',
+			cacheNonce: 'a',
+			launch: {
+				type: McpServerTransportType.Stdio,
+				command: 'test-command',
+				args: [],
+				env: {},
+				envFile: undefined,
+				cwd: '/test',
+				sandbox: undefined
+			}
+		};
+	});
 
-  function waitForHandler(cnx: McpServerConnection) {
-    const handler = cnx.handler.get();
-    if (handler) {
-      return Promise.resolve(handler);
-    }
+	function waitForHandler(cnx: McpServerConnection) {
+		const handler = cnx.handler.get();
+		if (handler) {
+			return Promise.resolve(handler);
+		}
 
-    return new Promise((resolve) => {
-      const disposable = autorun((reader) => {
-        const handler = cnx.handler.read(reader);
-        if (handler) {
-          disposable.dispose();
-          resolve(handler);
-        }
-      });
-    });
-  }
+		return new Promise(resolve => {
+			const disposable = autorun(reader => {
+				const handler = cnx.handler.read(reader);
+				if (handler) {
+					disposable.dispose();
+					resolve(handler);
+				}
+			});
+		});
+	}
 
-  test('should start and set state to Running when transport succeeds', async () => {
-    // Create server connection
-    const connection = instantiationService.createInstance(
-      McpServerConnection,
-      collection,
-      serverDefinition,
-      delegate,
-      serverDefinition.launch,
-      new NullLogger(),
-    );
-    store.add(connection);
+	test('should start and set state to Running when transport succeeds', async () => {
+		// Create server connection
+		const connection = instantiationService.createInstance(
+			McpServerConnection,
+			collection,
+			serverDefinition,
+			delegate,
+			serverDefinition.launch,
+			new NullLogger(),
+			false,
+			store.add(new McpTaskManager()),
+		);
+		store.add(connection);
 
-    // Start the connection
-    const startPromise = connection.start();
+		// Start the connection
+		const startPromise = connection.start({});
 
-    // Simulate successful connection
-    transport.setConnectionState({ state: McpConnectionState.Kind.Running });
+		// Simulate successful connection
+		transport.setConnectionState({ state: McpConnectionState.Kind.Running });
 
-    const state = await startPromise;
-    assert.strictEqual(state.state, McpConnectionState.Kind.Running);
+		const state = await startPromise;
+		assert.strictEqual(state.state, McpConnectionState.Kind.Running);
 
-    transport.simulateInitialized();
-    assert.ok(await waitForHandler(connection));
-  });
+		transport.simulateInitialized();
+		assert.ok(await waitForHandler(connection));
+	});
 
-  test('should handle errors during start', async () => {
-    // Setup delegate to fail on start
-    delegate.setCanStart(false);
+	test('should handle errors during start', async () => {
+		// Setup delegate to fail on start
+		delegate.setCanStart(false);
 
-    // Create server connection
-    const connection = instantiationService.createInstance(
-      McpServerConnection,
-      collection,
-      serverDefinition,
-      delegate,
-      serverDefinition.launch,
-      new NullLogger(),
-    );
-    store.add(connection);
+		// Create server connection
+		const connection = instantiationService.createInstance(
+			McpServerConnection,
+			collection,
+			serverDefinition,
+			delegate,
+			serverDefinition.launch,
+			new NullLogger(),
+			false,
+			store.add(new McpTaskManager()),
+		);
+		store.add(connection);
 
-    // Start the connection
-    const state = await connection.start();
+		// Start the connection
+		const state = await connection.start({});
 
-    assert.strictEqual(state.state, McpConnectionState.Kind.Error);
-    assert.ok(state.message);
-  });
+		assert.strictEqual(state.state, McpConnectionState.Kind.Error);
+		assert.ok(state.message);
+	});
 
-  test('should handle transport errors', async () => {
-    // Create server connection
-    const connection = instantiationService.createInstance(
-      McpServerConnection,
-      collection,
-      serverDefinition,
-      delegate,
-      serverDefinition.launch,
-      new NullLogger(),
-    );
-    store.add(connection);
+	for (const action of ['dispose', 'stop'] as const) {
+		test(`${action} settles every pending start while the transport is Starting`, async () => {
+			const connection = store.add(instantiationService.createInstance(
+				McpServerConnection, collection, serverDefinition, delegate, serverDefinition.launch,
+				new NullLogger(), false, store.add(new McpTaskManager()),
+			));
+			const pending = [connection.start({}), connection.start({})];
+			if (action === 'dispose') {
+				connection.dispose();
+			} else {
+				await connection.stop();
+			}
+			const states = await raceTimeout(Promise.all(pending), 1000);
+			assert.deepStrictEqual(states?.map(state => state.state), [
+				McpConnectionState.Kind.Stopped,
+				McpConnectionState.Kind.Stopped,
+			]);
+		});
+	}
 
-    // Start the connection
-    const startPromise = connection.start();
+	test('a disposed connection does not start a transport', async () => {
+		const connection = store.add(instantiationService.createInstance(
+			McpServerConnection, collection, serverDefinition, delegate, serverDefinition.launch,
+			new NullLogger(), false, store.add(new McpTaskManager()),
+		));
+		let launches = 0;
+		delegate.start = () => {
+			launches++;
+			return transport;
+		};
+		connection.dispose();
+		const state = await raceTimeout(connection.start({}), 1000);
+		assert.deepStrictEqual({ state: state?.state, launches }, {
+			state: McpConnectionState.Kind.Stopped,
+			launches: 0,
+		});
+	});
 
-    // Simulate error in transport
-    transport.setConnectionState({
-      state: McpConnectionState.Kind.Error,
-      message: 'Test error message',
-    });
+	test('should handle transport errors', async () => {
+		// Create server connection
+		const connection = instantiationService.createInstance(
+			McpServerConnection,
+			collection,
+			serverDefinition,
+			delegate,
+			serverDefinition.launch,
+			new NullLogger(),
+			false,
+			store.add(new McpTaskManager()),
+		);
+		store.add(connection);
 
-    const state = await startPromise;
-    assert.strictEqual(state.state, McpConnectionState.Kind.Error);
-    assert.strictEqual(state.message, 'Test error message');
-  });
+		// Start the connection
+		const startPromise = connection.start({});
 
-  test('should stop and set state to Stopped', async () => {
-    // Create server connection
-    const connection = instantiationService.createInstance(
-      McpServerConnection,
-      collection,
-      serverDefinition,
-      delegate,
-      serverDefinition.launch,
-      new NullLogger(),
-    );
-    store.add(connection);
+		// Simulate error in transport
+		transport.setConnectionState({
+			state: McpConnectionState.Kind.Error,
+			message: 'Test error message'
+		});
 
-    // Start the connection
-    const startPromise = connection.start();
-    transport.setConnectionState({ state: McpConnectionState.Kind.Running });
-    await startPromise;
+		const state = await startPromise;
+		assert.strictEqual(state.state, McpConnectionState.Kind.Error);
+		assert.strictEqual(state.message, 'Test error message');
+	});
 
-    // Stop the connection
-    const stopPromise = connection.stop();
-    await stopPromise;
+	test('should stop and set state to Stopped', async () => {
+		// Create server connection
+		const connection = instantiationService.createInstance(
+			McpServerConnection,
+			collection,
+			serverDefinition,
+			delegate,
+			serverDefinition.launch,
+			new NullLogger(),
+			false,
+			store.add(new McpTaskManager()),
+		);
+		store.add(connection);
 
-    assert.strictEqual(connection.state.get().state, McpConnectionState.Kind.Stopped);
-  });
+		// Start the connection
+		const startPromise = connection.start({});
+		transport.setConnectionState({ state: McpConnectionState.Kind.Running });
+		await startPromise;
 
-  test('should not restart if already starting', async () => {
-    // Create server connection
-    const connection = instantiationService.createInstance(
-      McpServerConnection,
-      collection,
-      serverDefinition,
-      delegate,
-      serverDefinition.launch,
-      new NullLogger(),
-    );
-    store.add(connection);
+		// Stop the connection
+		const stopPromise = connection.stop();
+		await stopPromise;
 
-    // Start the connection
-    const startPromise1 = connection.start();
+		assert.strictEqual(connection.state.get().state, McpConnectionState.Kind.Stopped);
+	});
 
-    // Try to start again while starting
-    const startPromise2 = connection.start();
+	test('should not restart if already starting', async () => {
+		// Create server connection
+		const connection = instantiationService.createInstance(
+			McpServerConnection,
+			collection,
+			serverDefinition,
+			delegate,
+			serverDefinition.launch,
+			new NullLogger(),
+			false,
+			store.add(new McpTaskManager()),
+		);
+		store.add(connection);
 
-    // Simulate successful connection
-    transport.setConnectionState({ state: McpConnectionState.Kind.Running });
+		// Start the connection
+		const startPromise1 = connection.start({});
 
-    const state1 = await startPromise1;
-    const state2 = await startPromise2;
+		// Try to start again while starting
+		const startPromise2 = connection.start({});
 
-    // Both promises should resolve to the same state
-    assert.strictEqual(state1.state, McpConnectionState.Kind.Running);
-    assert.strictEqual(state2.state, McpConnectionState.Kind.Running);
+		// Simulate successful connection
+		transport.setConnectionState({ state: McpConnectionState.Kind.Running });
 
-    transport.simulateInitialized();
-    assert.ok(await waitForHandler(connection));
+		const state1 = await startPromise1;
+		const state2 = await startPromise2;
 
-    connection.dispose();
-  });
+		// Both promises should resolve to the same state
+		assert.strictEqual(state1.state, McpConnectionState.Kind.Running);
+		assert.strictEqual(state2.state, McpConnectionState.Kind.Running);
 
-  test('should clean up when disposed', async () => {
-    // Create server connection
-    const connection = instantiationService.createInstance(
-      McpServerConnection,
-      collection,
-      serverDefinition,
-      delegate,
-      serverDefinition.launch,
-      new NullLogger(),
-    );
+		transport.simulateInitialized();
+		assert.ok(await waitForHandler(connection));
 
-    // Start the connection
-    const startPromise = connection.start();
-    transport.setConnectionState({ state: McpConnectionState.Kind.Running });
-    await startPromise;
+		connection.dispose();
+	});
 
-    // Dispose the connection
-    connection.dispose();
+	test('should clean up when disposed', async () => {
+		// Create server connection
+		const connection = instantiationService.createInstance(
+			McpServerConnection,
+			collection,
+			serverDefinition,
+			delegate,
+			serverDefinition.launch,
+			new NullLogger(),
+			false,
+			store.add(new McpTaskManager()),
+		);
 
-    assert.strictEqual(connection.state.get().state, McpConnectionState.Kind.Stopped);
-  });
+		// Start the connection
+		const startPromise = connection.start({});
+		transport.setConnectionState({ state: McpConnectionState.Kind.Running });
+		await startPromise;
 
-  test('should log transport messages', async () => {
-    // Track logged messages
-    const loggedMessages: string[] = [];
+		// Dispose the connection
+		connection.dispose();
 
-    // Create server connection
-    const connection = instantiationService.createInstance(
-      McpServerConnection,
-      collection,
-      serverDefinition,
-      delegate,
-      serverDefinition.launch,
-      {
-        getLevel: () => LogLevel.Debug,
-        info: (message: string) => {
-          loggedMessages.push(message);
-        },
-        error: () => {},
-        dispose: () => {},
-      } as Partial<ILogger> as ILogger,
-    );
-    store.add(connection);
+		assert.strictEqual(connection.state.get().state, McpConnectionState.Kind.Stopped);
+	});
 
-    // Start the connection
-    const startPromise = connection.start();
+	test('should log transport messages', async () => {
+		// Track logged messages
+		const loggedMessages: string[] = [];
 
-    // Simulate log message from transport
-    transport.simulateLog('Test log message');
+		// Create server connection
+		const connection = instantiationService.createInstance(
+			McpServerConnection,
+			collection,
+			serverDefinition,
+			delegate,
+			serverDefinition.launch,
+			{
+				onDidChangeLogLevel: Event.None,
+				getLevel: () => LogLevel.Debug,
+				info: (message: string) => {
+					loggedMessages.push(message);
+				},
+				error: () => { },
+				dispose: () => { }
+			} as Partial<ILogger> as ILogger,
+			false,
+			store.add(new McpTaskManager()),
+		);
+		store.add(connection);
 
-    // Set connection to running
-    transport.setConnectionState({ state: McpConnectionState.Kind.Running });
-    await startPromise;
+		// Start the connection
+		const startPromise = connection.start({});
 
-    // Check that the message was logged
-    assert.ok(loggedMessages.some((msg) => msg === 'Test log message'));
+		// Simulate log message from transport
+		transport.simulateLog('Test log message');
 
-    connection.dispose();
-    await timeout(10);
-  });
+		// Set connection to running
+		transport.setConnectionState({ state: McpConnectionState.Kind.Running });
+		await startPromise;
 
-  test('should correctly handle transitions to and from error state', async () => {
-    // Create server connection
-    const connection = instantiationService.createInstance(
-      McpServerConnection,
-      collection,
-      serverDefinition,
-      delegate,
-      serverDefinition.launch,
-      new NullLogger(),
-    );
-    store.add(connection);
+		// Check that the message was logged
+		assert.ok(loggedMessages.some(msg => msg === 'Test log message'));
 
-    // Start the connection
-    const startPromise = connection.start();
+		connection.dispose();
+		await timeout(10);
+	});
 
-    // Transition to error state
-    const errorState: McpConnectionState = {
-      state: McpConnectionState.Kind.Error,
-      message: 'Temporary error',
-    };
-    transport.setConnectionState(errorState);
+	test('should emit a sandbox filesystem block for read-only errors with backtick paths', async () => {
+		const sandboxedDefinition: McpServerDefinition = {
+			...serverDefinition,
+			sandboxEnabled: true,
+		};
 
-    let state = await startPromise;
-    assert.equal(state, errorState);
+		const connection = instantiationService.createInstance(
+			McpServerConnection,
+			collection,
+			sandboxedDefinition,
+			delegate,
+			sandboxedDefinition.launch,
+			new NullLogger(),
+			false,
+			store.add(new McpTaskManager()),
+		);
+		store.add(connection);
 
-    transport.setConnectionState({ state: McpConnectionState.Kind.Stopped });
+		const message = 'error: failed to open file `/test-for-sandbox/.git`: Read-only file system (os error 30)';
+		const sandboxBlock = Event.toPromise(connection.onPotentialSandboxBlock);
+		const startPromise = connection.start({});
 
-    // Transition back to running state
-    const startPromise2 = connection.start();
-    transport.setConnectionState({ state: McpConnectionState.Kind.Running });
-    state = await startPromise2;
-    assert.deepStrictEqual(state, { state: McpConnectionState.Kind.Running });
+		transport.simulateLog(message);
+		transport.setConnectionState({ state: McpConnectionState.Kind.Running });
 
-    connection.dispose();
-    await timeout(10);
-  });
+		assert.deepStrictEqual(await sandboxBlock, {
+			kind: 'filesystem',
+			message,
+			path: '/test-for-sandbox/.git',
+		});
 
-  test('should handle multiple start/stop cycles', async () => {
-    // Create server connection
-    const connection = instantiationService.createInstance(
-      McpServerConnection,
-      collection,
-      serverDefinition,
-      delegate,
-      serverDefinition.launch,
-      new NullLogger(),
-    );
-    store.add(connection);
+		await startPromise;
 
-    // First cycle
-    let startPromise = connection.start();
-    transport.setConnectionState({ state: McpConnectionState.Kind.Running });
-    await startPromise;
+		connection.dispose();
+		await timeout(10);
+	});
 
-    await connection.stop();
-    assert.deepStrictEqual(connection.state.get(), { state: McpConnectionState.Kind.Stopped });
+	test('should emit a sandbox filesystem block for read-only errors with double-quoted paths', async () => {
+		const sandboxedDefinition: McpServerDefinition = {
+			...serverDefinition,
+			sandboxEnabled: true,
+		};
 
-    // Second cycle
-    startPromise = connection.start();
-    transport.setConnectionState({ state: McpConnectionState.Kind.Running });
-    await startPromise;
+		const connection = instantiationService.createInstance(
+			McpServerConnection,
+			collection,
+			sandboxedDefinition,
+			delegate,
+			sandboxedDefinition.launch,
+			new NullLogger(),
+			false,
+			store.add(new McpTaskManager()),
+		);
+		store.add(connection);
 
-    assert.deepStrictEqual(connection.state.get(), { state: McpConnectionState.Kind.Running });
+		const message = 'error: failed to open file `/test-for-sandbox/.testfile`: Read-only file system (os error 30)';
+		const sandboxBlock = Event.toPromise(connection.onPotentialSandboxBlock);
+		const startPromise = connection.start({});
 
-    await connection.stop();
+		transport.simulateLog(message);
+		transport.setConnectionState({ state: McpConnectionState.Kind.Running });
 
-    assert.deepStrictEqual(connection.state.get(), { state: McpConnectionState.Kind.Stopped });
+		assert.deepStrictEqual(await sandboxBlock, {
+			kind: 'filesystem',
+			message,
+			path: '/test-for-sandbox/.testfile',
+		});
 
-    connection.dispose();
-    await timeout(10);
-  });
+		await startPromise;
+
+		connection.dispose();
+		await timeout(10);
+	});
+
+	test('should emit a sandbox filesystem block for read-only at-path errors with double-quoted paths', async () => {
+		const sandboxedDefinition: McpServerDefinition = {
+			...serverDefinition,
+			sandboxEnabled: true,
+		};
+
+		const connection = instantiationService.createInstance(
+			McpServerConnection,
+			collection,
+			sandboxedDefinition,
+			delegate,
+			sandboxedDefinition.launch,
+			new NullLogger(),
+			false,
+			store.add(new McpTaskManager()),
+		);
+		store.add(connection);
+
+		const message = 'error: Read-only file system (os error 30) at path "/test-for-sandbox/.testfile"';
+		const sandboxBlock = Event.toPromise(connection.onPotentialSandboxBlock);
+		const startPromise = connection.start({});
+
+		transport.simulateLog(message);
+		transport.setConnectionState({ state: McpConnectionState.Kind.Running });
+
+		assert.deepStrictEqual(await sandboxBlock, {
+			kind: 'filesystem',
+			message,
+			path: '/test-for-sandbox/.testfile',
+		});
+
+		await startPromise;
+
+		connection.dispose();
+		await timeout(10);
+	});
+
+	test('should emit a sandbox network block with the denied host', async () => {
+		const sandboxedDefinition: McpServerDefinition = {
+			...serverDefinition,
+			sandboxEnabled: true,
+		};
+
+		const connection = instantiationService.createInstance(
+			McpServerConnection,
+			collection,
+			sandboxedDefinition,
+			delegate,
+			sandboxedDefinition.launch,
+			new NullLogger(),
+			false,
+			store.add(new McpTaskManager()),
+		);
+		store.add(connection);
+
+		const sandboxBlock = Event.toPromise(connection.onPotentialSandboxBlock);
+		const startPromise = connection.start({});
+
+		transport.simulateLog('No matching config rule, denying: api.example.com:443.');
+		transport.setConnectionState({ state: McpConnectionState.Kind.Running });
+
+		assert.deepStrictEqual(await sandboxBlock, {
+			kind: 'network',
+			message: 'No matching config rule, denying: api.example.com:443.',
+			host: 'api.example.com',
+		});
+
+		await startPromise;
+
+		connection.dispose();
+		await timeout(10);
+	});
+
+	test('should correctly handle transitions to and from error state', async () => {
+		// Create server connection
+		const connection = instantiationService.createInstance(
+			McpServerConnection,
+			collection,
+			serverDefinition,
+			delegate,
+			serverDefinition.launch,
+			new NullLogger(),
+			false,
+			store.add(new McpTaskManager()),
+		);
+		store.add(connection);
+
+		// Start the connection
+		const startPromise = connection.start({});
+
+		// Transition to error state
+		const errorState: McpConnectionState = {
+			state: McpConnectionState.Kind.Error,
+			message: 'Temporary error'
+		};
+		transport.setConnectionState(errorState);
+
+		let state = await startPromise;
+		assert.equal(state, errorState);
+
+
+		transport.setConnectionState({ state: McpConnectionState.Kind.Stopped });
+
+		// Transition back to running state
+		const startPromise2 = connection.start({});
+		transport.setConnectionState({ state: McpConnectionState.Kind.Running });
+		state = await startPromise2;
+		assert.deepStrictEqual(state, { state: McpConnectionState.Kind.Running });
+
+		connection.dispose();
+		await timeout(10);
+	});
+
+	test('should handle multiple start/stop cycles', async () => {
+		// Create server connection
+		const connection = instantiationService.createInstance(
+			McpServerConnection,
+			collection,
+			serverDefinition,
+			delegate,
+			serverDefinition.launch,
+			new NullLogger(),
+			false,
+			store.add(new McpTaskManager()),
+		);
+		store.add(connection);
+
+		// First cycle
+		let startPromise = connection.start({});
+		transport.setConnectionState({ state: McpConnectionState.Kind.Running });
+		await startPromise;
+
+		await connection.stop();
+		assert.deepStrictEqual(connection.state.get(), { state: McpConnectionState.Kind.Stopped });
+
+		// Second cycle
+		startPromise = connection.start({});
+		transport.setConnectionState({ state: McpConnectionState.Kind.Running });
+		await startPromise;
+
+		assert.deepStrictEqual(connection.state.get(), { state: McpConnectionState.Kind.Running });
+
+		await connection.stop();
+
+		assert.deepStrictEqual(connection.state.get(), { state: McpConnectionState.Kind.Stopped });
+
+		connection.dispose();
+		await timeout(10);
+	});
 });

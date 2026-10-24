@@ -4,18 +4,8 @@
  *--------------------------------------------------------------------------------------------*/
 
 import assert from 'assert';
-import {
-  EditorGroupModel,
-  ISerializedEditorGroupModel,
-} from '../../../../common/editor/editorGroupModel.js';
-import {
-  EditorExtensions,
-  IEditorFactoryRegistry,
-  IFileEditorInput,
-  IEditorSerializer,
-  EditorsOrder,
-  GroupModelChangeKind,
-} from '../../../../common/editor.js';
+import { EditorGroupModel, ISerializedEditorGroupModel } from '../../../../common/editor/editorGroupModel.js';
+import { EditorExtensions, IEditorFactoryRegistry, IFileEditorInput, IEditorSerializer, EditorsOrder, GroupModelChangeKind } from '../../../../common/editor.js';
 import { URI } from '../../../../../base/common/uri.js';
 import { TestLifecycleService } from '../../workbenchTestServices.js';
 import { TestConfigurationService } from '../../../../../platform/configuration/test/common/testConfigurationService.js';
@@ -28,909 +18,799 @@ import { IInstantiationService } from '../../../../../platform/instantiation/com
 import { ITelemetryService } from '../../../../../platform/telemetry/common/telemetry.js';
 import { NullTelemetryService } from '../../../../../platform/telemetry/common/telemetryUtils.js';
 import { IStorageService } from '../../../../../platform/storage/common/storage.js';
-import {
-  DisposableStore,
-  IDisposable,
-  toDisposable,
-} from '../../../../../base/common/lifecycle.js';
+import { DisposableStore, IDisposable, toDisposable } from '../../../../../base/common/lifecycle.js';
 import { TestContextService, TestStorageService } from '../../../common/workbenchTestServices.js';
 import { EditorInput } from '../../../../common/editor/editorInput.js';
 import { isEqual } from '../../../../../base/common/resources.js';
 import { ensureNoDisposablesAreLeakedInTestSuite } from '../../../../../base/test/common/utils.js';
-import {
-  StickyEditorGroupModel,
-  UnstickyEditorGroupModel,
-} from '../../../../common/editor/filteredEditorGroupModel.js';
+import { StickyEditorGroupModel, UnstickyEditorGroupModel } from '../../../../common/editor/filteredEditorGroupModel.js';
 
 suite('FilteredEditorGroupModel', () => {
-  let testInstService: TestInstantiationService | undefined;
-
-  suiteTeardown(() => {
-    testInstService?.dispose();
-    testInstService = undefined;
-  });
-
-  function inst(): IInstantiationService {
-    if (!testInstService) {
-      testInstService = new TestInstantiationService();
-    }
-    const inst = testInstService;
-    inst.stub(IStorageService, disposables.add(new TestStorageService()));
-    inst.stub(ILifecycleService, disposables.add(new TestLifecycleService()));
-    inst.stub(IWorkspaceContextService, new TestContextService());
-    inst.stub(ITelemetryService, NullTelemetryService);
-
-    const config = new TestConfigurationService();
-    config.setUserConfiguration('workbench', {
-      editor: { openPositioning: 'right', focusRecentEditorAfterClose: true },
-    });
-    inst.stub(IConfigurationService, config);
-
-    return inst;
-  }
-
-  function createEditorGroupModel(serialized?: ISerializedEditorGroupModel): EditorGroupModel {
-    const group = disposables.add(inst().createInstance(EditorGroupModel, serialized));
 
-    disposables.add(
-      toDisposable(() => {
-        for (const editor of group.getEditors(EditorsOrder.MOST_RECENTLY_ACTIVE)) {
-          group.closeEditor(editor);
-        }
-      }),
-    );
+	let testInstService: TestInstantiationService | undefined;
+
+	suiteTeardown(() => {
+		testInstService?.dispose();
+		testInstService = undefined;
+	});
+
+	function inst(): IInstantiationService {
+		if (!testInstService) {
+			testInstService = new TestInstantiationService();
+		}
+		const inst = testInstService;
+		inst.stub(IStorageService, disposables.add(new TestStorageService()));
+		inst.stub(ILifecycleService, disposables.add(new TestLifecycleService()));
+		inst.stub(IWorkspaceContextService, new TestContextService());
+		inst.stub(ITelemetryService, NullTelemetryService);
+
+		const config = new TestConfigurationService();
+		config.setUserConfiguration('workbench', { editor: { openPositioning: 'right', focusRecentEditorAfterClose: true } });
+		inst.stub(IConfigurationService, config);
+
+		return inst;
+	}
+
+	function createEditorGroupModel(serialized?: ISerializedEditorGroupModel): EditorGroupModel {
+		const group = disposables.add(inst().createInstance(EditorGroupModel, serialized));
+
+		disposables.add(toDisposable(() => {
+			for (const editor of group.getEditors(EditorsOrder.MOST_RECENTLY_ACTIVE)) {
+				group.closeEditor(editor);
+			}
+		}));
+
+		return group;
+	}
+
+	let index = 0;
+	class TestEditorInput extends EditorInput {
+
+		readonly resource = undefined;
+
+		constructor(public id: string) {
+			super();
+		}
+		override get typeId() { return 'testEditorInputForGroups'; }
+		override async resolve(): Promise<IDisposable> { return null!; }
+
+		override matches(other: TestEditorInput): boolean {
+			return other && this.id === other.id && other instanceof TestEditorInput;
+		}
+
+		setDirty(): void {
+			this._onDidChangeDirty.fire();
+		}
+
+		setLabel(): void {
+			this._onDidChangeLabel.fire();
+		}
+	}
+
+	class NonSerializableTestEditorInput extends EditorInput {
+
+		readonly resource = undefined;
+
+		constructor(public id: string) {
+			super();
+		}
+		override get typeId() { return 'testEditorInputForGroups-nonSerializable'; }
+		override async resolve(): Promise<IDisposable | null> { return null; }
+
+		override matches(other: NonSerializableTestEditorInput): boolean {
+			return other && this.id === other.id && other instanceof NonSerializableTestEditorInput;
+		}
+	}
+
+	class TestFileEditorInput extends EditorInput implements IFileEditorInput {
+
+		readonly preferredResource;
+
+		constructor(public id: string, public resource: URI) {
+			super();
+			this.preferredResource = this.resource;
+		}
+		override get typeId() { return 'testFileEditorInputForGroups'; }
+		override get editorId() { return this.id; }
+		override async resolve(): Promise<IDisposable | null> { return null; }
+		setPreferredName(name: string): void { }
+		setPreferredDescription(description: string): void { }
+		setPreferredResource(resource: URI): void { }
+		async setEncoding(encoding: string) { }
+		getEncoding() { return undefined; }
+		setPreferredEncoding(encoding: string) { }
+		setForceOpenAsBinary(): void { }
+		setPreferredContents(contents: string): void { }
+		setLanguageId(languageId: string) { }
+		setPreferredLanguageId(languageId: string) { }
+		isResolved(): boolean { return false; }
 
-    return group;
-  }
+		override matches(other: TestFileEditorInput): boolean {
+			if (super.matches(other)) {
+				return true;
+			}
 
-  let index = 0;
-  class TestEditorInput extends EditorInput {
-    readonly resource = undefined;
+			if (other instanceof TestFileEditorInput) {
+				return isEqual(other.resource, this.resource);
+			}
 
-    constructor(public id: string) {
-      super();
-    }
+			return false;
+		}
+	}
 
-    override get typeId() {
-      return 'testEditorInputForGroups';
-    }
+	function input(id = String(index++), nonSerializable?: boolean, resource?: URI): EditorInput {
+		if (resource) {
+			return disposables.add(new TestFileEditorInput(id, resource));
+		}
 
-    override async resolve(): Promise<IDisposable> {
-      return null!;
-    }
+		return nonSerializable ? disposables.add(new NonSerializableTestEditorInput(id)) : disposables.add(new TestEditorInput(id));
+	}
 
-    override matches(other: TestEditorInput): boolean {
-      return other && this.id === other.id && other instanceof TestEditorInput;
-    }
+	function closeAllEditors(group: EditorGroupModel): void {
+		for (const editor of group.getEditors(EditorsOrder.SEQUENTIAL)) {
+			group.closeEditor(editor, undefined, false);
+		}
+	}
 
-    setDirty(): void {
-      this._onDidChangeDirty.fire();
-    }
+	interface ISerializedTestInput {
+		id: string;
+	}
 
-    setLabel(): void {
-      this._onDidChangeLabel.fire();
-    }
-  }
+	class TestEditorInputSerializer implements IEditorSerializer {
 
-  class NonSerializableTestEditorInput extends EditorInput {
-    readonly resource = undefined;
+		static disableSerialize = false;
+		static disableDeserialize = false;
 
-    constructor(public id: string) {
-      super();
-    }
+		canSerialize(editorInput: EditorInput): boolean {
+			return true;
+		}
 
-    override get typeId() {
-      return 'testEditorInputForGroups-nonSerializable';
-    }
+		serialize(editorInput: EditorInput): string | undefined {
+			if (TestEditorInputSerializer.disableSerialize) {
+				return undefined;
+			}
 
-    override async resolve(): Promise<IDisposable | null> {
-      return null;
-    }
+			const testEditorInput = <TestEditorInput>editorInput;
+			const testInput: ISerializedTestInput = {
+				id: testEditorInput.id
+			};
 
-    override matches(other: NonSerializableTestEditorInput): boolean {
-      return other && this.id === other.id && other instanceof NonSerializableTestEditorInput;
-    }
-  }
+			return JSON.stringify(testInput);
+		}
 
-  class TestFileEditorInput extends EditorInput implements IFileEditorInput {
-    readonly preferredResource;
+		deserialize(instantiationService: IInstantiationService, serializedEditorInput: string): EditorInput | undefined {
+			if (TestEditorInputSerializer.disableDeserialize) {
+				return undefined;
+			}
 
-    constructor(
-      public id: string,
-      public resource: URI,
-    ) {
-      super();
-      this.preferredResource = this.resource;
-    }
-
-    override get typeId() {
-      return 'testFileEditorInputForGroups';
-    }
+			const testInput: ISerializedTestInput = JSON.parse(serializedEditorInput);
 
-    override get editorId() {
-      return this.id;
-    }
+			return disposables.add(new TestEditorInput(testInput.id));
+		}
+	}
 
-    override async resolve(): Promise<IDisposable | null> {
-      return null;
-    }
+	const disposables = new DisposableStore();
 
-    setPreferredName(name: string): void {}
+	setup(() => {
+		TestEditorInputSerializer.disableSerialize = false;
+		TestEditorInputSerializer.disableDeserialize = false;
 
-    setPreferredDescription(description: string): void {}
+		disposables.add(Registry.as<IEditorFactoryRegistry>(EditorExtensions.EditorFactory).registerEditorSerializer('testEditorInputForGroups', TestEditorInputSerializer));
+	});
 
-    setPreferredResource(resource: URI): void {}
+	teardown(() => {
+		disposables.clear();
 
-    async setEncoding(encoding: string) {}
+		index = 1;
+	});
 
-    getEncoding() {
-      return undefined;
-    }
+	test('Sticky/Unsticky count', async () => {
 
-    setPreferredEncoding(encoding: string) {}
+		const model = createEditorGroupModel();
 
-    setForceOpenAsBinary(): void {}
+		const stickyFilteredEditorGroup = disposables.add(new StickyEditorGroupModel(model));
+		const unstickyFilteredEditorGroup = disposables.add(new UnstickyEditorGroupModel(model));
 
-    setPreferredContents(contents: string): void {}
+		const input1 = input();
+		const input2 = input();
 
-    setLanguageId(languageId: string) {}
+		model.openEditor(input1, { pinned: true, sticky: true });
+		model.openEditor(input2, { pinned: true, sticky: true });
 
-    setPreferredLanguageId(languageId: string) {}
 
-    isResolved(): boolean {
-      return false;
-    }
+		assert.strictEqual(stickyFilteredEditorGroup.count, 2);
+		assert.strictEqual(unstickyFilteredEditorGroup.count, 0);
 
-    override matches(other: TestFileEditorInput): boolean {
-      if (super.matches(other)) {
-        return true;
-      }
+		model.unstick(input1);
 
-      if (other instanceof TestFileEditorInput) {
-        return isEqual(other.resource, this.resource);
-      }
+		assert.strictEqual(stickyFilteredEditorGroup.count, 1);
+		assert.strictEqual(unstickyFilteredEditorGroup.count, 1);
 
-      return false;
-    }
-  }
+		model.unstick(input2);
 
-  function input(id = String(index++), nonSerializable?: boolean, resource?: URI): EditorInput {
-    if (resource) {
-      return disposables.add(new TestFileEditorInput(id, resource));
-    }
+		assert.strictEqual(stickyFilteredEditorGroup.count, 0);
+		assert.strictEqual(unstickyFilteredEditorGroup.count, 2);
+	});
 
-    return nonSerializable
-      ? disposables.add(new NonSerializableTestEditorInput(id))
-      : disposables.add(new TestEditorInput(id));
-  }
+	test('Sticky/Unsticky stickyCount', async () => {
+		const model = createEditorGroupModel();
 
-  function closeAllEditors(group: EditorGroupModel): void {
-    for (const editor of group.getEditors(EditorsOrder.SEQUENTIAL)) {
-      group.closeEditor(editor, undefined, false);
-    }
-  }
+		const stickyFilteredEditorGroup = disposables.add(new StickyEditorGroupModel(model));
+		const unstickyFilteredEditorGroup = disposables.add(new UnstickyEditorGroupModel(model));
 
-  interface ISerializedTestInput {
-    id: string;
-  }
+		const input1 = input();
+		const input2 = input();
 
-  class TestEditorInputSerializer implements IEditorSerializer {
-    static disableSerialize = false;
+		model.openEditor(input1, { pinned: true, sticky: true });
+		model.openEditor(input2, { pinned: true, sticky: true });
 
-    static disableDeserialize = false;
 
-    canSerialize(editorInput: EditorInput): boolean {
-      return true;
-    }
+		assert.strictEqual(stickyFilteredEditorGroup.stickyCount, 2);
+		assert.strictEqual(unstickyFilteredEditorGroup.stickyCount, 0);
 
-    serialize(editorInput: EditorInput): string | undefined {
-      if (TestEditorInputSerializer.disableSerialize) {
-        return undefined;
-      }
+		model.unstick(input1);
 
-      const testEditorInput = <TestEditorInput>editorInput;
-      const testInput: ISerializedTestInput = {
-        id: testEditorInput.id,
-      };
+		assert.strictEqual(stickyFilteredEditorGroup.stickyCount, 1);
+		assert.strictEqual(unstickyFilteredEditorGroup.stickyCount, 0);
 
-      return JSON.stringify(testInput);
-    }
+		model.unstick(input2);
 
-    deserialize(
-      instantiationService: IInstantiationService,
-      serializedEditorInput: string,
-    ): EditorInput | undefined {
-      if (TestEditorInputSerializer.disableDeserialize) {
-        return undefined;
-      }
+		assert.strictEqual(stickyFilteredEditorGroup.stickyCount, 0);
+		assert.strictEqual(unstickyFilteredEditorGroup.stickyCount, 0);
+	});
 
-      const testInput: ISerializedTestInput = JSON.parse(serializedEditorInput);
+	test('Sticky/Unsticky isEmpty', async () => {
+		const model = createEditorGroupModel();
 
-      return disposables.add(new TestEditorInput(testInput.id));
-    }
-  }
+		const stickyFilteredEditorGroup = disposables.add(new StickyEditorGroupModel(model));
+		const unstickyFilteredEditorGroup = disposables.add(new UnstickyEditorGroupModel(model));
 
-  const disposables = new DisposableStore();
+		const input1 = input();
+		const input2 = input();
 
-  setup(() => {
-    TestEditorInputSerializer.disableSerialize = false;
-    TestEditorInputSerializer.disableDeserialize = false;
+		model.openEditor(input1, { pinned: true, sticky: false });
+		model.openEditor(input2, { pinned: true, sticky: false });
 
-    disposables.add(
-      Registry.as<IEditorFactoryRegistry>(EditorExtensions.EditorFactory).registerEditorSerializer(
-        'testEditorInputForGroups',
-        TestEditorInputSerializer,
-      ),
-    );
-  });
 
-  teardown(() => {
-    disposables.clear();
+		assert.strictEqual(stickyFilteredEditorGroup.count === 0, true);
+		assert.strictEqual(unstickyFilteredEditorGroup.count === 0, false);
 
-    index = 1;
-  });
+		model.stick(input1);
 
-  test('Sticky/Unsticky count', async () => {
-    const model = createEditorGroupModel();
+		assert.strictEqual(stickyFilteredEditorGroup.count === 0, false);
+		assert.strictEqual(unstickyFilteredEditorGroup.count === 0, false);
 
-    const stickyFilteredEditorGroup = disposables.add(new StickyEditorGroupModel(model));
-    const unstickyFilteredEditorGroup = disposables.add(new UnstickyEditorGroupModel(model));
+		model.stick(input2);
 
-    const input1 = input();
-    const input2 = input();
+		assert.strictEqual(stickyFilteredEditorGroup.count === 0, false);
+		assert.strictEqual(unstickyFilteredEditorGroup.count === 0, true);
+	});
 
-    model.openEditor(input1, { pinned: true, sticky: true });
-    model.openEditor(input2, { pinned: true, sticky: true });
+	test('Sticky/Unsticky editors', async () => {
+		const model = createEditorGroupModel();
 
-    assert.strictEqual(stickyFilteredEditorGroup.count, 2);
-    assert.strictEqual(unstickyFilteredEditorGroup.count, 0);
+		const stickyFilteredEditorGroup = disposables.add(new StickyEditorGroupModel(model));
+		const unstickyFilteredEditorGroup = disposables.add(new UnstickyEditorGroupModel(model));
 
-    model.unstick(input1);
+		const input1 = input();
+		const input2 = input();
 
-    assert.strictEqual(stickyFilteredEditorGroup.count, 1);
-    assert.strictEqual(unstickyFilteredEditorGroup.count, 1);
+		model.openEditor(input1, { pinned: true, sticky: true });
+		model.openEditor(input2, { pinned: true, sticky: true });
 
-    model.unstick(input2);
+		assert.strictEqual(stickyFilteredEditorGroup.getEditors(EditorsOrder.SEQUENTIAL).length, 2);
+		assert.strictEqual(unstickyFilteredEditorGroup.getEditors(EditorsOrder.SEQUENTIAL).length, 0);
 
-    assert.strictEqual(stickyFilteredEditorGroup.count, 0);
-    assert.strictEqual(unstickyFilteredEditorGroup.count, 2);
-  });
+		model.unstick(input1);
 
-  test('Sticky/Unsticky stickyCount', async () => {
-    const model = createEditorGroupModel();
+		assert.strictEqual(stickyFilteredEditorGroup.getEditors(EditorsOrder.SEQUENTIAL).length, 1);
+		assert.strictEqual(unstickyFilteredEditorGroup.getEditors(EditorsOrder.SEQUENTIAL).length, 1);
 
-    const stickyFilteredEditorGroup = disposables.add(new StickyEditorGroupModel(model));
-    const unstickyFilteredEditorGroup = disposables.add(new UnstickyEditorGroupModel(model));
+		assert.strictEqual(stickyFilteredEditorGroup.getEditors(EditorsOrder.SEQUENTIAL)[0], input2);
+		assert.strictEqual(unstickyFilteredEditorGroup.getEditors(EditorsOrder.SEQUENTIAL)[0], input1);
 
-    const input1 = input();
-    const input2 = input();
+		model.unstick(input2);
 
-    model.openEditor(input1, { pinned: true, sticky: true });
-    model.openEditor(input2, { pinned: true, sticky: true });
+		assert.strictEqual(stickyFilteredEditorGroup.getEditors(EditorsOrder.SEQUENTIAL).length, 0);
+		assert.strictEqual(unstickyFilteredEditorGroup.getEditors(EditorsOrder.SEQUENTIAL).length, 2);
+	});
 
-    assert.strictEqual(stickyFilteredEditorGroup.stickyCount, 2);
-    assert.strictEqual(unstickyFilteredEditorGroup.stickyCount, 0);
+	test('Sticky/Unsticky activeEditor', async () => {
+		const model = createEditorGroupModel();
 
-    model.unstick(input1);
+		const stickyFilteredEditorGroup = disposables.add(new StickyEditorGroupModel(model));
+		const unstickyFilteredEditorGroup = disposables.add(new UnstickyEditorGroupModel(model));
 
-    assert.strictEqual(stickyFilteredEditorGroup.stickyCount, 1);
-    assert.strictEqual(unstickyFilteredEditorGroup.stickyCount, 0);
+		const input1 = input();
+		const input2 = input();
 
-    model.unstick(input2);
+		model.openEditor(input1, { pinned: true, sticky: true, active: true });
 
-    assert.strictEqual(stickyFilteredEditorGroup.stickyCount, 0);
-    assert.strictEqual(unstickyFilteredEditorGroup.stickyCount, 0);
-  });
+		assert.strictEqual(stickyFilteredEditorGroup.activeEditor, input1);
+		assert.strictEqual(unstickyFilteredEditorGroup.activeEditor, null);
 
-  test('Sticky/Unsticky isEmpty', async () => {
-    const model = createEditorGroupModel();
+		model.openEditor(input2, { pinned: true, sticky: false, active: true });
 
-    const stickyFilteredEditorGroup = disposables.add(new StickyEditorGroupModel(model));
-    const unstickyFilteredEditorGroup = disposables.add(new UnstickyEditorGroupModel(model));
+		assert.strictEqual(stickyFilteredEditorGroup.activeEditor, null);
+		assert.strictEqual(unstickyFilteredEditorGroup.activeEditor, input2);
 
-    const input1 = input();
-    const input2 = input();
+		model.closeEditor(input1);
 
-    model.openEditor(input1, { pinned: true, sticky: false });
-    model.openEditor(input2, { pinned: true, sticky: false });
+		assert.strictEqual(stickyFilteredEditorGroup.activeEditor, null);
+		assert.strictEqual(unstickyFilteredEditorGroup.activeEditor, input2);
 
-    assert.strictEqual(stickyFilteredEditorGroup.count === 0, true);
-    assert.strictEqual(unstickyFilteredEditorGroup.count === 0, false);
+		model.closeEditor(input2);
 
-    model.stick(input1);
+		assert.strictEqual(stickyFilteredEditorGroup.activeEditor, null);
+		assert.strictEqual(unstickyFilteredEditorGroup.activeEditor, null);
+	});
 
-    assert.strictEqual(stickyFilteredEditorGroup.count === 0, false);
-    assert.strictEqual(unstickyFilteredEditorGroup.count === 0, false);
+	test('Sticky/Unsticky previewEditor', async () => {
+		const model = createEditorGroupModel();
 
-    model.stick(input2);
+		const stickyFilteredEditorGroup = disposables.add(new StickyEditorGroupModel(model));
+		const unstickyFilteredEditorGroup = disposables.add(new UnstickyEditorGroupModel(model));
 
-    assert.strictEqual(stickyFilteredEditorGroup.count === 0, false);
-    assert.strictEqual(unstickyFilteredEditorGroup.count === 0, true);
-  });
+		const input1 = input();
+		const input2 = input();
 
-  test('Sticky/Unsticky editors', async () => {
-    const model = createEditorGroupModel();
+		model.openEditor(input1);
 
-    const stickyFilteredEditorGroup = disposables.add(new StickyEditorGroupModel(model));
-    const unstickyFilteredEditorGroup = disposables.add(new UnstickyEditorGroupModel(model));
+		assert.strictEqual(stickyFilteredEditorGroup.previewEditor, null);
+		assert.strictEqual(unstickyFilteredEditorGroup.previewEditor, input1);
 
-    const input1 = input();
-    const input2 = input();
+		model.openEditor(input2, { sticky: true });
+		assert.strictEqual(stickyFilteredEditorGroup.previewEditor, null);
+		assert.strictEqual(unstickyFilteredEditorGroup.previewEditor, input1);
+	});
 
-    model.openEditor(input1, { pinned: true, sticky: true });
-    model.openEditor(input2, { pinned: true, sticky: true });
+	test('Sticky/Unsticky isSticky()', async () => {
+		const model = createEditorGroupModel();
 
-    assert.strictEqual(stickyFilteredEditorGroup.getEditors(EditorsOrder.SEQUENTIAL).length, 2);
-    assert.strictEqual(unstickyFilteredEditorGroup.getEditors(EditorsOrder.SEQUENTIAL).length, 0);
+		const stickyFilteredEditorGroup = disposables.add(new StickyEditorGroupModel(model));
+		const unstickyFilteredEditorGroup = disposables.add(new UnstickyEditorGroupModel(model));
 
-    model.unstick(input1);
+		const input1 = input();
+		const input2 = input();
 
-    assert.strictEqual(stickyFilteredEditorGroup.getEditors(EditorsOrder.SEQUENTIAL).length, 1);
-    assert.strictEqual(unstickyFilteredEditorGroup.getEditors(EditorsOrder.SEQUENTIAL).length, 1);
+		model.openEditor(input1, { pinned: true, sticky: true });
+		model.openEditor(input2, { pinned: true, sticky: true });
 
-    assert.strictEqual(stickyFilteredEditorGroup.getEditors(EditorsOrder.SEQUENTIAL)[0], input2);
-    assert.strictEqual(unstickyFilteredEditorGroup.getEditors(EditorsOrder.SEQUENTIAL)[0], input1);
+		assert.strictEqual(stickyFilteredEditorGroup.isSticky(input1), true);
+		assert.strictEqual(stickyFilteredEditorGroup.isSticky(input2), true);
 
-    model.unstick(input2);
+		model.unstick(input1);
+		model.closeEditor(input1);
+		model.openEditor(input2, { pinned: true, sticky: true });
 
-    assert.strictEqual(stickyFilteredEditorGroup.getEditors(EditorsOrder.SEQUENTIAL).length, 0);
-    assert.strictEqual(unstickyFilteredEditorGroup.getEditors(EditorsOrder.SEQUENTIAL).length, 2);
-  });
+		assert.strictEqual(unstickyFilteredEditorGroup.isSticky(input1), false);
+		assert.strictEqual(unstickyFilteredEditorGroup.isSticky(input2), false);
+	});
 
-  test('Sticky/Unsticky activeEditor', async () => {
-    const model = createEditorGroupModel();
+	test('Sticky/Unsticky isPinned()', async () => {
+		const model = createEditorGroupModel();
 
-    const stickyFilteredEditorGroup = disposables.add(new StickyEditorGroupModel(model));
-    const unstickyFilteredEditorGroup = disposables.add(new UnstickyEditorGroupModel(model));
+		const stickyFilteredEditorGroup = disposables.add(new StickyEditorGroupModel(model));
+		const unstickyFilteredEditorGroup = disposables.add(new UnstickyEditorGroupModel(model));
 
-    const input1 = input();
-    const input2 = input();
+		const input1 = input();
+		const input2 = input();
+		const input3 = input();
+		const input4 = input();
 
-    model.openEditor(input1, { pinned: true, sticky: true, active: true });
+		model.openEditor(input1, { pinned: true, sticky: true });
+		model.openEditor(input2, { pinned: true, sticky: false });
+		model.openEditor(input3, { pinned: false, sticky: true });
+		model.openEditor(input4, { pinned: false, sticky: false });
 
-    assert.strictEqual(stickyFilteredEditorGroup.activeEditor, input1);
-    assert.strictEqual(unstickyFilteredEditorGroup.activeEditor, null);
+		assert.strictEqual(stickyFilteredEditorGroup.isPinned(input1), true);
+		assert.strictEqual(unstickyFilteredEditorGroup.isPinned(input2), true);
+		assert.strictEqual(stickyFilteredEditorGroup.isPinned(input3), true);
+		assert.strictEqual(unstickyFilteredEditorGroup.isPinned(input4), false);
+	});
 
-    model.openEditor(input2, { pinned: true, sticky: false, active: true });
+	test('Sticky/Unsticky isActive()', async () => {
+		const model = createEditorGroupModel();
 
-    assert.strictEqual(stickyFilteredEditorGroup.activeEditor, null);
-    assert.strictEqual(unstickyFilteredEditorGroup.activeEditor, input2);
+		const stickyFilteredEditorGroup = disposables.add(new StickyEditorGroupModel(model));
+		const unstickyFilteredEditorGroup = disposables.add(new UnstickyEditorGroupModel(model));
 
-    model.closeEditor(input1);
+		const input1 = input();
+		const input2 = input();
 
-    assert.strictEqual(stickyFilteredEditorGroup.activeEditor, null);
-    assert.strictEqual(unstickyFilteredEditorGroup.activeEditor, input2);
+		model.openEditor(input1, { pinned: true, sticky: true, active: true });
 
-    model.closeEditor(input2);
+		assert.strictEqual(stickyFilteredEditorGroup.isActive(input1), true);
 
-    assert.strictEqual(stickyFilteredEditorGroup.activeEditor, null);
-    assert.strictEqual(unstickyFilteredEditorGroup.activeEditor, null);
-  });
+		model.openEditor(input2, { pinned: true, sticky: false, active: true });
 
-  test('Sticky/Unsticky previewEditor', async () => {
-    const model = createEditorGroupModel();
+		assert.strictEqual(stickyFilteredEditorGroup.isActive(input1), false);
+		assert.strictEqual(unstickyFilteredEditorGroup.isActive(input2), true);
 
-    const stickyFilteredEditorGroup = disposables.add(new StickyEditorGroupModel(model));
-    const unstickyFilteredEditorGroup = disposables.add(new UnstickyEditorGroupModel(model));
+		model.unstick(input1);
 
-    const input1 = input();
-    const input2 = input();
+		assert.strictEqual(unstickyFilteredEditorGroup.isActive(input1), false);
+		assert.strictEqual(unstickyFilteredEditorGroup.isActive(input2), true);
+	});
 
-    model.openEditor(input1);
+	test('Sticky/Unsticky getEditors()', async () => {
+		const model = createEditorGroupModel();
 
-    assert.strictEqual(stickyFilteredEditorGroup.previewEditor, null);
-    assert.strictEqual(unstickyFilteredEditorGroup.previewEditor, input1);
+		const stickyFilteredEditorGroup = disposables.add(new StickyEditorGroupModel(model));
+		const unstickyFilteredEditorGroup = disposables.add(new UnstickyEditorGroupModel(model));
 
-    model.openEditor(input2, { sticky: true });
-    assert.strictEqual(stickyFilteredEditorGroup.previewEditor, null);
-    assert.strictEqual(unstickyFilteredEditorGroup.previewEditor, input1);
-  });
+		const input1 = input();
+		const input2 = input();
 
-  test('Sticky/Unsticky isSticky()', async () => {
-    const model = createEditorGroupModel();
+		model.openEditor(input1, { pinned: true, sticky: true, active: true });
+		model.openEditor(input2, { pinned: true, sticky: true, active: true });
 
-    const stickyFilteredEditorGroup = disposables.add(new StickyEditorGroupModel(model));
-    const unstickyFilteredEditorGroup = disposables.add(new UnstickyEditorGroupModel(model));
+		// all sticky editors
+		assert.strictEqual(stickyFilteredEditorGroup.getEditors(EditorsOrder.SEQUENTIAL).length, 2);
+		assert.strictEqual(stickyFilteredEditorGroup.getEditors(EditorsOrder.MOST_RECENTLY_ACTIVE).length, 2);
 
-    const input1 = input();
-    const input2 = input();
+		// no unsticky editors
+		assert.strictEqual(unstickyFilteredEditorGroup.getEditors(EditorsOrder.SEQUENTIAL).length, 0);
+		assert.strictEqual(unstickyFilteredEditorGroup.getEditors(EditorsOrder.MOST_RECENTLY_ACTIVE).length, 0);
 
-    model.openEditor(input1, { pinned: true, sticky: true });
-    model.openEditor(input2, { pinned: true, sticky: true });
+		// options: excludeSticky
+		assert.strictEqual(stickyFilteredEditorGroup.getEditors(EditorsOrder.SEQUENTIAL, { excludeSticky: true }).length, 0);
+		assert.strictEqual(stickyFilteredEditorGroup.getEditors(EditorsOrder.SEQUENTIAL, { excludeSticky: false }).length, 2);
+		assert.strictEqual(unstickyFilteredEditorGroup.getEditors(EditorsOrder.SEQUENTIAL, { excludeSticky: true }).length, 0);
+		assert.strictEqual(unstickyFilteredEditorGroup.getEditors(EditorsOrder.SEQUENTIAL, { excludeSticky: false }).length, 0);
 
-    assert.strictEqual(stickyFilteredEditorGroup.isSticky(input1), true);
-    assert.strictEqual(stickyFilteredEditorGroup.isSticky(input2), true);
+		assert.strictEqual(stickyFilteredEditorGroup.getEditors(EditorsOrder.MOST_RECENTLY_ACTIVE)[0], input2);
+		assert.strictEqual(stickyFilteredEditorGroup.getEditors(EditorsOrder.MOST_RECENTLY_ACTIVE)[1], input1);
 
-    model.unstick(input1);
-    model.closeEditor(input1);
-    model.openEditor(input2, { pinned: true, sticky: true });
+		model.unstick(input1);
 
-    assert.strictEqual(unstickyFilteredEditorGroup.isSticky(input1), false);
-    assert.strictEqual(unstickyFilteredEditorGroup.isSticky(input2), false);
-  });
+		assert.strictEqual(stickyFilteredEditorGroup.getEditors(EditorsOrder.SEQUENTIAL).length, 1);
+		assert.strictEqual(unstickyFilteredEditorGroup.getEditors(EditorsOrder.MOST_RECENTLY_ACTIVE).length, 1);
 
-  test('Sticky/Unsticky isPinned()', async () => {
-    const model = createEditorGroupModel();
+		assert.strictEqual(stickyFilteredEditorGroup.getEditors(EditorsOrder.MOST_RECENTLY_ACTIVE)[0], input2);
+		assert.strictEqual(unstickyFilteredEditorGroup.getEditors(EditorsOrder.SEQUENTIAL)[0], input1);
 
-    const stickyFilteredEditorGroup = disposables.add(new StickyEditorGroupModel(model));
-    const unstickyFilteredEditorGroup = disposables.add(new UnstickyEditorGroupModel(model));
+		model.unstick(input2);
 
-    const input1 = input();
-    const input2 = input();
-    const input3 = input();
-    const input4 = input();
+		// all unsticky editors
+		assert.strictEqual(stickyFilteredEditorGroup.getEditors(EditorsOrder.SEQUENTIAL).length, 0);
+		assert.strictEqual(unstickyFilteredEditorGroup.getEditors(EditorsOrder.MOST_RECENTLY_ACTIVE).length, 2);
 
-    model.openEditor(input1, { pinned: true, sticky: true });
-    model.openEditor(input2, { pinned: true, sticky: false });
-    model.openEditor(input3, { pinned: false, sticky: true });
-    model.openEditor(input4, { pinned: false, sticky: false });
+		// order: MOST_RECENTLY_ACTIVE
+		assert.strictEqual(unstickyFilteredEditorGroup.getEditors(EditorsOrder.MOST_RECENTLY_ACTIVE)[0], input2);
+		assert.strictEqual(unstickyFilteredEditorGroup.getEditors(EditorsOrder.MOST_RECENTLY_ACTIVE)[1], input1);
 
-    assert.strictEqual(stickyFilteredEditorGroup.isPinned(input1), true);
-    assert.strictEqual(unstickyFilteredEditorGroup.isPinned(input2), true);
-    assert.strictEqual(stickyFilteredEditorGroup.isPinned(input3), true);
-    assert.strictEqual(unstickyFilteredEditorGroup.isPinned(input4), false);
-  });
+		// order: SEQUENTIAL
+		assert.strictEqual(unstickyFilteredEditorGroup.getEditors(EditorsOrder.SEQUENTIAL)[0], input2);
+		assert.strictEqual(unstickyFilteredEditorGroup.getEditors(EditorsOrder.SEQUENTIAL)[1], input1);
+	});
 
-  test('Sticky/Unsticky isActive()', async () => {
-    const model = createEditorGroupModel();
+	test('Sticky/Unsticky getEditorByIndex()', async () => {
+		const model = createEditorGroupModel();
 
-    const stickyFilteredEditorGroup = disposables.add(new StickyEditorGroupModel(model));
-    const unstickyFilteredEditorGroup = disposables.add(new UnstickyEditorGroupModel(model));
+		const stickyFilteredEditorGroup = disposables.add(new StickyEditorGroupModel(model));
+		const unstickyFilteredEditorGroup = disposables.add(new UnstickyEditorGroupModel(model));
 
-    const input1 = input();
-    const input2 = input();
+		const input1 = input();
+		const input2 = input();
+		const input3 = input();
 
-    model.openEditor(input1, { pinned: true, sticky: true, active: true });
+		model.openEditor(input1, { pinned: true, sticky: true });
+		model.openEditor(input2, { pinned: true, sticky: true });
 
-    assert.strictEqual(stickyFilteredEditorGroup.isActive(input1), true);
+		assert.strictEqual(stickyFilteredEditorGroup.getEditorByIndex(0), input1);
+		assert.strictEqual(stickyFilteredEditorGroup.getEditorByIndex(1), input2);
+		assert.strictEqual(stickyFilteredEditorGroup.getEditorByIndex(2), undefined);
+		assert.strictEqual(unstickyFilteredEditorGroup.getEditorByIndex(0), undefined);
+		assert.strictEqual(unstickyFilteredEditorGroup.getEditorByIndex(1), undefined);
 
-    model.openEditor(input2, { pinned: true, sticky: false, active: true });
+		model.openEditor(input3, { pinned: true, sticky: false });
 
-    assert.strictEqual(stickyFilteredEditorGroup.isActive(input1), false);
-    assert.strictEqual(unstickyFilteredEditorGroup.isActive(input2), true);
+		assert.strictEqual(stickyFilteredEditorGroup.getEditorByIndex(0), input1);
+		assert.strictEqual(stickyFilteredEditorGroup.getEditorByIndex(1), input2);
+		assert.strictEqual(stickyFilteredEditorGroup.getEditorByIndex(2), undefined);
+		assert.strictEqual(unstickyFilteredEditorGroup.getEditorByIndex(0), input3);
+		assert.strictEqual(unstickyFilteredEditorGroup.getEditorByIndex(1), undefined);
 
-    model.unstick(input1);
+		model.unstick(input1);
 
-    assert.strictEqual(unstickyFilteredEditorGroup.isActive(input1), false);
-    assert.strictEqual(unstickyFilteredEditorGroup.isActive(input2), true);
-  });
+		assert.strictEqual(stickyFilteredEditorGroup.getEditorByIndex(0), input2);
+		assert.strictEqual(stickyFilteredEditorGroup.getEditorByIndex(1), undefined);
+		assert.strictEqual(unstickyFilteredEditorGroup.getEditorByIndex(0), input1);
+		assert.strictEqual(unstickyFilteredEditorGroup.getEditorByIndex(1), input3);
+		assert.strictEqual(unstickyFilteredEditorGroup.getEditorByIndex(2), undefined);
+	});
 
-  test('Sticky/Unsticky getEditors()', async () => {
-    const model = createEditorGroupModel();
+	test('Sticky/Unsticky indexOf()', async () => {
+		const model = createEditorGroupModel();
 
-    const stickyFilteredEditorGroup = disposables.add(new StickyEditorGroupModel(model));
-    const unstickyFilteredEditorGroup = disposables.add(new UnstickyEditorGroupModel(model));
+		const stickyFilteredEditorGroup = disposables.add(new StickyEditorGroupModel(model));
+		const unstickyFilteredEditorGroup = disposables.add(new UnstickyEditorGroupModel(model));
 
-    const input1 = input();
-    const input2 = input();
+		const input1 = input();
+		const input2 = input();
+		const input3 = input();
 
-    model.openEditor(input1, { pinned: true, sticky: true, active: true });
-    model.openEditor(input2, { pinned: true, sticky: true, active: true });
+		model.openEditor(input1, { pinned: true, sticky: true });
+		model.openEditor(input2, { pinned: true, sticky: true });
 
-    // all sticky editors
-    assert.strictEqual(stickyFilteredEditorGroup.getEditors(EditorsOrder.SEQUENTIAL).length, 2);
-    assert.strictEqual(
-      stickyFilteredEditorGroup.getEditors(EditorsOrder.MOST_RECENTLY_ACTIVE).length,
-      2,
-    );
+		assert.strictEqual(stickyFilteredEditorGroup.indexOf(input1), 0);
+		assert.strictEqual(stickyFilteredEditorGroup.indexOf(input2), 1);
+		assert.strictEqual(unstickyFilteredEditorGroup.indexOf(input1), -1);
+		assert.strictEqual(unstickyFilteredEditorGroup.indexOf(input2), -1);
 
-    // no unsticky editors
-    assert.strictEqual(unstickyFilteredEditorGroup.getEditors(EditorsOrder.SEQUENTIAL).length, 0);
-    assert.strictEqual(
-      unstickyFilteredEditorGroup.getEditors(EditorsOrder.MOST_RECENTLY_ACTIVE).length,
-      0,
-    );
+		model.openEditor(input3, { pinned: true, sticky: false });
 
-    // options: excludeSticky
-    assert.strictEqual(
-      stickyFilteredEditorGroup.getEditors(EditorsOrder.SEQUENTIAL, { excludeSticky: true }).length,
-      0,
-    );
-    assert.strictEqual(
-      stickyFilteredEditorGroup.getEditors(EditorsOrder.SEQUENTIAL, { excludeSticky: false })
-        .length,
-      2,
-    );
-    assert.strictEqual(
-      unstickyFilteredEditorGroup.getEditors(EditorsOrder.SEQUENTIAL, { excludeSticky: true })
-        .length,
-      0,
-    );
-    assert.strictEqual(
-      unstickyFilteredEditorGroup.getEditors(EditorsOrder.SEQUENTIAL, { excludeSticky: false })
-        .length,
-      0,
-    );
+		assert.strictEqual(stickyFilteredEditorGroup.indexOf(input1), 0);
+		assert.strictEqual(stickyFilteredEditorGroup.indexOf(input2), 1);
+		assert.strictEqual(stickyFilteredEditorGroup.indexOf(input3), -1);
+		assert.strictEqual(unstickyFilteredEditorGroup.indexOf(input1), -1);
+		assert.strictEqual(unstickyFilteredEditorGroup.indexOf(input2), -1);
+		assert.strictEqual(unstickyFilteredEditorGroup.indexOf(input3), 0);
 
-    assert.strictEqual(
-      stickyFilteredEditorGroup.getEditors(EditorsOrder.MOST_RECENTLY_ACTIVE)[0],
-      input2,
-    );
-    assert.strictEqual(
-      stickyFilteredEditorGroup.getEditors(EditorsOrder.MOST_RECENTLY_ACTIVE)[1],
-      input1,
-    );
+		model.unstick(input1);
 
-    model.unstick(input1);
+		assert.strictEqual(stickyFilteredEditorGroup.indexOf(input1), -1);
+		assert.strictEqual(stickyFilteredEditorGroup.indexOf(input2), 0);
+		assert.strictEqual(stickyFilteredEditorGroup.indexOf(input3), -1);
+		assert.strictEqual(unstickyFilteredEditorGroup.indexOf(input1), 0);
+		assert.strictEqual(unstickyFilteredEditorGroup.indexOf(input2), -1);
+		assert.strictEqual(unstickyFilteredEditorGroup.indexOf(input3), 1);
+	});
 
-    assert.strictEqual(stickyFilteredEditorGroup.getEditors(EditorsOrder.SEQUENTIAL).length, 1);
-    assert.strictEqual(
-      unstickyFilteredEditorGroup.getEditors(EditorsOrder.MOST_RECENTLY_ACTIVE).length,
-      1,
-    );
+	test('Sticky/Unsticky isFirst()', async () => {
+		const model = createEditorGroupModel();
 
-    assert.strictEqual(
-      stickyFilteredEditorGroup.getEditors(EditorsOrder.MOST_RECENTLY_ACTIVE)[0],
-      input2,
-    );
-    assert.strictEqual(unstickyFilteredEditorGroup.getEditors(EditorsOrder.SEQUENTIAL)[0], input1);
+		const stickyFilteredEditorGroup = disposables.add(new StickyEditorGroupModel(model));
+		const unstickyFilteredEditorGroup = disposables.add(new UnstickyEditorGroupModel(model));
 
-    model.unstick(input2);
+		const input1 = input();
+		const input2 = input();
 
-    // all unsticky editors
-    assert.strictEqual(stickyFilteredEditorGroup.getEditors(EditorsOrder.SEQUENTIAL).length, 0);
-    assert.strictEqual(
-      unstickyFilteredEditorGroup.getEditors(EditorsOrder.MOST_RECENTLY_ACTIVE).length,
-      2,
-    );
+		model.openEditor(input1, { pinned: true, sticky: true });
 
-    // order: MOST_RECENTLY_ACTIVE
-    assert.strictEqual(
-      unstickyFilteredEditorGroup.getEditors(EditorsOrder.MOST_RECENTLY_ACTIVE)[0],
-      input2,
-    );
-    assert.strictEqual(
-      unstickyFilteredEditorGroup.getEditors(EditorsOrder.MOST_RECENTLY_ACTIVE)[1],
-      input1,
-    );
+		assert.strictEqual(stickyFilteredEditorGroup.isFirst(input1), true);
 
-    // order: SEQUENTIAL
-    assert.strictEqual(unstickyFilteredEditorGroup.getEditors(EditorsOrder.SEQUENTIAL)[0], input2);
-    assert.strictEqual(unstickyFilteredEditorGroup.getEditors(EditorsOrder.SEQUENTIAL)[1], input1);
-  });
+		model.openEditor(input2, { pinned: true, sticky: true });
 
-  test('Sticky/Unsticky getEditorByIndex()', async () => {
-    const model = createEditorGroupModel();
+		assert.strictEqual(stickyFilteredEditorGroup.isFirst(input1), true);
+		assert.strictEqual(stickyFilteredEditorGroup.isFirst(input2), false);
 
-    const stickyFilteredEditorGroup = disposables.add(new StickyEditorGroupModel(model));
-    const unstickyFilteredEditorGroup = disposables.add(new UnstickyEditorGroupModel(model));
+		model.unstick(input1);
 
-    const input1 = input();
-    const input2 = input();
-    const input3 = input();
+		assert.strictEqual(unstickyFilteredEditorGroup.isFirst(input1), true);
+		assert.strictEqual(stickyFilteredEditorGroup.isFirst(input2), true);
 
-    model.openEditor(input1, { pinned: true, sticky: true });
-    model.openEditor(input2, { pinned: true, sticky: true });
+		model.unstick(input2);
 
-    assert.strictEqual(stickyFilteredEditorGroup.getEditorByIndex(0), input1);
-    assert.strictEqual(stickyFilteredEditorGroup.getEditorByIndex(1), input2);
-    assert.strictEqual(stickyFilteredEditorGroup.getEditorByIndex(2), undefined);
-    assert.strictEqual(unstickyFilteredEditorGroup.getEditorByIndex(0), undefined);
-    assert.strictEqual(unstickyFilteredEditorGroup.getEditorByIndex(1), undefined);
+		assert.strictEqual(unstickyFilteredEditorGroup.isFirst(input1), false);
+		assert.strictEqual(unstickyFilteredEditorGroup.isFirst(input2), true);
 
-    model.openEditor(input3, { pinned: true, sticky: false });
+		model.moveEditor(input2, 1);
 
-    assert.strictEqual(stickyFilteredEditorGroup.getEditorByIndex(0), input1);
-    assert.strictEqual(stickyFilteredEditorGroup.getEditorByIndex(1), input2);
-    assert.strictEqual(stickyFilteredEditorGroup.getEditorByIndex(2), undefined);
-    assert.strictEqual(unstickyFilteredEditorGroup.getEditorByIndex(0), input3);
-    assert.strictEqual(unstickyFilteredEditorGroup.getEditorByIndex(1), undefined);
+		assert.strictEqual(unstickyFilteredEditorGroup.isFirst(input1), true);
+		assert.strictEqual(unstickyFilteredEditorGroup.isFirst(input2), false);
+	});
 
-    model.unstick(input1);
+	test('Sticky/Unsticky isLast()', async () => {
+		const model = createEditorGroupModel();
 
-    assert.strictEqual(stickyFilteredEditorGroup.getEditorByIndex(0), input2);
-    assert.strictEqual(stickyFilteredEditorGroup.getEditorByIndex(1), undefined);
-    assert.strictEqual(unstickyFilteredEditorGroup.getEditorByIndex(0), input1);
-    assert.strictEqual(unstickyFilteredEditorGroup.getEditorByIndex(1), input3);
-    assert.strictEqual(unstickyFilteredEditorGroup.getEditorByIndex(2), undefined);
-  });
+		const stickyFilteredEditorGroup = disposables.add(new StickyEditorGroupModel(model));
+		const unstickyFilteredEditorGroup = disposables.add(new UnstickyEditorGroupModel(model));
 
-  test('Sticky/Unsticky indexOf()', async () => {
-    const model = createEditorGroupModel();
+		const input1 = input();
+		const input2 = input();
 
-    const stickyFilteredEditorGroup = disposables.add(new StickyEditorGroupModel(model));
-    const unstickyFilteredEditorGroup = disposables.add(new UnstickyEditorGroupModel(model));
+		model.openEditor(input1, { pinned: true, sticky: true });
 
-    const input1 = input();
-    const input2 = input();
-    const input3 = input();
+		assert.strictEqual(stickyFilteredEditorGroup.isLast(input1), true);
 
-    model.openEditor(input1, { pinned: true, sticky: true });
-    model.openEditor(input2, { pinned: true, sticky: true });
+		model.openEditor(input2, { pinned: true, sticky: true });
 
-    assert.strictEqual(stickyFilteredEditorGroup.indexOf(input1), 0);
-    assert.strictEqual(stickyFilteredEditorGroup.indexOf(input2), 1);
-    assert.strictEqual(unstickyFilteredEditorGroup.indexOf(input1), -1);
-    assert.strictEqual(unstickyFilteredEditorGroup.indexOf(input2), -1);
+		assert.strictEqual(stickyFilteredEditorGroup.isLast(input1), false);
+		assert.strictEqual(stickyFilteredEditorGroup.isLast(input2), true);
 
-    model.openEditor(input3, { pinned: true, sticky: false });
+		model.unstick(input1);
 
-    assert.strictEqual(stickyFilteredEditorGroup.indexOf(input1), 0);
-    assert.strictEqual(stickyFilteredEditorGroup.indexOf(input2), 1);
-    assert.strictEqual(stickyFilteredEditorGroup.indexOf(input3), -1);
-    assert.strictEqual(unstickyFilteredEditorGroup.indexOf(input1), -1);
-    assert.strictEqual(unstickyFilteredEditorGroup.indexOf(input2), -1);
-    assert.strictEqual(unstickyFilteredEditorGroup.indexOf(input3), 0);
+		assert.strictEqual(unstickyFilteredEditorGroup.isLast(input1), true);
+		assert.strictEqual(stickyFilteredEditorGroup.isLast(input2), true);
 
-    model.unstick(input1);
+		model.unstick(input2);
 
-    assert.strictEqual(stickyFilteredEditorGroup.indexOf(input1), -1);
-    assert.strictEqual(stickyFilteredEditorGroup.indexOf(input2), 0);
-    assert.strictEqual(stickyFilteredEditorGroup.indexOf(input3), -1);
-    assert.strictEqual(unstickyFilteredEditorGroup.indexOf(input1), 0);
-    assert.strictEqual(unstickyFilteredEditorGroup.indexOf(input2), -1);
-    assert.strictEqual(unstickyFilteredEditorGroup.indexOf(input3), 1);
-  });
+		assert.strictEqual(unstickyFilteredEditorGroup.isLast(input1), true);
+		assert.strictEqual(unstickyFilteredEditorGroup.isLast(input2), false);
 
-  test('Sticky/Unsticky isFirst()', async () => {
-    const model = createEditorGroupModel();
+		model.moveEditor(input2, 1);
 
-    const stickyFilteredEditorGroup = disposables.add(new StickyEditorGroupModel(model));
-    const unstickyFilteredEditorGroup = disposables.add(new UnstickyEditorGroupModel(model));
+		assert.strictEqual(unstickyFilteredEditorGroup.isLast(input1), false);
+		assert.strictEqual(unstickyFilteredEditorGroup.isLast(input2), true);
+	});
 
-    const input1 = input();
-    const input2 = input();
+	test('Sticky/Unsticky contains()', async () => {
+		const model = createEditorGroupModel();
 
-    model.openEditor(input1, { pinned: true, sticky: true });
+		const stickyFilteredEditorGroup = disposables.add(new StickyEditorGroupModel(model));
+		const unstickyFilteredEditorGroup = disposables.add(new UnstickyEditorGroupModel(model));
 
-    assert.strictEqual(stickyFilteredEditorGroup.isFirst(input1), true);
+		const input1 = input();
+		const input2 = input();
 
-    model.openEditor(input2, { pinned: true, sticky: true });
+		model.openEditor(input1, { pinned: true, sticky: true });
+		model.openEditor(input2, { pinned: true, sticky: true });
 
-    assert.strictEqual(stickyFilteredEditorGroup.isFirst(input1), true);
-    assert.strictEqual(stickyFilteredEditorGroup.isFirst(input2), false);
+		assert.strictEqual(stickyFilteredEditorGroup.contains(input1), true);
+		assert.strictEqual(stickyFilteredEditorGroup.contains(input2), true);
 
-    model.unstick(input1);
+		assert.strictEqual(unstickyFilteredEditorGroup.contains(input1), false);
+		assert.strictEqual(unstickyFilteredEditorGroup.contains(input2), false);
 
-    assert.strictEqual(unstickyFilteredEditorGroup.isFirst(input1), true);
-    assert.strictEqual(stickyFilteredEditorGroup.isFirst(input2), true);
+		model.unstick(input1);
 
-    model.unstick(input2);
+		assert.strictEqual(stickyFilteredEditorGroup.contains(input1), false);
+		assert.strictEqual(stickyFilteredEditorGroup.contains(input2), true);
 
-    assert.strictEqual(unstickyFilteredEditorGroup.isFirst(input1), false);
-    assert.strictEqual(unstickyFilteredEditorGroup.isFirst(input2), true);
+		assert.strictEqual(unstickyFilteredEditorGroup.contains(input1), true);
+		assert.strictEqual(unstickyFilteredEditorGroup.contains(input2), false);
 
-    model.moveEditor(input2, 1);
+		model.unstick(input2);
 
-    assert.strictEqual(unstickyFilteredEditorGroup.isFirst(input1), true);
-    assert.strictEqual(unstickyFilteredEditorGroup.isFirst(input2), false);
-  });
+		assert.strictEqual(stickyFilteredEditorGroup.contains(input1), false);
+		assert.strictEqual(stickyFilteredEditorGroup.contains(input2), false);
 
-  test('Sticky/Unsticky isLast()', async () => {
-    const model = createEditorGroupModel();
+		assert.strictEqual(unstickyFilteredEditorGroup.contains(input1), true);
+		assert.strictEqual(unstickyFilteredEditorGroup.contains(input2), true);
+	});
 
-    const stickyFilteredEditorGroup = disposables.add(new StickyEditorGroupModel(model));
-    const unstickyFilteredEditorGroup = disposables.add(new UnstickyEditorGroupModel(model));
+	test('Sticky/Unsticky group information', async () => {
+		const model = createEditorGroupModel();
 
-    const input1 = input();
-    const input2 = input();
+		const stickyFilteredEditorGroup = disposables.add(new StickyEditorGroupModel(model));
+		const unstickyFilteredEditorGroup = disposables.add(new UnstickyEditorGroupModel(model));
 
-    model.openEditor(input1, { pinned: true, sticky: true });
+		// same id
+		assert.strictEqual(stickyFilteredEditorGroup.id, model.id);
+		assert.strictEqual(unstickyFilteredEditorGroup.id, model.id);
 
-    assert.strictEqual(stickyFilteredEditorGroup.isLast(input1), true);
+		// group locking same behaviour
+		assert.strictEqual(stickyFilteredEditorGroup.isLocked, model.isLocked);
+		assert.strictEqual(unstickyFilteredEditorGroup.isLocked, model.isLocked);
 
-    model.openEditor(input2, { pinned: true, sticky: true });
+		model.lock(true);
 
-    assert.strictEqual(stickyFilteredEditorGroup.isLast(input1), false);
-    assert.strictEqual(stickyFilteredEditorGroup.isLast(input2), true);
+		assert.strictEqual(stickyFilteredEditorGroup.isLocked, model.isLocked);
+		assert.strictEqual(unstickyFilteredEditorGroup.isLocked, model.isLocked);
 
-    model.unstick(input1);
+		model.lock(false);
 
-    assert.strictEqual(unstickyFilteredEditorGroup.isLast(input1), true);
-    assert.strictEqual(stickyFilteredEditorGroup.isLast(input2), true);
+		assert.strictEqual(stickyFilteredEditorGroup.isLocked, model.isLocked);
+		assert.strictEqual(unstickyFilteredEditorGroup.isLocked, model.isLocked);
+	});
 
-    model.unstick(input2);
+	test('Multiple Editors - Editor Emits Dirty and Label Changed', function () {
+		const model1 = createEditorGroupModel();
+		const model2 = createEditorGroupModel();
 
-    assert.strictEqual(unstickyFilteredEditorGroup.isLast(input1), true);
-    assert.strictEqual(unstickyFilteredEditorGroup.isLast(input2), false);
+		const stickyFilteredEditorGroup1 = disposables.add(new StickyEditorGroupModel(model1));
+		const unstickyFilteredEditorGroup1 = disposables.add(new UnstickyEditorGroupModel(model1));
+		const stickyFilteredEditorGroup2 = disposables.add(new StickyEditorGroupModel(model2));
+		const unstickyFilteredEditorGroup2 = disposables.add(new UnstickyEditorGroupModel(model2));
 
-    model.moveEditor(input2, 1);
+		const input1 = input();
+		const input2 = input();
 
-    assert.strictEqual(unstickyFilteredEditorGroup.isLast(input1), false);
-    assert.strictEqual(unstickyFilteredEditorGroup.isLast(input2), true);
-  });
+		model1.openEditor(input1, { pinned: true, active: true });
+		model2.openEditor(input2, { pinned: true, active: true, sticky: true });
 
-  test('Sticky/Unsticky contains()', async () => {
-    const model = createEditorGroupModel();
+		// DIRTY
+		let dirty1CounterSticky = 0;
+		disposables.add(stickyFilteredEditorGroup1.onDidModelChange((e) => {
+			if (e.kind === GroupModelChangeKind.EDITOR_DIRTY) {
+				dirty1CounterSticky++;
+			}
+		}));
 
-    const stickyFilteredEditorGroup = disposables.add(new StickyEditorGroupModel(model));
-    const unstickyFilteredEditorGroup = disposables.add(new UnstickyEditorGroupModel(model));
+		let dirty1CounterUnsticky = 0;
+		disposables.add(unstickyFilteredEditorGroup1.onDidModelChange((e) => {
+			if (e.kind === GroupModelChangeKind.EDITOR_DIRTY) {
+				dirty1CounterUnsticky++;
+			}
+		}));
 
-    const input1 = input();
-    const input2 = input();
+		let dirty2CounterSticky = 0;
+		disposables.add(stickyFilteredEditorGroup2.onDidModelChange((e) => {
+			if (e.kind === GroupModelChangeKind.EDITOR_DIRTY) {
+				dirty2CounterSticky++;
+			}
+		}));
 
-    model.openEditor(input1, { pinned: true, sticky: true });
-    model.openEditor(input2, { pinned: true, sticky: true });
+		let dirty2CounterUnsticky = 0;
+		disposables.add(unstickyFilteredEditorGroup2.onDidModelChange((e) => {
+			if (e.kind === GroupModelChangeKind.EDITOR_DIRTY) {
+				dirty2CounterUnsticky++;
+			}
+		}));
 
-    assert.strictEqual(stickyFilteredEditorGroup.contains(input1), true);
-    assert.strictEqual(stickyFilteredEditorGroup.contains(input2), true);
+		// LABEL
+		let label1ChangeCounterSticky = 0;
+		disposables.add(stickyFilteredEditorGroup1.onDidModelChange((e) => {
+			if (e.kind === GroupModelChangeKind.EDITOR_LABEL) {
+				label1ChangeCounterSticky++;
+			}
+		}));
 
-    assert.strictEqual(unstickyFilteredEditorGroup.contains(input1), false);
-    assert.strictEqual(unstickyFilteredEditorGroup.contains(input2), false);
+		let label1ChangeCounterUnsticky = 0;
+		disposables.add(unstickyFilteredEditorGroup1.onDidModelChange((e) => {
+			if (e.kind === GroupModelChangeKind.EDITOR_LABEL) {
+				label1ChangeCounterUnsticky++;
+			}
+		}));
 
-    model.unstick(input1);
+		let label2ChangeCounterSticky = 0;
+		disposables.add(stickyFilteredEditorGroup2.onDidModelChange((e) => {
+			if (e.kind === GroupModelChangeKind.EDITOR_LABEL) {
+				label2ChangeCounterSticky++;
+			}
+		}));
 
-    assert.strictEqual(stickyFilteredEditorGroup.contains(input1), false);
-    assert.strictEqual(stickyFilteredEditorGroup.contains(input2), true);
+		let label2ChangeCounterUnsticky = 0;
+		disposables.add(unstickyFilteredEditorGroup2.onDidModelChange((e) => {
+			if (e.kind === GroupModelChangeKind.EDITOR_LABEL) {
+				label2ChangeCounterUnsticky++;
+			}
+		}));
 
-    assert.strictEqual(unstickyFilteredEditorGroup.contains(input1), true);
-    assert.strictEqual(unstickyFilteredEditorGroup.contains(input2), false);
+		(<TestEditorInput>input1).setDirty();
+		(<TestEditorInput>input1).setLabel();
 
-    model.unstick(input2);
+		assert.strictEqual(dirty1CounterSticky, 0);
+		assert.strictEqual(dirty1CounterUnsticky, 1);
+		assert.strictEqual(label1ChangeCounterSticky, 0);
+		assert.strictEqual(label1ChangeCounterUnsticky, 1);
 
-    assert.strictEqual(stickyFilteredEditorGroup.contains(input1), false);
-    assert.strictEqual(stickyFilteredEditorGroup.contains(input2), false);
+		(<TestEditorInput>input2).setDirty();
+		(<TestEditorInput>input2).setLabel();
 
-    assert.strictEqual(unstickyFilteredEditorGroup.contains(input1), true);
-    assert.strictEqual(unstickyFilteredEditorGroup.contains(input2), true);
-  });
+		assert.strictEqual(dirty2CounterSticky, 1);
+		assert.strictEqual(dirty2CounterUnsticky, 0);
+		assert.strictEqual(label2ChangeCounterSticky, 1);
+		assert.strictEqual(label2ChangeCounterUnsticky, 0);
 
-  test('Sticky/Unsticky group information', async () => {
-    const model = createEditorGroupModel();
+		closeAllEditors(model2);
 
-    const stickyFilteredEditorGroup = disposables.add(new StickyEditorGroupModel(model));
-    const unstickyFilteredEditorGroup = disposables.add(new UnstickyEditorGroupModel(model));
+		(<TestEditorInput>input2).setDirty();
+		(<TestEditorInput>input2).setLabel();
 
-    // same id
-    assert.strictEqual(stickyFilteredEditorGroup.id, model.id);
-    assert.strictEqual(unstickyFilteredEditorGroup.id, model.id);
+		assert.strictEqual(dirty2CounterSticky, 1);
+		assert.strictEqual(dirty2CounterUnsticky, 0);
+		assert.strictEqual(label2ChangeCounterSticky, 1);
+		assert.strictEqual(label2ChangeCounterUnsticky, 0);
+		assert.strictEqual(dirty1CounterSticky, 0);
+		assert.strictEqual(dirty1CounterUnsticky, 1);
+		assert.strictEqual(label1ChangeCounterSticky, 0);
+		assert.strictEqual(label1ChangeCounterUnsticky, 1);
+	});
 
-    // group locking same behaviour
-    assert.strictEqual(stickyFilteredEditorGroup.isLocked, model.isLocked);
-    assert.strictEqual(unstickyFilteredEditorGroup.isLocked, model.isLocked);
+	test('Sticky/Unsticky isTransient()', async () => {
+		const model = createEditorGroupModel();
 
-    model.lock(true);
+		const stickyFilteredEditorGroup = disposables.add(new StickyEditorGroupModel(model));
+		const unstickyFilteredEditorGroup = disposables.add(new UnstickyEditorGroupModel(model));
 
-    assert.strictEqual(stickyFilteredEditorGroup.isLocked, model.isLocked);
-    assert.strictEqual(unstickyFilteredEditorGroup.isLocked, model.isLocked);
+		const input1 = input();
+		const input2 = input();
+		const input3 = input();
+		const input4 = input();
 
-    model.lock(false);
+		model.openEditor(input1, { pinned: true, transient: false });
+		model.openEditor(input2, { pinned: true });
+		model.openEditor(input3, { pinned: true, transient: true });
+		model.openEditor(input4, { pinned: false, transient: true });
 
-    assert.strictEqual(stickyFilteredEditorGroup.isLocked, model.isLocked);
-    assert.strictEqual(unstickyFilteredEditorGroup.isLocked, model.isLocked);
-  });
+		assert.strictEqual(stickyFilteredEditorGroup.isTransient(input1), false);
+		assert.strictEqual(unstickyFilteredEditorGroup.isTransient(input2), false);
+		assert.strictEqual(stickyFilteredEditorGroup.isTransient(input3), true);
+		assert.strictEqual(unstickyFilteredEditorGroup.isTransient(input4), true);
+	});
 
-  test('Multiple Editors - Editor Emits Dirty and Label Changed', () => {
-    const model1 = createEditorGroupModel();
-    const model2 = createEditorGroupModel();
-
-    const stickyFilteredEditorGroup1 = disposables.add(new StickyEditorGroupModel(model1));
-    const unstickyFilteredEditorGroup1 = disposables.add(new UnstickyEditorGroupModel(model1));
-    const stickyFilteredEditorGroup2 = disposables.add(new StickyEditorGroupModel(model2));
-    const unstickyFilteredEditorGroup2 = disposables.add(new UnstickyEditorGroupModel(model2));
-
-    const input1 = input();
-    const input2 = input();
-
-    model1.openEditor(input1, { pinned: true, active: true });
-    model2.openEditor(input2, { pinned: true, active: true, sticky: true });
-
-    // DIRTY
-    let dirty1CounterSticky = 0;
-    disposables.add(
-      stickyFilteredEditorGroup1.onDidModelChange((e) => {
-        if (e.kind === GroupModelChangeKind.EDITOR_DIRTY) {
-          dirty1CounterSticky++;
-        }
-      }),
-    );
-
-    let dirty1CounterUnsticky = 0;
-    disposables.add(
-      unstickyFilteredEditorGroup1.onDidModelChange((e) => {
-        if (e.kind === GroupModelChangeKind.EDITOR_DIRTY) {
-          dirty1CounterUnsticky++;
-        }
-      }),
-    );
-
-    let dirty2CounterSticky = 0;
-    disposables.add(
-      stickyFilteredEditorGroup2.onDidModelChange((e) => {
-        if (e.kind === GroupModelChangeKind.EDITOR_DIRTY) {
-          dirty2CounterSticky++;
-        }
-      }),
-    );
-
-    let dirty2CounterUnsticky = 0;
-    disposables.add(
-      unstickyFilteredEditorGroup2.onDidModelChange((e) => {
-        if (e.kind === GroupModelChangeKind.EDITOR_DIRTY) {
-          dirty2CounterUnsticky++;
-        }
-      }),
-    );
-
-    // LABEL
-    let label1ChangeCounterSticky = 0;
-    disposables.add(
-      stickyFilteredEditorGroup1.onDidModelChange((e) => {
-        if (e.kind === GroupModelChangeKind.EDITOR_LABEL) {
-          label1ChangeCounterSticky++;
-        }
-      }),
-    );
-
-    let label1ChangeCounterUnsticky = 0;
-    disposables.add(
-      unstickyFilteredEditorGroup1.onDidModelChange((e) => {
-        if (e.kind === GroupModelChangeKind.EDITOR_LABEL) {
-          label1ChangeCounterUnsticky++;
-        }
-      }),
-    );
-
-    let label2ChangeCounterSticky = 0;
-    disposables.add(
-      stickyFilteredEditorGroup2.onDidModelChange((e) => {
-        if (e.kind === GroupModelChangeKind.EDITOR_LABEL) {
-          label2ChangeCounterSticky++;
-        }
-      }),
-    );
-
-    let label2ChangeCounterUnsticky = 0;
-    disposables.add(
-      unstickyFilteredEditorGroup2.onDidModelChange((e) => {
-        if (e.kind === GroupModelChangeKind.EDITOR_LABEL) {
-          label2ChangeCounterUnsticky++;
-        }
-      }),
-    );
-
-    (<TestEditorInput>input1).setDirty();
-    (<TestEditorInput>input1).setLabel();
-
-    assert.strictEqual(dirty1CounterSticky, 0);
-    assert.strictEqual(dirty1CounterUnsticky, 1);
-    assert.strictEqual(label1ChangeCounterSticky, 0);
-    assert.strictEqual(label1ChangeCounterUnsticky, 1);
-
-    (<TestEditorInput>input2).setDirty();
-    (<TestEditorInput>input2).setLabel();
-
-    assert.strictEqual(dirty2CounterSticky, 1);
-    assert.strictEqual(dirty2CounterUnsticky, 0);
-    assert.strictEqual(label2ChangeCounterSticky, 1);
-    assert.strictEqual(label2ChangeCounterUnsticky, 0);
-
-    closeAllEditors(model2);
-
-    (<TestEditorInput>input2).setDirty();
-    (<TestEditorInput>input2).setLabel();
-
-    assert.strictEqual(dirty2CounterSticky, 1);
-    assert.strictEqual(dirty2CounterUnsticky, 0);
-    assert.strictEqual(label2ChangeCounterSticky, 1);
-    assert.strictEqual(label2ChangeCounterUnsticky, 0);
-    assert.strictEqual(dirty1CounterSticky, 0);
-    assert.strictEqual(dirty1CounterUnsticky, 1);
-    assert.strictEqual(label1ChangeCounterSticky, 0);
-    assert.strictEqual(label1ChangeCounterUnsticky, 1);
-  });
-
-  test('Sticky/Unsticky isTransient()', async () => {
-    const model = createEditorGroupModel();
-
-    const stickyFilteredEditorGroup = disposables.add(new StickyEditorGroupModel(model));
-    const unstickyFilteredEditorGroup = disposables.add(new UnstickyEditorGroupModel(model));
-
-    const input1 = input();
-    const input2 = input();
-    const input3 = input();
-    const input4 = input();
-
-    model.openEditor(input1, { pinned: true, transient: false });
-    model.openEditor(input2, { pinned: true });
-    model.openEditor(input3, { pinned: true, transient: true });
-    model.openEditor(input4, { pinned: false, transient: true });
-
-    assert.strictEqual(stickyFilteredEditorGroup.isTransient(input1), false);
-    assert.strictEqual(unstickyFilteredEditorGroup.isTransient(input2), false);
-    assert.strictEqual(stickyFilteredEditorGroup.isTransient(input3), true);
-    assert.strictEqual(unstickyFilteredEditorGroup.isTransient(input4), true);
-  });
-
-  ensureNoDisposablesAreLeakedInTestSuite();
+	ensureNoDisposablesAreLeakedInTestSuite();
 });

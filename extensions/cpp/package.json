@@ -2,7 +2,7 @@
   "name": "cpp",
   "displayName": "%displayName%",
   "description": "%description%",
-  "version": "1.0.0",
+  "version": "10.0.0",
   "publisher": "vscode",
   "license": "MIT",
   "engines": {
@@ -11,9 +11,7 @@
   "scripts": {
     "update-grammar": "node ./build/update-grammars.js"
   },
-  "categories": [
-    "Programming Languages"
-  ],
+  "categories": ["Programming Languages"],
   "contributes": {
     "languages": [
       {
@@ -49,6 +47,8 @@
           ".inl",
           ".ipp",
           ".ixx",
+          ".mpp",
+          ".mxx",
           ".tpp",
           ".txx",
           ".hpp.in",
@@ -111,15 +111,15 @@
       }
     ],
     "problemMatchers": [
-      {
-        "name": "nvcc",
-        "owner": "cuda-cpp",
-        "fileLocation": [
-          "relative",
-          "${workspaceFolder}"
-        ],
-        "pattern": "$nvcc-location"
-      }
+        {
+            "name": "nvcc",
+            "owner": "cuda-cpp",
+            "fileLocation": [
+                "relative",
+                "${workspaceFolder}"
+            ],
+            "pattern": "$nvcc-location"
+        }
     ],
     "snippets": [
       {

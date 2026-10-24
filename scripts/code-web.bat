@@ -9,11 +9,11 @@ pushd %~dp0\..
 call npm run download-builtin-extensions
 
 :: Node executable
-FOR /F "tokens=*" %%g IN ('node build/lib/node.js') do (SET NODE=%%g)
+FOR /F "tokens=*" %%g IN ('node build/lib/node.ts') do (SET NODE=%%g)
 
 if not exist "%NODE%" (
 	:: Download nodejs executable for remote
-	call npm run build:task -- node
+	call npm run gulp node
 )
 
 :: Launch Server

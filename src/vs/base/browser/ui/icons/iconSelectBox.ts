@@ -9,12 +9,7 @@ import { alert } from '../aria/aria.js';
 import { IInputBoxStyles, InputBox } from '../inputbox/inputBox.js';
 import { DomScrollableElement } from '../scrollbar/scrollableElement.js';
 import { Emitter } from '../../../common/event.js';
-import {
-  IDisposable,
-  DisposableStore,
-  Disposable,
-  MutableDisposable,
-} from '../../../common/lifecycle.js';
+import { IDisposable, DisposableStore, Disposable, MutableDisposable } from '../../../common/lifecycle.js';
 import { ThemeIcon } from '../../../common/themables.js';
 import { localize } from '../../../../nls.js';
 import { IMatch } from '../../../common/filters.js';
@@ -22,322 +17,285 @@ import { ScrollbarVisibility } from '../../../common/scrollable.js';
 import { HighlightedLabel } from '../highlightedlabel/highlightedLabel.js';
 
 export interface IIconSelectBoxOptions {
-  readonly icons: ThemeIcon[];
-  readonly inputBoxStyles: IInputBoxStyles;
-  readonly showIconInfo?: boolean;
+	readonly icons: ThemeIcon[];
+	readonly inputBoxStyles: IInputBoxStyles;
+	readonly showIconInfo?: boolean;
 }
 
 interface IRenderedIconItem {
-  readonly icon: ThemeIcon;
-  readonly element: HTMLElement;
-  readonly highlightMatches?: IMatch[];
+	readonly icon: ThemeIcon;
+	readonly element: HTMLElement;
+	readonly highlightMatches?: IMatch[];
 }
 
 export class IconSelectBox extends Disposable {
-  private static InstanceCount = 0;
 
-  readonly domId = `icon_select_box_id_${++IconSelectBox.InstanceCount}`;
+	private static InstanceCount = 0;
+	readonly domId = `icon_select_box_id_${++IconSelectBox.InstanceCount}`;
 
-  readonly domNode: HTMLElement;
+	readonly domNode: HTMLElement;
 
-  private _onDidSelect = this._register(new Emitter<ThemeIcon>());
+	private _onDidSelect = this._register(new Emitter<ThemeIcon>());
+	readonly onDidSelect = this._onDidSelect.event;
 
-  readonly onDidSelect = this._onDidSelect.event;
+	private renderedIcons: IRenderedIconItem[] = [];
 
-  private renderedIcons: IRenderedIconItem[] = [];
+	private focusedItemIndex: number = 0;
+	private numberOfElementsPerRow: number = 1;
 
-  private focusedItemIndex: number = 0;
+	protected inputBox: InputBox | undefined;
+	private scrollableElement: DomScrollableElement | undefined;
+	private iconsContainer: HTMLElement | undefined;
+	private iconIdElement: HighlightedLabel | undefined;
+	private readonly iconContainerWidth = 36;
+	private readonly iconContainerHeight = 36;
 
-  private numberOfElementsPerRow: number = 1;
+	constructor(
+		private readonly options: IIconSelectBoxOptions,
+	) {
+		super();
+		this.domNode = dom.$('.icon-select-box');
+		this._register(this.create());
+	}
 
-  protected inputBox: InputBox | undefined;
+	private create(): IDisposable {
+		const disposables = new DisposableStore();
 
-  private scrollableElement: DomScrollableElement | undefined;
+		const iconSelectBoxContainer = dom.append(this.domNode, dom.$('.icon-select-box-container'));
+		iconSelectBoxContainer.style.margin = '10px 15px';
 
-  private iconsContainer: HTMLElement | undefined;
+		const iconSelectInputContainer = dom.append(iconSelectBoxContainer, dom.$('.icon-select-input-container'));
+		iconSelectInputContainer.style.paddingBottom = '10px';
+		this.inputBox = disposables.add(new InputBox(iconSelectInputContainer, undefined, {
+			placeholder: localize('iconSelect.placeholder', "Search icons"),
+			inputBoxStyles: this.options.inputBoxStyles,
+		}));
 
-  private iconIdElement: HighlightedLabel | undefined;
+		const iconsContainer = this.iconsContainer = dom.$('.icon-select-icons-container', { id: `${this.domId}_icons` });
+		iconsContainer.role = 'listbox';
+		iconsContainer.tabIndex = 0;
+		this.scrollableElement = disposables.add(new DomScrollableElement(iconsContainer, {
+			useShadows: false,
+			horizontal: ScrollbarVisibility.Hidden,
+		}));
+		dom.append(iconSelectBoxContainer, this.scrollableElement.getDomNode());
 
-  private readonly iconContainerWidth = 36;
+		if (this.options.showIconInfo) {
+			this.iconIdElement = this._register(new HighlightedLabel(dom.append(dom.append(iconSelectBoxContainer, dom.$('.icon-select-id-container')), dom.$('.icon-select-id-label'))));
+		}
 
-  private readonly iconContainerHeight = 36;
+		const iconsDisposables = disposables.add(new MutableDisposable());
+		iconsDisposables.value = this.renderIcons(this.options.icons, [], iconsContainer);
+		this.scrollableElement.scanDomNode();
 
-  constructor(private readonly options: IIconSelectBoxOptions) {
-    super();
-    this.domNode = dom.$('.icon-select-box');
-    this._register(this.create());
-  }
+		disposables.add(this.inputBox.onDidChange(value => {
+			const icons = [], matches = [];
+			for (const icon of this.options.icons) {
+				const match = this.matchesContiguous(value, icon.id);
+				if (match) {
+					icons.push(icon);
+					matches.push(match);
+				}
+			}
+			if (icons.length) {
+				iconsDisposables.value = this.renderIcons(icons, matches, iconsContainer);
+				this.scrollableElement?.scanDomNode();
+			}
+		}));
 
-  private create(): IDisposable {
-    const disposables = new DisposableStore();
+		this.inputBox.inputElement.role = 'combobox';
+		this.inputBox.inputElement.ariaHasPopup = 'menu';
+		this.inputBox.inputElement.ariaAutoComplete = 'list';
+		this.inputBox.inputElement.ariaExpanded = 'true';
+		this.inputBox.inputElement.setAttribute('aria-controls', iconsContainer.id);
 
-    const iconSelectBoxContainer = dom.append(this.domNode, dom.$('.icon-select-box-container'));
-    iconSelectBoxContainer.style.margin = '10px 15px';
+		return disposables;
+	}
 
-    const iconSelectInputContainer = dom.append(
-      iconSelectBoxContainer,
-      dom.$('.icon-select-input-container'),
-    );
-    iconSelectInputContainer.style.paddingBottom = '10px';
-    this.inputBox = disposables.add(
-      new InputBox(iconSelectInputContainer, undefined, {
-        placeholder: localize('iconSelect.placeholder', 'Search icons'),
-        inputBoxStyles: this.options.inputBoxStyles,
-      }),
-    );
+	private renderIcons(icons: ThemeIcon[], matches: IMatch[][], container: HTMLElement): IDisposable {
+		const disposables = new DisposableStore();
+		dom.clearNode(container);
+		const focusedIcon = this.renderedIcons[this.focusedItemIndex]?.icon;
+		let focusedIconIndex = 0;
+		const renderedIcons: IRenderedIconItem[] = [];
+		if (icons.length) {
+			for (let index = 0; index < icons.length; index++) {
+				const icon = icons[index];
+				const iconContainer = dom.append(container, dom.$('.icon-container', { id: `${this.domId}_icons_${index}` }));
+				iconContainer.style.width = `${this.iconContainerWidth}px`;
+				iconContainer.style.height = `${this.iconContainerHeight}px`;
+				iconContainer.title = icon.id;
+				iconContainer.role = 'button';
+				iconContainer.setAttribute('aria-setsize', `${icons.length}`);
+				iconContainer.setAttribute('aria-posinset', `${index + 1}`);
+				dom.append(iconContainer, dom.$(ThemeIcon.asCSSSelector(icon)));
+				renderedIcons.push({ icon, element: iconContainer, highlightMatches: matches[index] });
 
-    const iconsContainer = (this.iconsContainer = dom.$('.icon-select-icons-container', {
-      id: `${this.domId}_icons`,
-    }));
-    iconsContainer.role = 'listbox';
-    iconsContainer.tabIndex = 0;
-    this.scrollableElement = disposables.add(
-      new DomScrollableElement(iconsContainer, {
-        useShadows: false,
-        horizontal: ScrollbarVisibility.Hidden,
-      }),
-    );
-    dom.append(iconSelectBoxContainer, this.scrollableElement.getDomNode());
+				disposables.add(dom.addDisposableListener(iconContainer, dom.EventType.CLICK, (e: MouseEvent) => {
+					e.stopPropagation();
+					this.setSelection(index);
+				}));
 
-    if (this.options.showIconInfo) {
-      this.iconIdElement = this._register(
-        new HighlightedLabel(
-          dom.append(
-            dom.append(iconSelectBoxContainer, dom.$('.icon-select-id-container')),
-            dom.$('.icon-select-id-label'),
-          ),
-        ),
-      );
-    }
+				if (icon === focusedIcon) {
+					focusedIconIndex = index;
+				}
+			}
+		} else {
+			const noResults = localize('iconSelect.noResults', "No results");
+			dom.append(container, dom.$('.icon-no-results', undefined, noResults));
+			alert(noResults);
+		}
 
-    const iconsDisposables = disposables.add(new MutableDisposable());
-    iconsDisposables.value = this.renderIcons(this.options.icons, [], iconsContainer);
-    this.scrollableElement.scanDomNode();
+		this.renderedIcons.splice(0, this.renderedIcons.length, ...renderedIcons);
+		this.focusIcon(focusedIconIndex);
 
-    disposables.add(
-      this.inputBox.onDidChange((value) => {
-        const icons = [];
-        const matches = [];
-        for (const icon of this.options.icons) {
-          const match = this.matchesContiguous(value, icon.id);
-          if (match) {
-            icons.push(icon);
-            matches.push(match);
-          }
-        }
-        if (icons.length) {
-          iconsDisposables.value = this.renderIcons(icons, matches, iconsContainer);
-          this.scrollableElement?.scanDomNode();
-        }
-      }),
-    );
+		return disposables;
+	}
 
-    this.inputBox.inputElement.role = 'combobox';
-    this.inputBox.inputElement.ariaHasPopup = 'menu';
-    this.inputBox.inputElement.ariaAutoComplete = 'list';
-    this.inputBox.inputElement.ariaExpanded = 'true';
-    this.inputBox.inputElement.setAttribute('aria-controls', iconsContainer.id);
+	private focusIcon(index: number): void {
+		const existing = this.renderedIcons[this.focusedItemIndex];
+		if (existing) {
+			existing.element.classList.remove('focused');
+		}
 
-    return disposables;
-  }
+		this.focusedItemIndex = index;
+		const renderedItem = this.renderedIcons[index];
 
-  private renderIcons(
-    icons: ThemeIcon[],
-    matches: IMatch[][],
-    container: HTMLElement,
-  ): IDisposable {
-    const disposables = new DisposableStore();
-    dom.clearNode(container);
-    const focusedIcon = this.renderedIcons[this.focusedItemIndex]?.icon;
-    let focusedIconIndex = 0;
-    const renderedIcons: IRenderedIconItem[] = [];
-    if (icons.length) {
-      for (let index = 0; index < icons.length; index++) {
-        const icon = icons[index];
-        const iconContainer = dom.append(
-          container,
-          dom.$('.icon-container', { id: `${this.domId}_icons_${index}` }),
-        );
-        iconContainer.style.width = `${this.iconContainerWidth}px`;
-        iconContainer.style.height = `${this.iconContainerHeight}px`;
-        iconContainer.title = icon.id;
-        iconContainer.role = 'button';
-        iconContainer.setAttribute('aria-setsize', `${icons.length}`);
-        iconContainer.setAttribute('aria-posinset', `${index + 1}`);
-        dom.append(iconContainer, dom.$(ThemeIcon.asCSSSelector(icon)));
-        renderedIcons.push({ icon, element: iconContainer, highlightMatches: matches[index] });
+		if (renderedItem) {
+			renderedItem.element.classList.add('focused');
+		}
 
-        disposables.add(
-          dom.addDisposableListener(iconContainer, dom.EventType.CLICK, (e: MouseEvent) => {
-            e.stopPropagation();
-            this.setSelection(index);
-          }),
-        );
+		if (this.inputBox) {
+			if (renderedItem) {
+				this.inputBox.inputElement.setAttribute('aria-activedescendant', renderedItem.element.id);
+			} else {
+				this.inputBox.inputElement.removeAttribute('aria-activedescendant');
+			}
+		}
 
-        if (icon === focusedIcon) {
-          focusedIconIndex = index;
-        }
-      }
-    } else {
-      const noResults = localize('iconSelect.noResults', 'No results');
-      dom.append(container, dom.$('.icon-no-results', undefined, noResults));
-      alert(noResults);
-    }
+		if (this.iconIdElement) {
+			if (renderedItem) {
+				this.iconIdElement.set(renderedItem.icon.id, renderedItem.highlightMatches);
+			} else {
+				this.iconIdElement.set('');
+			}
+		}
 
-    this.renderedIcons.splice(0, this.renderedIcons.length, ...renderedIcons);
-    this.focusIcon(focusedIconIndex);
+		this.reveal(index);
+	}
 
-    return disposables;
-  }
+	private reveal(index: number): void {
+		if (!this.scrollableElement) {
+			return;
+		}
+		if (index < 0 || index >= this.renderedIcons.length) {
+			return;
+		}
+		const element = this.renderedIcons[index].element;
+		if (!element) {
+			return;
+		}
+		const { height } = this.scrollableElement.getScrollDimensions();
+		const { scrollTop } = this.scrollableElement.getScrollPosition();
+		if (element.offsetTop + this.iconContainerHeight > scrollTop + height) {
+			this.scrollableElement.setScrollPosition({ scrollTop: element.offsetTop + this.iconContainerHeight - height });
+		} else if (element.offsetTop < scrollTop) {
+			this.scrollableElement.setScrollPosition({ scrollTop: element.offsetTop });
+		}
+	}
 
-  private focusIcon(index: number): void {
-    const existing = this.renderedIcons[this.focusedItemIndex];
-    if (existing) {
-      existing.element.classList.remove('focused');
-    }
+	private matchesContiguous(word: string, wordToMatchAgainst: string): IMatch[] | null {
+		const matchIndex = wordToMatchAgainst.toLowerCase().indexOf(word.toLowerCase());
+		if (matchIndex !== -1) {
+			return [{ start: matchIndex, end: matchIndex + word.length }];
+		}
+		return null;
+	}
 
-    this.focusedItemIndex = index;
-    const renderedItem = this.renderedIcons[index];
+	layout(dimension: dom.Dimension): void {
+		this.domNode.style.width = `${dimension.width}px`;
+		this.domNode.style.height = `${dimension.height}px`;
 
-    if (renderedItem) {
-      renderedItem.element.classList.add('focused');
-    }
+		const iconsContainerWidth = dimension.width - 30;
+		this.numberOfElementsPerRow = Math.floor(iconsContainerWidth / this.iconContainerWidth);
+		if (this.numberOfElementsPerRow === 0) {
+			throw new Error('Insufficient width');
+		}
 
-    if (this.inputBox) {
-      if (renderedItem) {
-        this.inputBox.inputElement.setAttribute('aria-activedescendant', renderedItem.element.id);
-      } else {
-        this.inputBox.inputElement.removeAttribute('aria-activedescendant');
-      }
-    }
+		const extraSpace = iconsContainerWidth % this.iconContainerWidth;
+		const iconElementMargin = Math.floor(extraSpace / this.numberOfElementsPerRow);
+		for (const { element } of this.renderedIcons) {
+			element.style.marginRight = `${iconElementMargin}px`;
+		}
 
-    if (this.iconIdElement) {
-      if (renderedItem) {
-        this.iconIdElement.set(renderedItem.icon.id, renderedItem.highlightMatches);
-      } else {
-        this.iconIdElement.set('');
-      }
-    }
+		const containerPadding = extraSpace % this.numberOfElementsPerRow;
+		if (this.iconsContainer) {
+			this.iconsContainer.style.paddingLeft = `${Math.floor(containerPadding / 2)}px`;
+			this.iconsContainer.style.paddingRight = `${Math.ceil(containerPadding / 2)}px`;
+		}
 
-    this.reveal(index);
-  }
+		if (this.scrollableElement) {
+			this.scrollableElement.getDomNode().style.height = `${this.iconIdElement ? dimension.height - 80 : dimension.height - 40}px`;
+			this.scrollableElement.scanDomNode();
+		}
+	}
 
-  private reveal(index: number): void {
-    if (!this.scrollableElement) {
-      return;
-    }
-    if (index < 0 || index >= this.renderedIcons.length) {
-      return;
-    }
-    const element = this.renderedIcons[index].element;
-    if (!element) {
-      return;
-    }
-    const { height } = this.scrollableElement.getScrollDimensions();
-    const { scrollTop } = this.scrollableElement.getScrollPosition();
-    if (element.offsetTop + this.iconContainerHeight > scrollTop + height) {
-      this.scrollableElement.setScrollPosition({
-        scrollTop: element.offsetTop + this.iconContainerHeight - height,
-      });
-    } else if (element.offsetTop < scrollTop) {
-      this.scrollableElement.setScrollPosition({ scrollTop: element.offsetTop });
-    }
-  }
+	getFocus(): number[] {
+		return [this.focusedItemIndex];
+	}
 
-  private matchesContiguous(word: string, wordToMatchAgainst: string): IMatch[] | null {
-    const matchIndex = wordToMatchAgainst.toLowerCase().indexOf(word.toLowerCase());
-    if (matchIndex !== -1) {
-      return [{ start: matchIndex, end: matchIndex + word.length }];
-    }
-    return null;
-  }
+	setSelection(index: number): void {
+		if (index < 0 || index >= this.renderedIcons.length) {
+			throw new Error(`Invalid index ${index}`);
+		}
+		this.focusIcon(index);
+		this._onDidSelect.fire(this.renderedIcons[index].icon);
+	}
 
-  layout(dimension: dom.Dimension): void {
-    this.domNode.style.width = `${dimension.width}px`;
-    this.domNode.style.height = `${dimension.height}px`;
+	clearInput(): void {
+		if (this.inputBox) {
+			this.inputBox.value = '';
+		}
+	}
 
-    const iconsContainerWidth = dimension.width - 30;
-    this.numberOfElementsPerRow = Math.floor(iconsContainerWidth / this.iconContainerWidth);
-    if (this.numberOfElementsPerRow === 0) {
-      throw new Error('Insufficient width');
-    }
+	focus(): void {
+		this.inputBox?.focus();
+		this.focusIcon(0);
+	}
 
-    const extraSpace = iconsContainerWidth % this.iconContainerWidth;
-    const iconElementMargin = Math.floor(extraSpace / this.numberOfElementsPerRow);
-    for (const { element } of this.renderedIcons) {
-      element.style.marginRight = `${iconElementMargin}px`;
-    }
+	focusNext(): void {
+		this.focusIcon((this.focusedItemIndex + 1) % this.renderedIcons.length);
+	}
 
-    const containerPadding = extraSpace % this.numberOfElementsPerRow;
-    if (this.iconsContainer) {
-      this.iconsContainer.style.paddingLeft = `${Math.floor(containerPadding / 2)}px`;
-      this.iconsContainer.style.paddingRight = `${Math.ceil(containerPadding / 2)}px`;
-    }
+	focusPrevious(): void {
+		this.focusIcon((this.focusedItemIndex - 1 + this.renderedIcons.length) % this.renderedIcons.length);
+	}
 
-    if (this.scrollableElement) {
-      this.scrollableElement.getDomNode().style.height = `${this.iconIdElement ? dimension.height - 80 : dimension.height - 40}px`;
-      this.scrollableElement.scanDomNode();
-    }
-  }
+	focusNextRow(): void {
+		let nextRowIndex = this.focusedItemIndex + this.numberOfElementsPerRow;
+		if (nextRowIndex >= this.renderedIcons.length) {
+			nextRowIndex = (nextRowIndex + 1) % this.numberOfElementsPerRow;
+			nextRowIndex = nextRowIndex >= this.renderedIcons.length ? 0 : nextRowIndex;
+		}
+		this.focusIcon(nextRowIndex);
+	}
 
-  getFocus(): number[] {
-    return [this.focusedItemIndex];
-  }
+	focusPreviousRow(): void {
+		let previousRowIndex = this.focusedItemIndex - this.numberOfElementsPerRow;
+		if (previousRowIndex < 0) {
+			const numberOfRows = Math.floor(this.renderedIcons.length / this.numberOfElementsPerRow);
+			previousRowIndex = this.focusedItemIndex + (this.numberOfElementsPerRow * numberOfRows) - 1;
+			previousRowIndex = previousRowIndex < 0
+				? this.renderedIcons.length - 1
+				: previousRowIndex >= this.renderedIcons.length
+					? previousRowIndex - this.numberOfElementsPerRow
+					: previousRowIndex;
+		}
+		this.focusIcon(previousRowIndex);
+	}
 
-  setSelection(index: number): void {
-    if (index < 0 || index >= this.renderedIcons.length) {
-      throw new Error(`Invalid index ${index}`);
-    }
-    this.focusIcon(index);
-    this._onDidSelect.fire(this.renderedIcons[index].icon);
-  }
+	getFocusedIcon(): ThemeIcon {
+		return this.renderedIcons[this.focusedItemIndex].icon;
+	}
 
-  clearInput(): void {
-    if (this.inputBox) {
-      this.inputBox.value = '';
-    }
-  }
-
-  focus(): void {
-    this.inputBox?.focus();
-    this.focusIcon(0);
-  }
-
-  focusNext(): void {
-    this.focusIcon((this.focusedItemIndex + 1) % this.renderedIcons.length);
-  }
-
-  focusPrevious(): void {
-    this.focusIcon(
-      (this.focusedItemIndex - 1 + this.renderedIcons.length) % this.renderedIcons.length,
-    );
-  }
-
-  focusNextRow(): void {
-    let nextRowIndex = this.focusedItemIndex + this.numberOfElementsPerRow;
-    if (nextRowIndex >= this.renderedIcons.length) {
-      nextRowIndex = (nextRowIndex + 1) % this.numberOfElementsPerRow;
-      nextRowIndex = nextRowIndex >= this.renderedIcons.length ? 0 : nextRowIndex;
-    }
-    this.focusIcon(nextRowIndex);
-  }
-
-  focusPreviousRow(): void {
-    let previousRowIndex = this.focusedItemIndex - this.numberOfElementsPerRow;
-    if (previousRowIndex < 0) {
-      const numberOfRows = Math.floor(this.renderedIcons.length / this.numberOfElementsPerRow);
-      previousRowIndex = this.focusedItemIndex + this.numberOfElementsPerRow * numberOfRows - 1;
-      previousRowIndex =
-        previousRowIndex < 0
-          ? this.renderedIcons.length - 1
-          : previousRowIndex >= this.renderedIcons.length
-            ? previousRowIndex - this.numberOfElementsPerRow
-            : previousRowIndex;
-    }
-    this.focusIcon(previousRowIndex);
-  }
-
-  getFocusedIcon(): ThemeIcon {
-    return this.renderedIcons[this.focusedItemIndex].icon;
-  }
 }

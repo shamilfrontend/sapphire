@@ -5,17 +5,8 @@
 
 import { Event, Emitter } from '../../../../base/common/event.js';
 import { VSBufferReadableStream } from '../../../../base/common/buffer.js';
-import {
-  IWorkingCopyBackup,
-  IWorkingCopySaveEvent,
-  WorkingCopyCapabilities,
-} from './workingCopy.js';
-import {
-  IFileWorkingCopy,
-  IFileWorkingCopyModel,
-  IFileWorkingCopyModelFactory,
-  SnapshotContext,
-} from './fileWorkingCopy.js';
+import { IWorkingCopyBackup, IWorkingCopySaveEvent, WorkingCopyCapabilities } from './workingCopy.js';
+import { IFileWorkingCopy, IFileWorkingCopyModel, IFileWorkingCopyModelFactory, SnapshotContext } from './fileWorkingCopy.js';
 import { Disposable } from '../../../../base/common/lifecycle.js';
 import { URI } from '../../../../base/common/uri.js';
 import { IWorkingCopyService } from './workingCopyService.js';
@@ -29,9 +20,7 @@ import { emptyStream } from '../../../../base/common/stream.js';
 /**
  * Untitled file specific working copy model factory.
  */
-export interface IUntitledFileWorkingCopyModelFactory<
-  M extends IUntitledFileWorkingCopyModel,
-> extends IFileWorkingCopyModelFactory<M> {}
+export interface IUntitledFileWorkingCopyModelFactory<M extends IUntitledFileWorkingCopyModel> extends IFileWorkingCopyModelFactory<M> { }
 
 /**
  * The underlying model of a untitled file working copy provides
@@ -40,317 +29,301 @@ export interface IUntitledFileWorkingCopyModelFactory<
  * has been resolved via it's `resolve()` method.
  */
 export interface IUntitledFileWorkingCopyModel extends IFileWorkingCopyModel {
-  readonly onDidChangeContent: Event<IUntitledFileWorkingCopyModelContentChangedEvent>;
+
+	readonly onDidChangeContent: Event<IUntitledFileWorkingCopyModelContentChangedEvent>;
 }
 
 export interface IUntitledFileWorkingCopyModelContentChangedEvent {
-  /**
-   * Flag that indicates that the content change should
-   * clear the dirty/modified flags, e.g. because the contents are
-   * back to being empty or back to an initial state that
-   * should not be considered as modified.
-   */
-  readonly isInitial: boolean;
+
+	/**
+	 * Flag that indicates that the content change should
+	 * clear the dirty/modified flags, e.g. because the contents are
+	 * back to being empty or back to an initial state that
+	 * should not be considered as modified.
+	 */
+	readonly isInitial: boolean;
 }
 
-export interface IUntitledFileWorkingCopy<
-  M extends IUntitledFileWorkingCopyModel,
-> extends IFileWorkingCopy<M> {
-  /**
-   * Whether this untitled file working copy model has an associated file path.
-   */
-  readonly hasAssociatedFilePath: boolean;
+export interface IUntitledFileWorkingCopy<M extends IUntitledFileWorkingCopyModel> extends IFileWorkingCopy<M> {
 
-  /**
-   * Whether we have a resolved model or not.
-   */
-  isResolved(): this is IResolvedUntitledFileWorkingCopy<M>;
+	/**
+	 * Whether this untitled file working copy model has an associated file path.
+	 */
+	readonly hasAssociatedFilePath: boolean;
+
+	/**
+	 * Whether we have a resolved model or not.
+	 */
+	isResolved(): this is IResolvedUntitledFileWorkingCopy<M>;
 }
 
-export interface IResolvedUntitledFileWorkingCopy<
-  M extends IUntitledFileWorkingCopyModel,
-> extends IUntitledFileWorkingCopy<M> {
-  /**
-   * A resolved untitled file working copy has a resolved model.
-   */
-  readonly model: M;
+export interface IResolvedUntitledFileWorkingCopy<M extends IUntitledFileWorkingCopyModel> extends IUntitledFileWorkingCopy<M> {
+
+	/**
+	 * A resolved untitled file working copy has a resolved model.
+	 */
+	readonly model: M;
 }
 
 export interface IUntitledFileWorkingCopySaveDelegate<M extends IUntitledFileWorkingCopyModel> {
-  /**
-   * A delegate to enable saving of untitled file working copies.
-   */
-  (workingCopy: IUntitledFileWorkingCopy<M>, options?: ISaveOptions): Promise<boolean>;
+
+	/**
+	 * A delegate to enable saving of untitled file working copies.
+	 */
+	(workingCopy: IUntitledFileWorkingCopy<M>, options?: ISaveOptions): Promise<boolean>;
 }
 
 export interface IUntitledFileWorkingCopyInitialContents {
-  /**
-   * The initial contents of the untitled file working copy.
-   */
-  readonly value: VSBufferReadableStream;
 
-  /**
-   * If not provided, the untitled file working copy will be marked
-   * modified by default given initial contents are provided.
-   *
-   * Note: if the untitled file working copy has an associated path
-   * the modified state will always be set.
-   */
-  readonly markModified?: boolean;
+	/**
+	 * The initial contents of the untitled file working copy.
+	 */
+	readonly value: VSBufferReadableStream;
+
+	/**
+	 * If not provided, the untitled file working copy will be marked
+	 * modified by default given initial contents are provided.
+	 *
+	 * Note: if the untitled file working copy has an associated path
+	 * the modified state will always be set.
+	 */
+	readonly markModified?: boolean;
 }
 
-export class UntitledFileWorkingCopy<M extends IUntitledFileWorkingCopyModel>
-  extends Disposable
-  implements IUntitledFileWorkingCopy<M>
-{
-  readonly capabilities: WorkingCopyCapabilities;
+export class UntitledFileWorkingCopy<M extends IUntitledFileWorkingCopyModel> extends Disposable implements IUntitledFileWorkingCopy<M> {
 
-  private _model: M | undefined = undefined;
+	readonly capabilities: WorkingCopyCapabilities;
 
-  get model(): M | undefined {
-    return this._model;
-  }
+	private _model: M | undefined = undefined;
+	get model(): M | undefined { return this._model; }
 
-  // #region Events
+	//#region Events
 
-  private readonly _onDidChangeContent = this._register(new Emitter<void>());
+	private readonly _onDidChangeContent = this._register(new Emitter<void>());
+	readonly onDidChangeContent = this._onDidChangeContent.event;
 
-  readonly onDidChangeContent = this._onDidChangeContent.event;
+	private readonly _onDidChangeDirty = this._register(new Emitter<void>());
+	readonly onDidChangeDirty = this._onDidChangeDirty.event;
 
-  private readonly _onDidChangeDirty = this._register(new Emitter<void>());
+	private readonly _onDidSave = this._register(new Emitter<IWorkingCopySaveEvent>());
+	readonly onDidSave = this._onDidSave.event;
 
-  readonly onDidChangeDirty = this._onDidChangeDirty.event;
+	private readonly _onDidRevert = this._register(new Emitter<void>());
+	readonly onDidRevert = this._onDidRevert.event;
 
-  private readonly _onDidSave = this._register(new Emitter<IWorkingCopySaveEvent>());
+	private readonly _onWillDispose = this._register(new Emitter<void>());
+	readonly onWillDispose = this._onWillDispose.event;
 
-  readonly onDidSave = this._onDidSave.event;
+	//#endregion
 
-  private readonly _onDidRevert = this._register(new Emitter<void>());
+	constructor(
+		readonly typeId: string,
+		readonly resource: URI,
+		readonly name: string,
+		readonly hasAssociatedFilePath: boolean,
+		private readonly isScratchpad: boolean,
+		private readonly initialContents: IUntitledFileWorkingCopyInitialContents | undefined,
+		private readonly modelFactory: IUntitledFileWorkingCopyModelFactory<M>,
+		private readonly saveDelegate: IUntitledFileWorkingCopySaveDelegate<M>,
+		@IWorkingCopyService workingCopyService: IWorkingCopyService,
+		@IWorkingCopyBackupService private readonly workingCopyBackupService: IWorkingCopyBackupService,
+		@ILogService private readonly logService: ILogService
+	) {
+		super();
 
-  readonly onDidRevert = this._onDidRevert.event;
+		this.capabilities = this.isScratchpad ? WorkingCopyCapabilities.Untitled | WorkingCopyCapabilities.Scratchpad : WorkingCopyCapabilities.Untitled;
+		this.modified = this.hasAssociatedFilePath || Boolean(this.initialContents && this.initialContents.markModified !== false);
 
-  private readonly _onWillDispose = this._register(new Emitter<void>());
+		// Make known to working copy service
+		this._register(workingCopyService.registerWorkingCopy(this));
+	}
 
-  readonly onWillDispose = this._onWillDispose.event;
+	//#region Dirty/Modified
 
-  // #endregion
+	private modified: boolean;
 
-  constructor(
-    readonly typeId: string,
-    readonly resource: URI,
-    readonly name: string,
-    readonly hasAssociatedFilePath: boolean,
-    private readonly isScratchpad: boolean,
-    private readonly initialContents: IUntitledFileWorkingCopyInitialContents | undefined,
-    private readonly modelFactory: IUntitledFileWorkingCopyModelFactory<M>,
-    private readonly saveDelegate: IUntitledFileWorkingCopySaveDelegate<M>,
-    @IWorkingCopyService workingCopyService: IWorkingCopyService,
-    @IWorkingCopyBackupService private readonly workingCopyBackupService: IWorkingCopyBackupService,
-    @ILogService private readonly logService: ILogService,
-  ) {
-    super();
+	isDirty(): boolean {
+		return this.modified && !this.isScratchpad; // Scratchpad working copies are never dirty
+	}
 
-    this.capabilities = this.isScratchpad
-      ? WorkingCopyCapabilities.Untitled | WorkingCopyCapabilities.Scratchpad
-      : WorkingCopyCapabilities.Untitled;
-    this.modified =
-      this.hasAssociatedFilePath ||
-      Boolean(this.initialContents && this.initialContents.markModified !== false);
+	isModified(): boolean {
+		return this.modified;
+	}
 
-    // Make known to working copy service
-    this._register(workingCopyService.registerWorkingCopy(this));
-  }
+	private setModified(modified: boolean): void {
+		if (this.modified === modified) {
+			return;
+		}
 
-  // #region Dirty/Modified
+		this.modified = modified;
+		if (!this.isScratchpad) {
+			this._onDidChangeDirty.fire();
+		}
+	}
 
-  private modified: boolean;
+	//#endregion
 
-  isDirty(): boolean {
-    return this.modified && !this.isScratchpad; // Scratchpad working copies are never dirty
-  }
 
-  isModified(): boolean {
-    return this.modified;
-  }
+	//#region Resolve
 
-  private setModified(modified: boolean): void {
-    if (this.modified === modified) {
-      return;
-    }
+	async resolve(): Promise<void> {
+		this.trace('resolve()');
 
-    this.modified = modified;
-    if (!this.isScratchpad) {
-      this._onDidChangeDirty.fire();
-    }
-  }
+		if (this.isResolved()) {
+			this.trace('resolve() - exit (already resolved)');
 
-  // #endregion
+			// return early if the untitled file working copy is already
+			// resolved assuming that the contents have meanwhile changed
+			// in the underlying model. we only resolve untitled once.
+			return;
+		}
 
-  // #region Resolve
+		let untitledContents: VSBufferReadableStream;
 
-  async resolve(): Promise<void> {
-    this.trace('resolve()');
+		// Check for backups or use initial value or empty
+		const backup = await this.workingCopyBackupService.resolve(this);
+		if (backup) {
+			this.trace('resolve() - with backup');
 
-    if (this.isResolved()) {
-      this.trace('resolve() - exit (already resolved)');
+			untitledContents = backup.value;
+		} else if (this.initialContents?.value) {
+			this.trace('resolve() - with initial contents');
 
-      // return early if the untitled file working copy is already
-      // resolved assuming that the contents have meanwhile changed
-      // in the underlying model. we only resolve untitled once.
-      return;
-    }
+			untitledContents = this.initialContents.value;
+		} else {
+			this.trace('resolve() - empty');
 
-    let untitledContents: VSBufferReadableStream;
-
-    // Check for backups or use initial value or empty
-    const backup = await this.workingCopyBackupService.resolve(this);
-    if (backup) {
-      this.trace('resolve() - with backup');
-
-      untitledContents = backup.value;
-    } else if (this.initialContents?.value) {
-      this.trace('resolve() - with initial contents');
+			untitledContents = emptyStream();
+		}
 
-      untitledContents = this.initialContents.value;
-    } else {
-      this.trace('resolve() - empty');
+		// Create model
+		await this.doCreateModel(untitledContents);
 
-      untitledContents = emptyStream();
-    }
+		// Untitled associated to file path are modified right away as well as untitled with content
+		this.setModified(this.hasAssociatedFilePath || !!backup || Boolean(this.initialContents && this.initialContents.markModified !== false));
 
-    // Create model
-    await this.doCreateModel(untitledContents);
+		// If we have initial contents, make sure to emit this
+		// as the appropriate events to the outside.
+		if (!!backup || this.initialContents) {
+			this._onDidChangeContent.fire();
+		}
+	}
 
-    // Untitled associated to file path are modified right away as well as untitled with content
-    this.setModified(
-      this.hasAssociatedFilePath ||
-        !!backup ||
-        Boolean(this.initialContents && this.initialContents.markModified !== false),
-    );
+	private async doCreateModel(contents: VSBufferReadableStream): Promise<void> {
+		this.trace('doCreateModel()');
 
-    // If we have initial contents, make sure to emit this
-    // as the appropriate events to the outside.
-    if (!!backup || this.initialContents) {
-      this._onDidChangeContent.fire();
-    }
-  }
+		// Create model and dispose it when we get disposed
+		this._model = this._register(await this.modelFactory.createModel(this.resource, contents, CancellationToken.None));
 
-  private async doCreateModel(contents: VSBufferReadableStream): Promise<void> {
-    this.trace('doCreateModel()');
+		// Model listeners
+		this.installModelListeners(this._model);
+	}
 
-    // Create model and dispose it when we get disposed
-    this._model = this._register(
-      await this.modelFactory.createModel(this.resource, contents, CancellationToken.None),
-    );
+	private installModelListeners(model: M): void {
 
-    // Model listeners
-    this.installModelListeners(this._model);
-  }
+		// Content Change
+		this._register(model.onDidChangeContent(e => this.onModelContentChanged(e)));
 
-  private installModelListeners(model: M): void {
-    // Content Change
-    this._register(model.onDidChangeContent((e) => this.onModelContentChanged(e)));
+		// Lifecycle
+		this._register(model.onWillDispose(() => this.dispose()));
+	}
 
-    // Lifecycle
-    this._register(model.onWillDispose(() => this.dispose()));
-  }
+	private onModelContentChanged(e: IUntitledFileWorkingCopyModelContentChangedEvent): void {
 
-  private onModelContentChanged(e: IUntitledFileWorkingCopyModelContentChangedEvent): void {
-    // Mark the untitled file working copy as non-modified once its
-    // in case provided by the change event and in case we do not
-    // have an associated path set
-    if (!this.hasAssociatedFilePath && e.isInitial) {
-      this.setModified(false);
-    }
+		// Mark the untitled file working copy as non-modified once its
+		// in case provided by the change event and in case we do not
+		// have an associated path set
+		if (!this.hasAssociatedFilePath && e.isInitial) {
+			this.setModified(false);
+		}
 
-    // Turn modified otherwise
-    else {
-      this.setModified(true);
-    }
+		// Turn modified otherwise
+		else {
+			this.setModified(true);
+		}
 
-    // Emit as general content change event
-    this._onDidChangeContent.fire();
-  }
+		// Emit as general content change event
+		this._onDidChangeContent.fire();
+	}
 
-  isResolved(): this is IResolvedUntitledFileWorkingCopy<M> {
-    return !!this.model;
-  }
+	isResolved(): this is IResolvedUntitledFileWorkingCopy<M> {
+		return !!this.model;
+	}
 
-  // #endregion
+	//#endregion
 
-  // #region Backup
 
-  get backupDelay(): number | undefined {
-    return this.model?.configuration?.backupDelay;
-  }
+	//#region Backup
 
-  async backup(token: CancellationToken): Promise<IWorkingCopyBackup> {
-    let content: VSBufferReadableStream | undefined;
+	get backupDelay(): number | undefined {
+		return this.model?.configuration?.backupDelay;
+	}
 
-    // Make sure to check whether this working copy has been
-    // resolved or not and fallback to the initial value -
-    // if any - to prevent backing up an unresolved working
-    // copy and loosing the initial value.
-    if (this.isResolved()) {
-      content = await raceCancellation(this.model.snapshot(SnapshotContext.Backup, token), token);
-    } else if (this.initialContents) {
-      content = this.initialContents.value;
-    }
+	async backup(token: CancellationToken): Promise<IWorkingCopyBackup> {
+		let content: VSBufferReadableStream | undefined = undefined;
 
-    return { content };
-  }
+		// Make sure to check whether this working copy has been
+		// resolved or not and fallback to the initial value -
+		// if any - to prevent backing up an unresolved working
+		// copy and loosing the initial value.
+		if (this.isResolved()) {
+			content = await raceCancellation(this.model.snapshot(SnapshotContext.Backup, token), token);
+		} else if (this.initialContents) {
+			content = this.initialContents.value;
+		}
 
-  // #endregion
+		return { content };
+	}
 
-  // #region Save
+	//#endregion
 
-  async save(options?: ISaveOptions): Promise<boolean> {
-    this.trace('save()');
 
-    const result = await this.saveDelegate(this, options);
+	//#region Save
 
-    // Emit Save Event
-    if (result) {
-      this._onDidSave.fire({ reason: options?.reason, source: options?.source });
-    }
+	async save(options?: ISaveOptions): Promise<boolean> {
+		this.trace('save()');
 
-    return result;
-  }
+		const result = await this.saveDelegate(this, options);
 
-  // #endregion
+		// Emit Save Event
+		if (result) {
+			this._onDidSave.fire({ reason: options?.reason, source: options?.source });
+		}
 
-  // #region Revert
+		return result;
+	}
 
-  async revert(): Promise<void> {
-    this.trace('revert()');
+	//#endregion
 
-    // No longer modified
-    this.setModified(false);
 
-    // Emit as event
-    this._onDidRevert.fire();
+	//#region Revert
 
-    // A reverted untitled file working copy is invalid
-    // because it has no actual source on disk to revert to.
-    // As such we dispose the model.
-    this.dispose();
-  }
+	async revert(): Promise<void> {
+		this.trace('revert()');
 
-  // #endregion
+		// No longer modified
+		this.setModified(false);
 
-  override dispose(): void {
-    this.trace('dispose()');
+		// Emit as event
+		this._onDidRevert.fire();
 
-    this._onWillDispose.fire();
+		// A reverted untitled file working copy is invalid
+		// because it has no actual source on disk to revert to.
+		// As such we dispose the model.
+		this.dispose();
+	}
 
-    super.dispose();
-  }
+	//#endregion
 
-  private trace(msg: string): void {
-    this.logService.trace(
-      `[untitled file working copy] ${msg}`,
-      this.resource.toString(),
-      this.typeId,
-    );
-  }
+	override dispose(): void {
+		this.trace('dispose()');
+
+		this._onWillDispose.fire();
+
+		super.dispose();
+	}
+
+	private trace(msg: string): void {
+		this.logService.trace(`[untitled file working copy] ${msg}`, this.resource.toString(), this.typeId);
+	}
 }

@@ -9,8 +9,12 @@
       "type": "extensionHost",
       "request": "launch",
       "skipFiles": ["<node_internals>/**"],
-      "args": ["--extensionDevelopmentPath=${workspaceFolder}"],
-      "outFiles": ["${workspaceFolder}/out/**/*.js"]
+      "args": [
+        "--extensionDevelopmentPath=${workspaceFolder}",
+      ],
+      "outFiles": [
+        "${workspaceFolder}/out/**/*.js",
+      ],
     }
   ]
 }

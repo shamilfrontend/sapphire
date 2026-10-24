@@ -16,85 +16,85 @@ import { timeout } from '../../../../base/common/async.js';
 import { runWithFakedTimers } from '../../../../base/test/common/timeTravelScheduler.js';
 
 suite('ExtHostDocumentContentProvider', () => {
-  ensureNoDisposablesAreLeakedInTestSuite();
 
-  const resource = URI.parse('foo:bar');
-  let documentContentProvider: ExtHostDocumentContentProvider;
-  let mainThreadContentProvider: MainThreadDocumentContentProvidersShape;
-  const changes: [uri: UriComponents, value: string][] = [];
+	ensureNoDisposablesAreLeakedInTestSuite();
 
-  setup(() => {
-    changes.length = 0;
+	const resource = URI.parse('foo:bar');
+	let documentContentProvider: ExtHostDocumentContentProvider;
+	let mainThreadContentProvider: MainThreadDocumentContentProvidersShape;
+	const changes: [uri: UriComponents, value: string][] = [];
 
-    mainThreadContentProvider = new (class implements MainThreadDocumentContentProvidersShape {
-      $registerTextContentProvider(handle: number, scheme: string): void {}
+	setup(() => {
 
-      $unregisterTextContentProvider(handle: number): void {}
+		changes.length = 0;
 
-      async $onVirtualDocumentChange(uri: UriComponents, value: string): Promise<void> {
-        await timeout(10);
-        changes.push([uri, value]);
-      }
+		mainThreadContentProvider = new class implements MainThreadDocumentContentProvidersShape {
+			$registerTextContentProvider(handle: number, scheme: string): void {
 
-      dispose(): void {
-        throw new Error('Method not implemented.');
-      }
-    })();
+			}
+			$unregisterTextContentProvider(handle: number): void {
 
-    const ehContext = SingleProxyRPCProtocol(mainThreadContentProvider);
-    const documentsAndEditors = new ExtHostDocumentsAndEditors(ehContext, new NullLogService());
-    documentsAndEditors.$acceptDocumentsAndEditorsDelta({
-      addedDocuments: [
-        {
-          isDirty: false,
-          languageId: 'foo',
-          uri: resource,
-          versionId: 1,
-          lines: ['foo'],
-          EOL: '\n',
-          encoding: 'utf8',
-        },
-      ],
-    });
-    documentContentProvider = new ExtHostDocumentContentProvider(
-      ehContext,
-      documentsAndEditors,
-      new NullLogService(),
-    );
-  });
+			}
+			async $onVirtualDocumentChange(uri: UriComponents, value: string): Promise<void> {
+				await timeout(10);
+				changes.push([uri, value]);
+			}
+			dispose(): void {
+				throw new Error('Method not implemented.');
+			}
+		};
 
-  test('TextDocumentContentProvider drops onDidChange events when they happen quickly #179711', async () => {
-    await runWithFakedTimers({}, async () => {
-      const emitter = new Emitter<URI>();
-      const contents = ['X', 'Y'];
-      let counter = 0;
+		const ehContext = SingleProxyRPCProtocol(mainThreadContentProvider);
+		const documentsAndEditors = new ExtHostDocumentsAndEditors(ehContext, new NullLogService());
+		documentsAndEditors.$acceptDocumentsAndEditorsDelta({
+			addedDocuments: [{
+				isDirty: false,
+				languageId: 'foo',
+				uri: resource,
+				versionId: 1,
+				lines: ['foo'],
+				EOL: '\n',
+				encoding: 'utf8'
+			}]
+		});
+		documentContentProvider = new ExtHostDocumentContentProvider(ehContext, documentsAndEditors, new NullLogService());
+	});
 
-      let stack = 0;
+	test('TextDocumentContentProvider drops onDidChange events when they happen quickly #179711', async () => {
+		await runWithFakedTimers({}, async function () {
 
-      const d = documentContentProvider.registerTextDocumentContentProvider(resource.scheme, {
-        onDidChange: emitter.event,
-        async provideTextDocumentContent(_uri) {
-          assert.strictEqual(stack, 0);
-          stack++;
-          try {
-            await timeout(0);
-            return contents[counter++ % contents.length];
-          } finally {
-            stack--;
-          }
-        },
-      });
+			const emitter = new Emitter<URI>();
+			const contents = ['X', 'Y'];
+			let counter = 0;
 
-      emitter.fire(resource);
-      emitter.fire(resource);
+			let stack = 0;
 
-      await timeout(100);
+			const d = documentContentProvider.registerTextDocumentContentProvider(resource.scheme, {
+				onDidChange: emitter.event,
+				async provideTextDocumentContent(_uri) {
+					assert.strictEqual(stack, 0);
+					stack++;
+					try {
+						await timeout(0);
+						return contents[counter++ % contents.length];
+					} finally {
+						stack--;
+					}
+				}
+			});
 
-      assert.strictEqual(changes.length, 2);
-      assert.strictEqual(changes[0][1], 'X');
-      assert.strictEqual(changes[1][1], 'Y');
+			emitter.fire(resource);
+			emitter.fire(resource);
 
-      d.dispose();
-    });
-  });
+			await timeout(100);
+
+			assert.strictEqual(changes.length, 2);
+			assert.strictEqual(changes[0][1], 'X');
+			assert.strictEqual(changes[1][1], 'Y');
+
+			d.dispose();
+		});
+	});
+
+
 });

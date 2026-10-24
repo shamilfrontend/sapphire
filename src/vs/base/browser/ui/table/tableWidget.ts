@@ -7,25 +7,10 @@ import { $, append, clearNode, getContentHeight, getContentWidth } from '../../d
 import { createStyleSheet } from '../../domStylesheets.js';
 import { getBaseLayerHoverDelegate } from '../hover/hoverDelegate2.js';
 import { getDefaultHoverDelegate } from '../hover/hoverDelegateFactory.js';
-import { IListRenderer, IListVirtualDelegate } from '../list/list.js';
-import {
-  IListOptions,
-  IListOptionsUpdate,
-  IListStyles,
-  List,
-  unthemedListStyles,
-} from '../list/listWidget.js';
+import { IListElementRenderDetails, IListRenderer, IListVirtualDelegate } from '../list/list.js';
+import { IListOptions, IListOptionsUpdate, IListStyles, List, unthemedListStyles } from '../list/listWidget.js';
 import { ISplitViewDescriptor, IView, Orientation, SplitView } from '../splitview/splitview.js';
-import {
-  ITableColumn,
-  ITableContextMenuEvent,
-  ITableEvent,
-  ITableGestureEvent,
-  ITableMouseEvent,
-  ITableRenderer,
-  ITableTouchEvent,
-  ITableVirtualDelegate,
-} from './table.js';
+import { ITableColumn, ITableContextMenuEvent, ITableEvent, ITableGestureEvent, ITableMouseEvent, ITableRenderer, ITableTouchEvent, ITableVirtualDelegate } from './table.js';
 import { Emitter, Event } from '../../../common/event.js';
 import { Disposable, DisposableStore, IDisposable } from '../../../common/lifecycle.js';
 import { ScrollbarVisibility, ScrollEvent } from '../../../common/scrollable.js';
@@ -36,473 +21,352 @@ import './table.css';
 type TCell = any;
 
 interface RowTemplateData {
-  readonly container: HTMLElement;
-  readonly cellContainers: HTMLElement[];
-  readonly cellTemplateData: unknown[];
+	readonly container: HTMLElement;
+	readonly cellContainers: HTMLElement[];
+	readonly cellTemplateData: unknown[];
 }
 
 class TableListRenderer<TRow> implements IListRenderer<TRow, RowTemplateData> {
-  static TemplateId = 'row';
 
-  readonly templateId = TableListRenderer.TemplateId;
+	static TemplateId = 'row';
+	readonly templateId = TableListRenderer.TemplateId;
+	private renderers: ITableRenderer<TCell, unknown>[];
+	private renderedTemplates = new Set<RowTemplateData>();
 
-  private renderers: ITableRenderer<TCell, unknown>[];
+	constructor(
+		private columns: ITableColumn<TRow, TCell>[],
+		renderers: ITableRenderer<TCell, unknown>[],
+		private getColumnSize: (index: number) => number
+	) {
+		const rendererMap = new Map(renderers.map(r => [r.templateId, r]));
+		this.renderers = [];
 
-  private renderedTemplates = new Set<RowTemplateData>();
+		for (const column of columns) {
+			const renderer = rendererMap.get(column.templateId);
 
-  constructor(
-    private columns: ITableColumn<TRow, TCell>[],
-    renderers: ITableRenderer<TCell, unknown>[],
-    private getColumnSize: (index: number) => number,
-  ) {
-    const rendererMap = new Map(renderers.map((r) => [r.templateId, r]));
-    this.renderers = [];
+			if (!renderer) {
+				throw new Error(`Table cell renderer for template id ${column.templateId} not found.`);
+			}
 
-    for (const column of columns) {
-      const renderer = rendererMap.get(column.templateId);
+			this.renderers.push(renderer);
+		}
+	}
 
-      if (!renderer) {
-        throw new Error(`Table cell renderer for template id ${column.templateId} not found.`);
-      }
+	renderTemplate(container: HTMLElement) {
+		const rowContainer = append(container, $('.monaco-table-tr'));
+		const cellContainers: HTMLElement[] = [];
+		const cellTemplateData: unknown[] = [];
 
-      this.renderers.push(renderer);
-    }
-  }
+		for (let i = 0; i < this.columns.length; i++) {
+			const renderer = this.renderers[i];
+			const cellContainer = append(rowContainer, $('.monaco-table-td', { 'data-col-index': i }));
 
-  renderTemplate(container: HTMLElement) {
-    const rowContainer = append(container, $('.monaco-table-tr'));
-    const cellContainers: HTMLElement[] = [];
-    const cellTemplateData: unknown[] = [];
+			cellContainer.style.width = `${this.getColumnSize(i)}px`;
+			cellContainers.push(cellContainer);
+			cellTemplateData.push(renderer.renderTemplate(cellContainer));
+		}
 
-    for (let i = 0; i < this.columns.length; i++) {
-      const renderer = this.renderers[i];
-      const cellContainer = append(rowContainer, $('.monaco-table-td', { 'data-col-index': i }));
+		const result = { container, cellContainers, cellTemplateData };
+		this.renderedTemplates.add(result);
 
-      cellContainer.style.width = `${this.getColumnSize(i)}px`;
-      cellContainers.push(cellContainer);
-      cellTemplateData.push(renderer.renderTemplate(cellContainer));
-    }
+		return result;
+	}
 
-    const result = { container, cellContainers, cellTemplateData };
-    this.renderedTemplates.add(result);
+	renderElement(element: TRow, index: number, templateData: RowTemplateData, renderDetails?: IListElementRenderDetails): void {
+		for (let i = 0; i < this.columns.length; i++) {
+			const column = this.columns[i];
+			const cell = column.project(element);
+			const renderer = this.renderers[i];
+			renderer.renderElement(cell, index, templateData.cellTemplateData[i], renderDetails);
+		}
+	}
 
-    return result;
-  }
+	disposeElement(element: TRow, index: number, templateData: RowTemplateData, renderDetails?: IListElementRenderDetails): void {
+		for (let i = 0; i < this.columns.length; i++) {
+			const renderer = this.renderers[i];
 
-  renderElement(
-    element: TRow,
-    index: number,
-    templateData: RowTemplateData,
-    height: number | undefined,
-  ): void {
-    for (let i = 0; i < this.columns.length; i++) {
-      const column = this.columns[i];
-      const cell = column.project(element);
-      const renderer = this.renderers[i];
-      renderer.renderElement(cell, index, templateData.cellTemplateData[i], height);
-    }
-  }
+			if (renderer.disposeElement) {
+				const column = this.columns[i];
+				const cell = column.project(element);
 
-  disposeElement(
-    element: TRow,
-    index: number,
-    templateData: RowTemplateData,
-    height: number | undefined,
-  ): void {
-    for (let i = 0; i < this.columns.length; i++) {
-      const renderer = this.renderers[i];
+				renderer.disposeElement(cell, index, templateData.cellTemplateData[i], renderDetails);
+			}
+		}
+	}
 
-      if (renderer.disposeElement) {
-        const column = this.columns[i];
-        const cell = column.project(element);
+	disposeTemplate(templateData: RowTemplateData): void {
+		for (let i = 0; i < this.columns.length; i++) {
+			const renderer = this.renderers[i];
+			renderer.disposeTemplate(templateData.cellTemplateData[i]);
+		}
 
-        renderer.disposeElement(cell, index, templateData.cellTemplateData[i], height);
-      }
-    }
-  }
+		clearNode(templateData.container);
+		this.renderedTemplates.delete(templateData);
+	}
 
-  disposeTemplate(templateData: RowTemplateData): void {
-    for (let i = 0; i < this.columns.length; i++) {
-      const renderer = this.renderers[i];
-      renderer.disposeTemplate(templateData.cellTemplateData[i]);
-    }
-
-    clearNode(templateData.container);
-    this.renderedTemplates.delete(templateData);
-  }
-
-  layoutColumn(index: number, size: number): void {
-    for (const { cellContainers } of this.renderedTemplates) {
-      cellContainers[index].style.width = `${size}px`;
-    }
-  }
+	layoutColumn(index: number, size: number): void {
+		for (const { cellContainers } of this.renderedTemplates) {
+			cellContainers[index].style.width = `${size}px`;
+		}
+	}
 }
 
-function asListVirtualDelegate<TRow>(
-  delegate: ITableVirtualDelegate<TRow>,
-): IListVirtualDelegate<TRow> {
-  return {
-    getHeight(row) {
-      return delegate.getHeight(row);
-    },
-    getTemplateId() {
-      return TableListRenderer.TemplateId;
-    },
-  };
+function asListVirtualDelegate<TRow>(delegate: ITableVirtualDelegate<TRow>): IListVirtualDelegate<TRow> {
+	return {
+		getHeight(row) { return delegate.getHeight(row); },
+		getTemplateId() { return TableListRenderer.TemplateId; },
+	};
 }
 
 class ColumnHeader<TRow, TCell> extends Disposable implements IView {
-  readonly element: HTMLElement;
 
-  get minimumSize() {
-    return this.column.minimumWidth ?? 120;
-  }
+	readonly element: HTMLElement;
 
-  get maximumSize() {
-    return this.column.maximumWidth ?? Number.POSITIVE_INFINITY;
-  }
+	get minimumSize() { return this.column.minimumWidth ?? 120; }
+	get maximumSize() { return this.column.maximumWidth ?? Number.POSITIVE_INFINITY; }
+	get onDidChange() { return this.column.onDidChangeWidthConstraints ?? Event.None; }
 
-  get onDidChange() {
-    return this.column.onDidChangeWidthConstraints ?? Event.None;
-  }
+	private _onDidLayout = this._register(new Emitter<[number, number]>());
+	readonly onDidLayout = this._onDidLayout.event;
 
-  private _onDidLayout = new Emitter<[number, number]>();
+	constructor(readonly column: ITableColumn<TRow, TCell>, private index: number) {
+		super();
 
-  readonly onDidLayout = this._onDidLayout.event;
+		this.element = $('.monaco-table-th', { 'data-col-index': index }, column.label);
 
-  constructor(
-    readonly column: ITableColumn<TRow, TCell>,
-    private index: number,
-  ) {
-    super();
+		if (column.tooltip) {
+			this._register(getBaseLayerHoverDelegate().setupManagedHover(getDefaultHoverDelegate('mouse'), this.element, column.tooltip));
+		}
+	}
 
-    this.element = $('.monaco-table-th', { 'data-col-index': index }, column.label);
-
-    if (column.tooltip) {
-      this._register(
-        getBaseLayerHoverDelegate().setupManagedHover(
-          getDefaultHoverDelegate('mouse'),
-          this.element,
-          column.tooltip,
-        ),
-      );
-    }
-  }
-
-  layout(size: number): void {
-    this._onDidLayout.fire([this.index, size]);
-  }
+	layout(size: number): void {
+		this._onDidLayout.fire([this.index, size]);
+	}
 }
 
-export interface ITableOptions<TRow> extends IListOptions<TRow> {}
-export interface ITableOptionsUpdate extends IListOptionsUpdate {}
-export interface ITableStyles extends IListStyles {}
+export interface ITableOptions<TRow> extends IListOptions<TRow> { }
+export interface ITableOptionsUpdate extends IListOptionsUpdate { }
+export interface ITableStyles extends IListStyles { }
 
 export class Table<TRow> implements ISpliceable<TRow>, IDisposable {
-  private static InstanceCount = 0;
 
-  readonly domId = `table_id_${++Table.InstanceCount}`;
+	private static InstanceCount = 0;
+	readonly domId = `table_id_${++Table.InstanceCount}`;
 
-  readonly domNode: HTMLElement;
+	readonly domNode: HTMLElement;
+	private splitview: SplitView;
+	private list: List<TRow>;
+	private styleElement: HTMLStyleElement;
+	protected readonly disposables = new DisposableStore();
 
-  private splitview: SplitView;
+	private cachedWidth: number = 0;
+	private cachedHeight: number = 0;
 
-  private list: List<TRow>;
+	get onDidChangeFocus(): Event<ITableEvent<TRow>> { return this.list.onDidChangeFocus; }
+	get onDidChangeSelection(): Event<ITableEvent<TRow>> { return this.list.onDidChangeSelection; }
 
-  private styleElement: HTMLStyleElement;
+	get onDidScroll(): Event<ScrollEvent> { return this.list.onDidScroll; }
+	get onMouseClick(): Event<ITableMouseEvent<TRow>> { return this.list.onMouseClick; }
+	get onMouseDblClick(): Event<ITableMouseEvent<TRow>> { return this.list.onMouseDblClick; }
+	get onMouseMiddleClick(): Event<ITableMouseEvent<TRow>> { return this.list.onMouseMiddleClick; }
+	get onPointer(): Event<ITableMouseEvent<TRow>> { return this.list.onPointer; }
+	get onMouseUp(): Event<ITableMouseEvent<TRow>> { return this.list.onMouseUp; }
+	get onMouseDown(): Event<ITableMouseEvent<TRow>> { return this.list.onMouseDown; }
+	get onMouseOver(): Event<ITableMouseEvent<TRow>> { return this.list.onMouseOver; }
+	get onMouseMove(): Event<ITableMouseEvent<TRow>> { return this.list.onMouseMove; }
+	get onMouseOut(): Event<ITableMouseEvent<TRow>> { return this.list.onMouseOut; }
+	get onTouchStart(): Event<ITableTouchEvent<TRow>> { return this.list.onTouchStart; }
+	get onTap(): Event<ITableGestureEvent<TRow>> { return this.list.onTap; }
+	get onContextMenu(): Event<ITableContextMenuEvent<TRow>> { return this.list.onContextMenu; }
 
-  protected readonly disposables = new DisposableStore();
+	get onDidFocus(): Event<void> { return this.list.onDidFocus; }
+	get onDidBlur(): Event<void> { return this.list.onDidBlur; }
 
-  private cachedWidth: number = 0;
+	get scrollTop(): number { return this.list.scrollTop; }
+	set scrollTop(scrollTop: number) { this.list.scrollTop = scrollTop; }
+	get scrollLeft(): number { return this.list.scrollLeft; }
+	set scrollLeft(scrollLeft: number) { this.list.scrollLeft = scrollLeft; }
+	get scrollHeight(): number { return this.list.scrollHeight; }
+	get renderHeight(): number { return this.list.renderHeight; }
+	get onDidDispose(): Event<void> { return this.list.onDidDispose; }
 
-  private cachedHeight: number = 0;
+	constructor(
+		user: string,
+		container: HTMLElement,
+		private virtualDelegate: ITableVirtualDelegate<TRow>,
+		private columns: ITableColumn<TRow, TCell>[],
+		renderers: ITableRenderer<TCell, unknown>[],
+		_options?: ITableOptions<TRow>
+	) {
+		this.domNode = append(container, $(`.monaco-table.${this.domId}`));
 
-  get onDidChangeFocus(): Event<ITableEvent<TRow>> {
-    return this.list.onDidChangeFocus;
-  }
+		const headers = columns.map((c, i) => this.disposables.add(new ColumnHeader(c, i)));
+		const descriptor: ISplitViewDescriptor = {
+			size: headers.reduce((a, b) => a + b.column.weight, 0),
+			views: headers.map(view => ({ size: view.column.weight, view }))
+		};
 
-  get onDidChangeSelection(): Event<ITableEvent<TRow>> {
-    return this.list.onDidChangeSelection;
-  }
+		this.splitview = this.disposables.add(new SplitView(this.domNode, {
+			orientation: Orientation.HORIZONTAL,
+			scrollbarVisibility: ScrollbarVisibility.Hidden,
+			getSashOrthogonalSize: () => this.cachedHeight,
+			descriptor
+		}));
 
-  get onDidScroll(): Event<ScrollEvent> {
-    return this.list.onDidScroll;
-  }
+		this.splitview.el.style.height = `${virtualDelegate.headerRowHeight}px`;
+		this.splitview.el.style.lineHeight = `${virtualDelegate.headerRowHeight}px`;
 
-  get onMouseClick(): Event<ITableMouseEvent<TRow>> {
-    return this.list.onMouseClick;
-  }
+		const renderer = new TableListRenderer(columns, renderers, i => this.splitview.getViewSize(i));
+		this.list = this.disposables.add(new List(user, this.domNode, asListVirtualDelegate(virtualDelegate), [renderer], _options));
 
-  get onMouseDblClick(): Event<ITableMouseEvent<TRow>> {
-    return this.list.onMouseDblClick;
-  }
+		Event.any(...headers.map(h => h.onDidLayout))
+			(([index, size]) => renderer.layoutColumn(index, size), null, this.disposables);
 
-  get onMouseMiddleClick(): Event<ITableMouseEvent<TRow>> {
-    return this.list.onMouseMiddleClick;
-  }
+		this.splitview.onDidSashReset(index => {
+			const totalWeight = columns.reduce((r, c) => r + c.weight, 0);
+			const size = columns[index].weight / totalWeight * this.cachedWidth;
+			this.splitview.resizeView(index, size);
+		}, null, this.disposables);
 
-  get onPointer(): Event<ITableMouseEvent<TRow>> {
-    return this.list.onPointer;
-  }
+		this.styleElement = createStyleSheet(this.domNode);
+		this.style(unthemedListStyles);
+	}
 
-  get onMouseUp(): Event<ITableMouseEvent<TRow>> {
-    return this.list.onMouseUp;
-  }
+	getColumnLabels(): string[] {
+		return this.columns.map(c => c.label);
+	}
 
-  get onMouseDown(): Event<ITableMouseEvent<TRow>> {
-    return this.list.onMouseDown;
-  }
+	resizeColumn(index: number, percentage: number): void {
+		const size = Math.round((percentage / 100.00) * this.cachedWidth);
+		this.splitview.resizeView(index, size);
+	}
 
-  get onMouseOver(): Event<ITableMouseEvent<TRow>> {
-    return this.list.onMouseOver;
-  }
+	updateOptions(options: ITableOptionsUpdate): void {
+		this.list.updateOptions(options);
+	}
 
-  get onMouseMove(): Event<ITableMouseEvent<TRow>> {
-    return this.list.onMouseMove;
-  }
+	splice(start: number, deleteCount: number, elements: readonly TRow[] = []): void {
+		this.list.splice(start, deleteCount, elements);
+	}
 
-  get onMouseOut(): Event<ITableMouseEvent<TRow>> {
-    return this.list.onMouseOut;
-  }
+	rerender(): void {
+		this.list.rerender();
+	}
 
-  get onTouchStart(): Event<ITableTouchEvent<TRow>> {
-    return this.list.onTouchStart;
-  }
+	row(index: number): TRow {
+		return this.list.element(index);
+	}
 
-  get onTap(): Event<ITableGestureEvent<TRow>> {
-    return this.list.onTap;
-  }
+	indexOf(element: TRow): number {
+		return this.list.indexOf(element);
+	}
 
-  get onContextMenu(): Event<ITableContextMenuEvent<TRow>> {
-    return this.list.onContextMenu;
-  }
+	get length(): number {
+		return this.list.length;
+	}
 
-  get onDidFocus(): Event<void> {
-    return this.list.onDidFocus;
-  }
+	getHTMLElement(): HTMLElement {
+		return this.domNode;
+	}
 
-  get onDidBlur(): Event<void> {
-    return this.list.onDidBlur;
-  }
+	layout(height?: number, width?: number): void {
+		height = height ?? getContentHeight(this.domNode);
+		width = width ?? getContentWidth(this.domNode);
 
-  get scrollTop(): number {
-    return this.list.scrollTop;
-  }
+		this.cachedWidth = width;
+		this.cachedHeight = height;
+		this.splitview.layout(width);
 
-  set scrollTop(scrollTop: number) {
-    this.list.scrollTop = scrollTop;
-  }
+		const listHeight = height - this.virtualDelegate.headerRowHeight;
+		this.list.getHTMLElement().style.height = `${listHeight}px`;
+		this.list.layout(listHeight, width);
+	}
 
-  get scrollLeft(): number {
-    return this.list.scrollLeft;
-  }
+	triggerTypeNavigation(): void {
+		this.list.triggerTypeNavigation();
+	}
 
-  set scrollLeft(scrollLeft: number) {
-    this.list.scrollLeft = scrollLeft;
-  }
+	style(styles: ITableStyles): void {
+		const content: string[] = [];
 
-  get scrollHeight(): number {
-    return this.list.scrollHeight;
-  }
-
-  get renderHeight(): number {
-    return this.list.renderHeight;
-  }
-
-  get onDidDispose(): Event<void> {
-    return this.list.onDidDispose;
-  }
-
-  constructor(
-    user: string,
-    container: HTMLElement,
-    private virtualDelegate: ITableVirtualDelegate<TRow>,
-    private columns: ITableColumn<TRow, TCell>[],
-    renderers: ITableRenderer<TCell, unknown>[],
-    _options?: ITableOptions<TRow>,
-  ) {
-    this.domNode = append(container, $(`.monaco-table.${this.domId}`));
-
-    const headers = columns.map((c, i) => this.disposables.add(new ColumnHeader(c, i)));
-    const descriptor: ISplitViewDescriptor = {
-      size: headers.reduce((a, b) => a + b.column.weight, 0),
-      views: headers.map((view) => ({ size: view.column.weight, view })),
-    };
-
-    this.splitview = this.disposables.add(
-      new SplitView(this.domNode, {
-        orientation: Orientation.HORIZONTAL,
-        scrollbarVisibility: ScrollbarVisibility.Hidden,
-        getSashOrthogonalSize: () => this.cachedHeight,
-        descriptor,
-      }),
-    );
-
-    this.splitview.el.style.height = `${virtualDelegate.headerRowHeight}px`;
-    this.splitview.el.style.lineHeight = `${virtualDelegate.headerRowHeight}px`;
-
-    const renderer = new TableListRenderer(columns, renderers, (i) =>
-      this.splitview.getViewSize(i),
-    );
-    this.list = this.disposables.add(
-      new List(user, this.domNode, asListVirtualDelegate(virtualDelegate), [renderer], _options),
-    );
-
-    Event.any(...headers.map((h) => h.onDidLayout))(
-      ([index, size]) => renderer.layoutColumn(index, size),
-      null,
-      this.disposables,
-    );
-
-    this.splitview.onDidSashReset(
-      (index) => {
-        const totalWeight = columns.reduce((r, c) => r + c.weight, 0);
-        const size = (columns[index].weight / totalWeight) * this.cachedWidth;
-        this.splitview.resizeView(index, size);
-      },
-      null,
-      this.disposables,
-    );
-
-    this.styleElement = createStyleSheet(this.domNode);
-    this.style(unthemedListStyles);
-  }
-
-  getColumnLabels(): string[] {
-    return this.columns.map((c) => c.label);
-  }
-
-  resizeColumn(index: number, percentage: number): void {
-    const size = Math.round((percentage / 100.0) * this.cachedWidth);
-    this.splitview.resizeView(index, size);
-  }
-
-  updateOptions(options: ITableOptionsUpdate): void {
-    this.list.updateOptions(options);
-  }
-
-  splice(start: number, deleteCount: number, elements: readonly TRow[] = []): void {
-    this.list.splice(start, deleteCount, elements);
-  }
-
-  rerender(): void {
-    this.list.rerender();
-  }
-
-  row(index: number): TRow {
-    return this.list.element(index);
-  }
-
-  indexOf(element: TRow): number {
-    return this.list.indexOf(element);
-  }
-
-  get length(): number {
-    return this.list.length;
-  }
-
-  getHTMLElement(): HTMLElement {
-    return this.domNode;
-  }
-
-  layout(height?: number, width?: number): void {
-    height = height ?? getContentHeight(this.domNode);
-    width = width ?? getContentWidth(this.domNode);
-
-    this.cachedWidth = width;
-    this.cachedHeight = height;
-    this.splitview.layout(width);
-
-    const listHeight = height - this.virtualDelegate.headerRowHeight;
-    this.list.getHTMLElement().style.height = `${listHeight}px`;
-    this.list.layout(listHeight, width);
-  }
-
-  triggerTypeNavigation(): void {
-    this.list.triggerTypeNavigation();
-  }
-
-  style(styles: ITableStyles): void {
-    const content: string[] = [];
-
-    content.push(`.monaco-table.${this.domId} > .monaco-split-view2 .monaco-sash.vertical::before {
+		content.push(`.monaco-table.${this.domId} > .monaco-split-view2 .monaco-sash.vertical::before {
 			top: ${this.virtualDelegate.headerRowHeight + 1}px;
 			height: calc(100% - ${this.virtualDelegate.headerRowHeight}px);
 		}`);
 
-    this.styleElement.textContent = content.join('\n');
-    this.list.style(styles);
-  }
+		this.styleElement.textContent = content.join('\n');
+		this.list.style(styles);
+	}
 
-  domFocus(): void {
-    this.list.domFocus();
-  }
+	domFocus(): void {
+		this.list.domFocus();
+	}
 
-  setAnchor(index: number | undefined): void {
-    this.list.setAnchor(index);
-  }
+	setAnchor(index: number | undefined): void {
+		this.list.setAnchor(index);
+	}
 
-  getAnchor(): number | undefined {
-    return this.list.getAnchor();
-  }
+	getAnchor(): number | undefined {
+		return this.list.getAnchor();
+	}
 
-  getSelectedElements(): TRow[] {
-    return this.list.getSelectedElements();
-  }
+	getSelectedElements(): TRow[] {
+		return this.list.getSelectedElements();
+	}
 
-  setSelection(indexes: number[], browserEvent?: UIEvent): void {
-    this.list.setSelection(indexes, browserEvent);
-  }
+	setSelection(indexes: number[], browserEvent?: UIEvent): void {
+		this.list.setSelection(indexes, browserEvent);
+	}
 
-  getSelection(): number[] {
-    return this.list.getSelection();
-  }
+	getSelection(): number[] {
+		return this.list.getSelection();
+	}
 
-  setFocus(indexes: number[], browserEvent?: UIEvent): void {
-    this.list.setFocus(indexes, browserEvent);
-  }
+	setFocus(indexes: number[], browserEvent?: UIEvent): void {
+		this.list.setFocus(indexes, browserEvent);
+	}
 
-  focusNext(n = 1, loop = false, browserEvent?: UIEvent): void {
-    this.list.focusNext(n, loop, browserEvent);
-  }
+	focusNext(n = 1, loop = false, browserEvent?: UIEvent): void {
+		this.list.focusNext(n, loop, browserEvent);
+	}
 
-  focusPrevious(n = 1, loop = false, browserEvent?: UIEvent): void {
-    this.list.focusPrevious(n, loop, browserEvent);
-  }
+	focusPrevious(n = 1, loop = false, browserEvent?: UIEvent): void {
+		this.list.focusPrevious(n, loop, browserEvent);
+	}
 
-  focusNextPage(browserEvent?: UIEvent): Promise<void> {
-    return this.list.focusNextPage(browserEvent);
-  }
+	focusNextPage(browserEvent?: UIEvent): Promise<void> {
+		return this.list.focusNextPage(browserEvent);
+	}
 
-  focusPreviousPage(browserEvent?: UIEvent): Promise<void> {
-    return this.list.focusPreviousPage(browserEvent);
-  }
+	focusPreviousPage(browserEvent?: UIEvent): Promise<void> {
+		return this.list.focusPreviousPage(browserEvent);
+	}
 
-  focusFirst(browserEvent?: UIEvent): void {
-    this.list.focusFirst(browserEvent);
-  }
+	focusFirst(browserEvent?: UIEvent): void {
+		this.list.focusFirst(browserEvent);
+	}
 
-  focusLast(browserEvent?: UIEvent): void {
-    this.list.focusLast(browserEvent);
-  }
+	focusLast(browserEvent?: UIEvent): void {
+		this.list.focusLast(browserEvent);
+	}
 
-  getFocus(): number[] {
-    return this.list.getFocus();
-  }
+	getFocus(): number[] {
+		return this.list.getFocus();
+	}
 
-  getFocusedElements(): TRow[] {
-    return this.list.getFocusedElements();
-  }
+	getFocusedElements(): TRow[] {
+		return this.list.getFocusedElements();
+	}
 
-  getRelativeTop(index: number): number | null {
-    return this.list.getRelativeTop(index);
-  }
+	getRelativeTop(index: number): number | null {
+		return this.list.getRelativeTop(index);
+	}
 
-  reveal(index: number, relativeTop?: number): void {
-    this.list.reveal(index, relativeTop);
-  }
+	reveal(index: number, relativeTop?: number): void {
+		this.list.reveal(index, relativeTop);
+	}
 
-  dispose(): void {
-    this.disposables.dispose();
-  }
+	dispose(): void {
+		this.disposables.dispose();
+	}
 }

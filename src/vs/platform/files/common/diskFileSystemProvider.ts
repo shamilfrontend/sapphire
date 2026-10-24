@@ -12,253 +12,245 @@ import { Disposable, IDisposable, toDisposable } from '../../../base/common/life
 import { normalize } from '../../../base/common/path.js';
 import { URI } from '../../../base/common/uri.js';
 import { IFileChange, IFileSystemProvider, IWatchOptions } from './files.js';
-import {
-  AbstractNonRecursiveWatcherClient,
-  AbstractUniversalWatcherClient,
-  ILogMessage,
-  INonRecursiveWatchRequest,
-  IRecursiveWatcherOptions,
-  isRecursiveWatchRequest,
-  IUniversalWatchRequest,
-  reviveFileChanges,
-} from './watcher.js';
+import { AbstractNonRecursiveWatcherClient, AbstractUniversalWatcherClient, ILogMessage, INonRecursiveWatchRequest, IRecursiveWatcherOptions, isRecursiveWatchRequest, IUniversalWatchRequest, reviveFileChanges } from './watcher.js';
 import { ILogService, LogLevel } from '../../log/common/log.js';
 
 export interface IDiskFileSystemProviderOptions {
-  watcher?: {
-    /**
-     * Extra options for the recursive file watching.
-     */
-    recursive?: IRecursiveWatcherOptions;
+	watcher?: {
 
-    /**
-     * Forces all file watch requests to run through a
-     * single universal file watcher, both recursive
-     * and non-recursively.
-     *
-     * Enabling this option might cause some overhead,
-     * specifically the universal file watcher will run
-     * in a separate process given its complexity. Only
-     * enable it when you understand the consequences.
-     */
-    forceUniversal?: boolean;
-  };
+		/**
+		 * Extra options for the recursive file watching.
+		 */
+		recursive?: IRecursiveWatcherOptions;
+
+		/**
+		 * Forces all file watch requests to run through a
+		 * single universal file watcher, both recursive
+		 * and non-recursively.
+		 *
+		 * Enabling this option might cause some overhead,
+		 * specifically the universal file watcher will run
+		 * in a separate process given its complexity. Only
+		 * enable it when you understand the consequences.
+		 */
+		forceUniversal?: boolean;
+	};
 }
 
-export abstract class AbstractDiskFileSystemProvider
-  extends Disposable
-  implements
-    Pick<IFileSystemProvider, 'watch'>,
-    Pick<IFileSystemProvider, 'onDidChangeFile'>,
-    Pick<IFileSystemProvider, 'onDidWatchError'>
-{
-  constructor(
-    protected readonly logService: ILogService,
-    private readonly options?: IDiskFileSystemProviderOptions,
-  ) {
-    super();
-  }
+export abstract class AbstractDiskFileSystemProvider extends Disposable implements
+	Pick<IFileSystemProvider, 'watch'>,
+	Pick<IFileSystemProvider, 'onDidChangeFile'>,
+	Pick<IFileSystemProvider, 'onDidWatchError'> {
 
-  protected readonly _onDidChangeFile = this._register(new Emitter<readonly IFileChange[]>());
+	constructor(
+		protected readonly logService: ILogService,
+		private readonly options?: IDiskFileSystemProviderOptions
+	) {
+		super();
+	}
 
-  readonly onDidChangeFile = this._onDidChangeFile.event;
+	protected readonly _onDidChangeFile = this._register(new Emitter<readonly IFileChange[]>());
+	readonly onDidChangeFile = this._onDidChangeFile.event;
 
-  protected readonly _onDidWatchError = this._register(new Emitter<string>());
+	protected readonly _onDidWatchError = this._register(new Emitter<string>());
+	readonly onDidWatchError = this._onDidWatchError.event;
 
-  readonly onDidWatchError = this._onDidWatchError.event;
+	watch(resource: URI, opts: IWatchOptions): IDisposable {
+		if (opts.recursive || this.options?.watcher?.forceUniversal) {
+			return this.watchUniversal(resource, opts);
+		}
 
-  watch(resource: URI, opts: IWatchOptions): IDisposable {
-    if (opts.recursive || this.options?.watcher?.forceUniversal) {
-      return this.watchUniversal(resource, opts);
-    }
+		return this.watchNonRecursive(resource, opts);
+	}
 
-    return this.watchNonRecursive(resource, opts);
-  }
+	private getRefreshWatchersDelay(count: number): number {
+		if (count > 200) {
+			// If there are many requests to refresh, start to throttle
+			// the refresh to reduce pressure. We see potentially thousands
+			// of requests coming in on startup repeatedly so we take it easy.
+			return 500;
+		}
 
-  // #region File Watching (universal)
+		// By default, use a short delay to keep watchers updating fast but still
+		// with a delay so that we can efficiently deduplicate requests or reuse
+		// existing watchers.
+		return 0;
+	}
 
-  private universalWatcher: AbstractUniversalWatcherClient | undefined;
+	//#region File Watching (universal)
 
-  private readonly universalWatchRequests: IUniversalWatchRequest[] = [];
+	private universalWatcher: AbstractUniversalWatcherClient | undefined;
 
-  private readonly universalWatchRequestDelayer = this._register(new ThrottledDelayer<void>(0));
+	private readonly universalWatchRequests: IUniversalWatchRequest[] = [];
+	private readonly universalWatchRequestDelayer = this._register(new ThrottledDelayer<void>(this.getRefreshWatchersDelay(this.universalWatchRequests.length)));
 
-  private watchUniversal(resource: URI, opts: IWatchOptions): IDisposable {
-    const request = this.toWatchRequest(resource, opts);
-    const remove = insert(this.universalWatchRequests, request);
+	private watchUniversal(resource: URI, opts: IWatchOptions): IDisposable {
+		const request = this.toWatchRequest(resource, opts);
+		const remove = insert(this.universalWatchRequests, request);
 
-    // Trigger update
-    this.refreshUniversalWatchers();
+		// Trigger update
+		this.refreshUniversalWatchers();
 
-    return toDisposable(() => {
-      // Remove from list of paths to watch universally
-      remove();
+		return toDisposable(() => {
 
-      // Trigger update
-      this.refreshUniversalWatchers();
-    });
-  }
+			// Remove from list of paths to watch universally
+			remove();
 
-  private toWatchRequest(resource: URI, opts: IWatchOptions): IUniversalWatchRequest {
-    const request: IUniversalWatchRequest = {
-      path: this.toWatchPath(resource),
-      excludes: opts.excludes,
-      includes: opts.includes,
-      recursive: opts.recursive,
-      filter: opts.filter,
-      correlationId: opts.correlationId,
-    };
+			// Trigger update
+			this.refreshUniversalWatchers();
+		});
+	}
 
-    if (isRecursiveWatchRequest(request)) {
-      // Adjust for polling
-      const usePolling = this.options?.watcher?.recursive?.usePolling;
-      if (usePolling === true) {
-        request.pollingInterval = this.options?.watcher?.recursive?.pollingInterval ?? 5000;
-      } else if (Array.isArray(usePolling)) {
-        if (usePolling.includes(request.path)) {
-          request.pollingInterval = this.options?.watcher?.recursive?.pollingInterval ?? 5000;
-        }
-      }
-    }
+	private toWatchRequest(resource: URI, opts: IWatchOptions): IUniversalWatchRequest {
+		const request: IUniversalWatchRequest = {
+			path: this.toWatchPath(resource),
+			excludes: opts.excludes,
+			includes: opts.includes,
+			recursive: opts.recursive,
+			filter: opts.filter,
+			correlationId: opts.correlationId
+		};
 
-    return request;
-  }
+		if (isRecursiveWatchRequest(request)) {
 
-  private refreshUniversalWatchers(): void {
-    // Buffer requests for universal watching to decide on right watcher
-    // that supports potentially watching more than one path at once
-    this.universalWatchRequestDelayer
-      .trigger(() => this.doRefreshUniversalWatchers())
-      .catch((error) => onUnexpectedError(error));
-  }
+			// Adjust for polling
+			const usePolling = this.options?.watcher?.recursive?.usePolling;
+			if (usePolling === true) {
+				request.pollingInterval = this.options?.watcher?.recursive?.pollingInterval ?? 5000;
+			} else if (Array.isArray(usePolling)) {
+				if (usePolling.includes(request.path)) {
+					request.pollingInterval = this.options?.watcher?.recursive?.pollingInterval ?? 5000;
+				}
+			}
+		}
 
-  private doRefreshUniversalWatchers(): Promise<void> {
-    // Create watcher if this is the first time
-    if (!this.universalWatcher) {
-      this.universalWatcher = this._register(
-        this.createUniversalWatcher(
-          (changes) => this._onDidChangeFile.fire(reviveFileChanges(changes)),
-          (msg) => this.onWatcherLogMessage(msg),
-          this.logService.getLevel() === LogLevel.Trace,
-        ),
-      );
+		return request;
+	}
 
-      // Apply log levels dynamically
-      this._register(
-        this.logService.onDidChangeLogLevel(() => {
-          this.universalWatcher?.setVerboseLogging(this.logService.getLevel() === LogLevel.Trace);
-        }),
-      );
-    }
+	private refreshUniversalWatchers(): void {
+		this.universalWatchRequestDelayer.trigger(() => {
+			return this.doRefreshUniversalWatchers();
+		}, this.getRefreshWatchersDelay(this.universalWatchRequests.length)).catch(error => onUnexpectedError(error));
+	}
 
-    // Ask to watch the provided paths
-    return this.universalWatcher.watch(this.universalWatchRequests);
-  }
+	private doRefreshUniversalWatchers(): Promise<void> {
 
-  protected abstract createUniversalWatcher(
-    onChange: (changes: IFileChange[]) => void,
-    onLogMessage: (msg: ILogMessage) => void,
-    verboseLogging: boolean,
-  ): AbstractUniversalWatcherClient;
+		// Create watcher if this is the first time
+		if (!this.universalWatcher) {
+			this.universalWatcher = this._register(this.createUniversalWatcher(
+				changes => this._onDidChangeFile.fire(reviveFileChanges(changes)),
+				msg => this.onWatcherLogMessage(msg),
+				this.logService.getLevel() === LogLevel.Trace
+			));
 
-  // #endregion
+			// Apply log levels dynamically
+			this._register(this.logService.onDidChangeLogLevel(() => {
+				this.universalWatcher?.setVerboseLogging(this.logService.getLevel() === LogLevel.Trace);
+			}));
+		}
 
-  // #region File Watching (non-recursive)
+		// Ask to watch the provided paths
+		return this.universalWatcher.watch(this.universalWatchRequests);
+	}
 
-  private nonRecursiveWatcher: AbstractNonRecursiveWatcherClient | undefined;
+	protected abstract createUniversalWatcher(
+		onChange: (changes: IFileChange[]) => void,
+		onLogMessage: (msg: ILogMessage) => void,
+		verboseLogging: boolean
+	): AbstractUniversalWatcherClient;
 
-  private readonly nonRecursiveWatchRequests: INonRecursiveWatchRequest[] = [];
+	//#endregion
 
-  private readonly nonRecursiveWatchRequestDelayer = this._register(new ThrottledDelayer<void>(0));
+	//#region File Watching (non-recursive)
 
-  private watchNonRecursive(resource: URI, opts: IWatchOptions): IDisposable {
-    // Add to list of paths to watch non-recursively
-    const request: INonRecursiveWatchRequest = {
-      path: this.toWatchPath(resource),
-      excludes: opts.excludes,
-      includes: opts.includes,
-      recursive: false,
-      filter: opts.filter,
-      correlationId: opts.correlationId,
-    };
-    const remove = insert(this.nonRecursiveWatchRequests, request);
+	private nonRecursiveWatcher: AbstractNonRecursiveWatcherClient | undefined;
 
-    // Trigger update
-    this.refreshNonRecursiveWatchers();
+	private readonly nonRecursiveWatchRequests: INonRecursiveWatchRequest[] = [];
+	private readonly nonRecursiveWatchRequestDelayer = this._register(new ThrottledDelayer<void>(this.getRefreshWatchersDelay(this.nonRecursiveWatchRequests.length)));
 
-    return toDisposable(() => {
-      // Remove from list of paths to watch non-recursively
-      remove();
+	private watchNonRecursive(resource: URI, opts: IWatchOptions): IDisposable {
 
-      // Trigger update
-      this.refreshNonRecursiveWatchers();
-    });
-  }
+		// Add to list of paths to watch non-recursively
+		const request: INonRecursiveWatchRequest = {
+			path: this.toWatchPath(resource),
+			excludes: opts.excludes,
+			includes: opts.includes,
+			recursive: false,
+			filter: opts.filter,
+			correlationId: opts.correlationId
+		};
+		const remove = insert(this.nonRecursiveWatchRequests, request);
 
-  private refreshNonRecursiveWatchers(): void {
-    // Buffer requests for nonrecursive watching to decide on right watcher
-    // that supports potentially watching more than one path at once
-    this.nonRecursiveWatchRequestDelayer
-      .trigger(() => this.doRefreshNonRecursiveWatchers())
-      .catch((error) => onUnexpectedError(error));
-  }
+		// Trigger update
+		this.refreshNonRecursiveWatchers();
 
-  private doRefreshNonRecursiveWatchers(): Promise<void> {
-    // Create watcher if this is the first time
-    if (!this.nonRecursiveWatcher) {
-      this.nonRecursiveWatcher = this._register(
-        this.createNonRecursiveWatcher(
-          (changes) => this._onDidChangeFile.fire(reviveFileChanges(changes)),
-          (msg) => this.onWatcherLogMessage(msg),
-          this.logService.getLevel() === LogLevel.Trace,
-        ),
-      );
+		return toDisposable(() => {
 
-      // Apply log levels dynamically
-      this._register(
-        this.logService.onDidChangeLogLevel(() => {
-          this.nonRecursiveWatcher?.setVerboseLogging(
-            this.logService.getLevel() === LogLevel.Trace,
-          );
-        }),
-      );
-    }
+			// Remove from list of paths to watch non-recursively
+			remove();
 
-    // Ask to watch the provided paths
-    return this.nonRecursiveWatcher.watch(this.nonRecursiveWatchRequests);
-  }
+			// Trigger update
+			this.refreshNonRecursiveWatchers();
+		});
+	}
 
-  protected abstract createNonRecursiveWatcher(
-    onChange: (changes: IFileChange[]) => void,
-    onLogMessage: (msg: ILogMessage) => void,
-    verboseLogging: boolean,
-  ): AbstractNonRecursiveWatcherClient;
+	private refreshNonRecursiveWatchers(): void {
+		this.nonRecursiveWatchRequestDelayer.trigger(() => {
+			return this.doRefreshNonRecursiveWatchers();
+		}, this.getRefreshWatchersDelay(this.nonRecursiveWatchRequests.length)).catch(error => onUnexpectedError(error));
+	}
 
-  // #endregion
+	private doRefreshNonRecursiveWatchers(): Promise<void> {
 
-  private onWatcherLogMessage(msg: ILogMessage): void {
-    if (msg.type === 'error') {
-      this._onDidWatchError.fire(msg.message);
-    }
+		// Create watcher if this is the first time
+		if (!this.nonRecursiveWatcher) {
+			this.nonRecursiveWatcher = this._register(this.createNonRecursiveWatcher(
+				changes => this._onDidChangeFile.fire(reviveFileChanges(changes)),
+				msg => this.onWatcherLogMessage(msg),
+				this.logService.getLevel() === LogLevel.Trace
+			));
 
-    this.logWatcherMessage(msg);
-  }
+			// Apply log levels dynamically
+			this._register(this.logService.onDidChangeLogLevel(() => {
+				this.nonRecursiveWatcher?.setVerboseLogging(this.logService.getLevel() === LogLevel.Trace);
+			}));
+		}
 
-  protected logWatcherMessage(msg: ILogMessage): void {
-    this.logService[msg.type](msg.message);
-  }
+		// Ask to watch the provided paths
+		return this.nonRecursiveWatcher.watch(this.nonRecursiveWatchRequests);
+	}
 
-  protected toFilePath(resource: URI): string {
-    return normalize(resource.fsPath);
-  }
+	protected abstract createNonRecursiveWatcher(
+		onChange: (changes: IFileChange[]) => void,
+		onLogMessage: (msg: ILogMessage) => void,
+		verboseLogging: boolean
+	): AbstractNonRecursiveWatcherClient;
 
-  private toWatchPath(resource: URI): string {
-    const filePath = this.toFilePath(resource);
+	//#endregion
 
-    // Ensure to have any trailing path separators removed, otherwise
-    // we may believe the path is not "real" and will convert every
-    // event back to this form, which is not warranted.
-    // See also https://github.com/microsoft/vscode/issues/210517
-    return removeTrailingPathSeparator(filePath);
-  }
+	private onWatcherLogMessage(msg: ILogMessage): void {
+		if (msg.type === 'error') {
+			this._onDidWatchError.fire(msg.message);
+		}
+
+		this.logWatcherMessage(msg);
+	}
+
+	protected logWatcherMessage(msg: ILogMessage): void {
+		this.logService[msg.type](msg.message);
+	}
+
+	protected toFilePath(resource: URI): string {
+		return normalize(resource.fsPath);
+	}
+
+	private toWatchPath(resource: URI): string {
+		const filePath = this.toFilePath(resource);
+
+		// Ensure to have any trailing path separators removed, otherwise
+		// we may believe the path is not "real" and will convert every
+		// event back to this form, which is not warranted.
+		// See also https://github.com/microsoft/vscode/issues/210517
+		return removeTrailingPathSeparator(filePath);
+	}
 }

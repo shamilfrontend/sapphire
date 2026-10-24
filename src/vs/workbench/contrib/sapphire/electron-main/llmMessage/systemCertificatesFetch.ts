@@ -23,7 +23,10 @@ export async function getGatewayHttpAgentWithSystemCertificates(): Promise<Agent
     cachedHttpAgentPromise = (async () => {
       let systemCAs: string[] = [];
       try {
-        systemCAs = await loadSystemCertificates({ log: quietCertLog });
+        systemCAs = await loadSystemCertificates({
+          log: quietCertLog,
+          loadSystemCertificatesFromNode: () => true,
+        });
       } catch {
         // Системное хранилище — best-effort.
       }

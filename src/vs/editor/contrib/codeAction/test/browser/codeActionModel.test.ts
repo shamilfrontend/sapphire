@@ -9,6 +9,7 @@ import { assertType } from '../../../../../base/common/types.js';
 import { URI } from '../../../../../base/common/uri.js';
 import { runWithFakedTimers } from '../../../../../base/test/common/timeTravelScheduler.js';
 import { ensureNoDisposablesAreLeakedInTestSuite } from '../../../../../base/test/common/utils.js';
+import { TestConfigurationService } from '../../../../../platform/configuration/test/common/testConfigurationService.js';
 import { MockContextKeyService } from '../../../../../platform/keybinding/test/common/mockKeybindingService.js';
 import { MarkerService } from '../../../../../platform/markers/common/markerService.js';
 import { ICodeEditor } from '../../../../browser/editorBrowser.js';
@@ -18,172 +19,251 @@ import { TextModel } from '../../../../common/model/textModel.js';
 import { createTestCodeEditor } from '../../../../test/browser/testCodeEditor.js';
 import { createTextModel } from '../../../../test/common/testTextModel.js';
 import { CodeActionModel, CodeActionsState } from '../../browser/codeActionModel.js';
+import { CodeActionTriggerSource } from '../../common/types.js';
 
 const testProvider = {
-  provideCodeActions(): languages.CodeActionList {
-    return {
-      actions: [{ title: 'test', command: { id: 'test-command', title: 'test', arguments: [] } }],
-      dispose() {
-        /* noop */
-      },
-    };
-  },
+	provideCodeActions(): languages.CodeActionList {
+		return {
+			actions: [
+				{ title: 'test', command: { id: 'test-command', title: 'test', arguments: [] } }
+			],
+			dispose() { /* noop*/ }
+		};
+	}
 };
 
 suite('CodeActionModel', () => {
-  const languageId = 'foo-lang';
-  const uri = URI.parse('untitled:path');
-  let model: TextModel;
-  let markerService: MarkerService;
-  let editor: ICodeEditor;
-  let registry: LanguageFeatureRegistry<languages.CodeActionProvider>;
 
-  setup(() => {
-    markerService = new MarkerService();
-    model = createTextModel('foobar  foo bar\nfarboo far boo', languageId, undefined, uri);
-    editor = createTestCodeEditor(model);
-    editor.setPosition({ lineNumber: 1, column: 1 });
-    registry = new LanguageFeatureRegistry();
-  });
+	const languageId = 'foo-lang';
+	const uri = URI.parse('untitled:path');
+	let model: TextModel;
+	let markerService: MarkerService;
+	let editor: ICodeEditor;
+	let registry: LanguageFeatureRegistry<languages.CodeActionProvider>;
 
-  const store = ensureNoDisposablesAreLeakedInTestSuite();
+	setup(() => {
+		markerService = new MarkerService();
+		model = createTextModel('foobar  foo bar\nfarboo far boo', languageId, undefined, uri);
+		editor = createTestCodeEditor(model);
+		editor.setPosition({ lineNumber: 1, column: 1 });
+		registry = new LanguageFeatureRegistry();
+	});
 
-  teardown(() => {
-    editor.dispose();
-    model.dispose();
-    markerService.dispose();
-  });
+	const store = ensureNoDisposablesAreLeakedInTestSuite();
 
-  test('Oracle -> marker added', async () => {
-    const { promise: donePromise, resolve: done } = promiseWithResolvers<void>();
+	teardown(() => {
+		editor.dispose();
+		model.dispose();
+		markerService.dispose();
+	});
 
-    await runWithFakedTimers({ useFakeTimers: true }, () => {
-      const reg = registry.register(languageId, testProvider);
-      store.add(reg);
+	test('Oracle -> marker added', async () => {
+		await runWithFakedTimers({ useFakeTimers: true }, () => {
+			const { promise: donePromise, resolve: done } = promiseWithResolvers<void>();
 
-      const contextKeys = new MockContextKeyService();
-      const model = store.add(
-        new CodeActionModel(editor, registry, markerService, contextKeys, undefined),
-      );
-      store.add(
-        model.onDidChangeState((e: CodeActionsState.State) => {
-          assertType(e.type === CodeActionsState.Type.Triggered);
+			const reg = registry.register(languageId, testProvider);
+			store.add(reg);
 
-          assert.strictEqual(e.trigger.type, languages.CodeActionTriggerType.Auto);
-          assert.ok(e.actions);
+			const contextKeys = new MockContextKeyService();
+			const model = store.add(new CodeActionModel(editor, registry, markerService, contextKeys, undefined));
+			store.add(model.onDidChangeState((e: CodeActionsState.State) => {
+				assertType(e.type === CodeActionsState.Type.Triggered);
 
-          e.actions.then((fixes) => {
-            model.dispose();
-            assert.strictEqual(fixes.validActions.length, 1);
-            done();
-          }, done);
-        }),
-      );
+				assert.strictEqual(e.trigger.type, languages.CodeActionTriggerType.Auto);
+				assert.ok(e.actions);
 
-      // start here
-      markerService.changeOne('fake', uri, [
-        {
-          startLineNumber: 1,
-          startColumn: 1,
-          endLineNumber: 1,
-          endColumn: 6,
-          message: 'error',
-          severity: 1,
-          code: '',
-          source: '',
-        },
-      ]);
-      return donePromise;
-    });
-  });
+				e.actions.then(fixes => {
+					model.dispose();
+					assert.strictEqual(fixes.validActions.length, 1);
+					done();
+				}, done);
+			}));
 
-  test('Oracle -> position changed', async () => {
-    await runWithFakedTimers({ useFakeTimers: true }, () => {
-      const reg = registry.register(languageId, testProvider);
-      store.add(reg);
+			// start here
+			markerService.changeOne('fake', uri, [{
+				startLineNumber: 1, startColumn: 1, endLineNumber: 1, endColumn: 6,
+				message: 'error',
+				severity: 1,
+				code: '',
+				source: ''
+			}]);
+			return donePromise;
+		});
+	});
 
-      markerService.changeOne('fake', uri, [
-        {
-          startLineNumber: 1,
-          startColumn: 1,
-          endLineNumber: 1,
-          endColumn: 6,
-          message: 'error',
-          severity: 1,
-          code: '',
-          source: '',
-        },
-      ]);
+	test('Oracle -> position changed', async () => {
+		await runWithFakedTimers({ useFakeTimers: true }, () => {
+			const reg = registry.register(languageId, testProvider);
+			store.add(reg);
 
-      editor.setPosition({ lineNumber: 2, column: 1 });
+			markerService.changeOne('fake', uri, [{
+				startLineNumber: 1, startColumn: 1, endLineNumber: 1, endColumn: 6,
+				message: 'error',
+				severity: 1,
+				code: '',
+				source: ''
+			}]);
 
-      return new Promise((resolve, reject) => {
-        const contextKeys = new MockContextKeyService();
-        const model = store.add(
-          new CodeActionModel(editor, registry, markerService, contextKeys, undefined),
-        );
-        store.add(
-          model.onDidChangeState((e: CodeActionsState.State) => {
-            assertType(e.type === CodeActionsState.Type.Triggered);
+			editor.setPosition({ lineNumber: 2, column: 1 });
 
-            assert.strictEqual(e.trigger.type, languages.CodeActionTriggerType.Auto);
-            assert.ok(e.actions);
-            e.actions.then((fixes) => {
-              model.dispose();
-              assert.strictEqual(fixes.validActions.length, 1);
-              resolve(undefined);
-            }, reject);
-          }),
-        );
-        // start here
-        editor.setPosition({ lineNumber: 1, column: 1 });
-      });
-    });
-  });
+			return new Promise((resolve, reject) => {
+				const contextKeys = new MockContextKeyService();
+				const model = store.add(new CodeActionModel(editor, registry, markerService, contextKeys, undefined));
+				store.add(model.onDidChangeState((e: CodeActionsState.State) => {
+					assertType(e.type === CodeActionsState.Type.Triggered);
 
-  test('Oracle -> should only auto trigger once for cursor and marker update right after each other', async () => {
-    const { promise: donePromise, resolve: done } = promiseWithResolvers<void>();
-    await runWithFakedTimers({ useFakeTimers: true }, () => {
-      const reg = registry.register(languageId, testProvider);
-      store.add(reg);
+					assert.strictEqual(e.trigger.type, languages.CodeActionTriggerType.Auto);
+					assert.ok(e.actions);
+					e.actions.then(fixes => {
+						model.dispose();
+						assert.strictEqual(fixes.validActions.length, 1);
+						resolve(undefined);
+					}, reject);
+				}));
+				// start here
+				editor.setPosition({ lineNumber: 1, column: 1 });
+			});
+		});
+	});
 
-      let triggerCount = 0;
-      const contextKeys = new MockContextKeyService();
-      const model = store.add(
-        new CodeActionModel(editor, registry, markerService, contextKeys, undefined),
-      );
-      store.add(
-        model.onDidChangeState((e: CodeActionsState.State) => {
-          assertType(e.type === CodeActionsState.Type.Triggered);
+	test('Oracle -> should only auto trigger once for cursor and marker update right after each other', async () => {
+		await runWithFakedTimers({ useFakeTimers: true }, () => {
+			const { promise: donePromise, resolve: done } = promiseWithResolvers<void>();
+			const reg = registry.register(languageId, testProvider);
+			store.add(reg);
 
-          assert.strictEqual(e.trigger.type, languages.CodeActionTriggerType.Auto);
-          ++triggerCount;
+			let triggerCount = 0;
+			const contextKeys = new MockContextKeyService();
+			const model = store.add(new CodeActionModel(editor, registry, markerService, contextKeys, undefined));
+			store.add(model.onDidChangeState((e: CodeActionsState.State) => {
+				assertType(e.type === CodeActionsState.Type.Triggered);
 
-          // give time for second trigger before completing test
-          setTimeout(() => {
-            model.dispose();
-            assert.strictEqual(triggerCount, 1);
-            done();
-          }, 0);
-        }, 5 /* delay */),
-      );
+				assert.strictEqual(e.trigger.type, languages.CodeActionTriggerType.Auto);
+				++triggerCount;
 
-      markerService.changeOne('fake', uri, [
-        {
-          startLineNumber: 1,
-          startColumn: 1,
-          endLineNumber: 1,
-          endColumn: 6,
-          message: 'error',
-          severity: 1,
-          code: '',
-          source: '',
-        },
-      ]);
+				// give time for second trigger before completing test
+				setTimeout(() => {
+					model.dispose();
+					assert.strictEqual(triggerCount, 1);
+					done();
+				}, 0);
+			}, 5 /*delay*/));
 
-      editor.setSelection({ startLineNumber: 1, startColumn: 1, endLineNumber: 4, endColumn: 1 });
+			markerService.changeOne('fake', uri, [{
+				startLineNumber: 1, startColumn: 1, endLineNumber: 1, endColumn: 6,
+				message: 'error',
+				severity: 1,
+				code: '',
+				source: ''
+			}]);
 
-      return donePromise;
-    });
-  });
+			editor.setSelection({ startLineNumber: 1, startColumn: 1, endLineNumber: 4, endColumn: 1 });
+
+			return donePromise;
+		});
+	});
+
+	test('disposes manually triggered code actions when the editor model is cleared', async () => {
+		let disposeCount = 0;
+		store.add(registry.register(languageId, {
+			provideCodeActions(_model, _range, context): languages.CodeActionList | undefined {
+				if (context.trigger !== languages.CodeActionTriggerType.Invoke) {
+					return undefined;
+				}
+				return {
+					actions: [
+						{ title: 'test', command: { id: 'test-command', title: 'test', arguments: [] } }
+					],
+					dispose() {
+						disposeCount++;
+					}
+				};
+			}
+		}));
+
+		const contextKeys = new MockContextKeyService();
+		const codeActionModel = store.add(new CodeActionModel(editor, registry, markerService, contextKeys, undefined));
+		const { promise, resolve } = promiseWithResolvers<CodeActionsState.Triggered>();
+		store.add(codeActionModel.onDidChangeState(state => {
+			if (state.type !== CodeActionsState.Type.Triggered || state.trigger.type !== languages.CodeActionTriggerType.Invoke) {
+				return;
+			}
+			resolve(state);
+		}));
+
+		codeActionModel.trigger({
+			type: languages.CodeActionTriggerType.Invoke,
+			triggerAction: CodeActionTriggerSource.Default,
+		});
+		const state = await promise;
+		await state.actions;
+		editor.setModel(null);
+		assert.strictEqual(disposeCount, 1);
+	});
+
+	async function assertManualActionsSurviveCanceledAutomaticRequest(claimBeforeAutomaticResultCompletes: boolean): Promise<void> {
+		const { promise: automaticResult, resolve: resolveAutomaticResult } = promiseWithResolvers<languages.CodeActionList>();
+		let provideCount = 0;
+		let manualDisposeCount = 0;
+		store.add(registry.register(languageId, {
+			provideCodeActions(_model, _range, context): languages.ProviderResult<languages.CodeActionList> {
+				if (provideCount++ === 0) {
+					return automaticResult;
+				}
+				assert.strictEqual(context.trigger, languages.CodeActionTriggerType.Invoke);
+				return {
+					actions: [{
+						title: 'test',
+						kind: 'quickfix',
+						command: { id: 'test-command', title: 'test', arguments: [{ value: true }] }
+					}],
+					dispose() {
+						manualDisposeCount++;
+					}
+				};
+			}
+		}));
+
+		const contextKeys = new MockContextKeyService();
+		const configurationService = new TestConfigurationService({ 'editor.codeActionWidget.includeNearbyQuickFixes': true });
+		const codeActionModel = store.add(new CodeActionModel(editor, registry, markerService, contextKeys, undefined, configurationService));
+		const { promise, resolve } = promiseWithResolvers<CodeActionsState.Triggered>();
+		store.add(codeActionModel.onDidChangeState(state => {
+			if (state.type === CodeActionsState.Type.Triggered && state.trigger.type === languages.CodeActionTriggerType.Invoke) {
+				resolve(state);
+			}
+		}));
+
+		codeActionModel.trigger({
+			type: languages.CodeActionTriggerType.Invoke,
+			triggerAction: CodeActionTriggerSource.QuickFix,
+		});
+		const manualActionSet = await (await promise).actions;
+		let manualActions = claimBeforeAutomaticResultCompletes ? codeActionModel.takeCodeActions(manualActionSet) : undefined;
+
+		resolveAutomaticResult({ actions: [], dispose() { } });
+		await new Promise(resolve => setTimeout(resolve, 0));
+		manualActions ??= codeActionModel.takeCodeActions(manualActionSet);
+		const wasClaimed = !!manualActions;
+		const disposeCountBeforeRelease = manualDisposeCount;
+		manualActions?.dispose();
+
+		assert.deepStrictEqual({
+			wasClaimed,
+			disposeCountBeforeRelease,
+			disposeCountAfterRelease: manualDisposeCount,
+		}, {
+			wasClaimed: true,
+			disposeCountBeforeRelease: 0,
+			disposeCountAfterRelease: 1,
+		});
+	}
+
+	test('does not dispose claimed manual code actions when a canceled automatic request completes', async () => {
+		await assertManualActionsSurviveCanceledAutomaticRequest(true);
+	});
+
+	test('does not replace manual code actions when a canceled automatic request completes before claim', async () => {
+		await assertManualActionsSurviveCanceledAutomaticRequest(false);
+	});
 });

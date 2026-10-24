@@ -16,61 +16,53 @@ import { ThemeIcon } from '../../../../base/common/themables.js';
 import { Codicon } from '../../../../base/common/codicons.js';
 import { registerIcon } from '../../../../platform/theme/common/iconRegistry.js';
 
-const ExtensionEditorIcon = registerIcon(
-  'extensions-editor-label-icon',
-  Codicon.extensions,
-  localize('extensionsEditorLabelIcon', 'Icon of the extensions editor label.'),
-);
+const ExtensionEditorIcon = registerIcon('extensions-editor-label-icon', Codicon.extensions, localize('extensionsEditorLabelIcon', 'Icon of the extensions editor label.'));
 
 export interface IExtensionEditorOptions extends IEditorOptions {
-  showPreReleaseVersion?: boolean;
-  tab?: ExtensionEditorTab;
-  feature?: string;
-  sideByside?: boolean;
+	showPreReleaseVersion?: boolean;
+	tab?: ExtensionEditorTab;
+	feature?: string;
+	sideByside?: boolean;
 }
 
 export class ExtensionsInput extends EditorInput {
-  static readonly ID = 'workbench.extensions.input2';
 
-  override get typeId(): string {
-    return ExtensionsInput.ID;
-  }
+	static readonly ID = 'workbench.extensions.input2';
 
-  override get capabilities(): EditorInputCapabilities {
-    return EditorInputCapabilities.Readonly | EditorInputCapabilities.Singleton;
-  }
+	override get typeId(): string {
+		return ExtensionsInput.ID;
+	}
 
-  override get resource() {
-    return URI.from({
-      scheme: Schemas.extension,
-      path: join(this._extension.identifier.id, 'extension'),
-    });
-  }
+	override get capabilities(): EditorInputCapabilities {
+		return EditorInputCapabilities.Readonly | EditorInputCapabilities.Singleton;
+	}
 
-  constructor(private _extension: IExtension) {
-    super();
-  }
+	override get resource() {
+		return URI.from({
+			scheme: Schemas.extension,
+			path: join(this._extension.identifier.id, 'extension')
+		});
+	}
 
-  get extension(): IExtension {
-    return this._extension;
-  }
+	constructor(private _extension: IExtension) {
+		super();
+	}
 
-  override getName(): string {
-    return localize('extensionsInputName', 'Extension: {0}', this._extension.displayName);
-  }
+	get extension(): IExtension { return this._extension; }
 
-  override getIcon(): ThemeIcon | undefined {
-    return ExtensionEditorIcon;
-  }
+	override getName(): string {
+		return localize('extensionsInputName', "Extension: {0}", this._extension.displayName);
+	}
 
-  override matches(other: EditorInput | IUntypedEditorInput): boolean {
-    if (super.matches(other)) {
-      return true;
-    }
+	override getIcon(): ThemeIcon | undefined {
+		return ExtensionEditorIcon;
+	}
 
-    return (
-      other instanceof ExtensionsInput &&
-      areSameExtensions(this._extension.identifier, other._extension.identifier)
-    );
-  }
+	override matches(other: EditorInput | IUntypedEditorInput): boolean {
+		if (super.matches(other)) {
+			return true;
+		}
+
+		return other instanceof ExtensionsInput && areSameExtensions(this._extension.identifier, other._extension.identifier);
+	}
 }

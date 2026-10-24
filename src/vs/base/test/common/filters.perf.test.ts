@@ -11,69 +11,72 @@ const patterns = ['cci', 'ida', 'pos', 'CCI', 'enbled', 'callback', 'gGame', 'co
 const _enablePerf = false;
 
 function perfSuite(name: string, callback: (this: Mocha.Suite) => void) {
-  if (_enablePerf) {
-    suite(name, callback);
-  }
+	if (_enablePerf) {
+		suite(name, callback);
+	}
 }
 
-perfSuite('Performance - fuzzyMatch', async () => {
-  const uri = FileAccess.asBrowserUri('vs/base/test/common/filters.perf.data').toString(true);
-  const { data } = await importAMDNodeModule<typeof import('./filters.perf.data.js')>(uri, '');
+perfSuite('Performance - fuzzyMatch', async function () {
 
-  // suiteSetup(() => console.profile());
-  // suiteTeardown(() => console.profileEnd());
+	const uri = FileAccess.asBrowserUri('vs/base/test/common/filters.perf.data').toString(true);
+	const { data } = await importAMDNodeModule<typeof import('./filters.perf.data.js')>(uri, '');
 
-  console.log(
-    `Matching ${data.length} items against ${patterns.length} patterns (${data.length * patterns.length} operations) `,
-  );
+	// suiteSetup(() => console.profile());
+	// suiteTeardown(() => console.profileEnd());
 
-  function perfTest(name: string, match: filters.FuzzyScorer) {
-    test(name, () => {
-      const t1 = Date.now();
-      let count = 0;
-      for (let i = 0; i < 2; i++) {
-        for (const pattern of patterns) {
-          const patternLow = pattern.toLowerCase();
-          for (const item of data) {
-            count += 1;
-            match(pattern, patternLow, 0, item, item.toLowerCase(), 0);
-          }
-        }
-      }
-      const d = Date.now() - t1;
-      console.log(name, `${d}ms, ${Math.round(count / d) * 15}/15ms, ${Math.round(count / d)}/1ms`);
-    });
-  }
+	console.log(`Matching ${data.length} items against ${patterns.length} patterns (${data.length * patterns.length} operations) `);
 
-  perfTest('fuzzyScore', filters.fuzzyScore);
-  perfTest('fuzzyScoreGraceful', filters.fuzzyScoreGraceful);
-  perfTest('fuzzyScoreGracefulAggressive', filters.fuzzyScoreGracefulAggressive);
+	function perfTest(name: string, match: filters.FuzzyScorer) {
+		test(name, () => {
+
+			const t1 = Date.now();
+			let count = 0;
+			for (let i = 0; i < 2; i++) {
+				for (const pattern of patterns) {
+					const patternLow = pattern.toLowerCase();
+					for (const item of data) {
+						count += 1;
+						match(pattern, patternLow, 0, item, item.toLowerCase(), 0);
+					}
+				}
+			}
+			const d = Date.now() - t1;
+			console.log(name, `${d}ms, ${Math.round(count / d) * 15}/15ms, ${Math.round(count / d)}/1ms`);
+		});
+	}
+
+	perfTest('fuzzyScore', filters.fuzzyScore);
+	perfTest('fuzzyScoreGraceful', filters.fuzzyScoreGraceful);
+	perfTest('fuzzyScoreGracefulAggressive', filters.fuzzyScoreGracefulAggressive);
 });
 
-perfSuite('Performance - IFilter', async () => {
-  const uri = FileAccess.asBrowserUri('vs/base/test/common/filters.perf.data').toString(true);
-  const { data } = await importAMDNodeModule<typeof import('./filters.perf.data.js')>(uri, '');
 
-  function perfTest(name: string, match: filters.IFilter) {
-    test(name, () => {
-      const t1 = Date.now();
-      let count = 0;
-      for (let i = 0; i < 2; i++) {
-        for (const pattern of patterns) {
-          for (const item of data) {
-            count += 1;
-            match(pattern, item);
-          }
-        }
-      }
-      const d = Date.now() - t1;
-      console.log(name, `${d}ms, ${Math.round(count / d) * 15}/15ms, ${Math.round(count / d)}/1ms`);
-    });
-  }
+perfSuite('Performance - IFilter', async function () {
 
-  perfTest('matchesFuzzy', filters.matchesFuzzy);
-  perfTest('matchesFuzzy2', filters.matchesFuzzy2);
-  perfTest('matchesPrefix', filters.matchesPrefix);
-  perfTest('matchesContiguousSubString', filters.matchesContiguousSubString);
-  perfTest('matchesCamelCase', filters.matchesCamelCase);
+	const uri = FileAccess.asBrowserUri('vs/base/test/common/filters.perf.data').toString(true);
+	const { data } = await importAMDNodeModule<typeof import('./filters.perf.data.js')>(uri, '');
+
+	function perfTest(name: string, match: filters.IFilter) {
+		test(name, () => {
+
+			const t1 = Date.now();
+			let count = 0;
+			for (let i = 0; i < 2; i++) {
+				for (const pattern of patterns) {
+					for (const item of data) {
+						count += 1;
+						match(pattern, item);
+					}
+				}
+			}
+			const d = Date.now() - t1;
+			console.log(name, `${d}ms, ${Math.round(count / d) * 15}/15ms, ${Math.round(count / d)}/1ms`);
+		});
+	}
+
+	perfTest('matchesFuzzy', filters.matchesFuzzy);
+	perfTest('matchesFuzzy2', filters.matchesFuzzy2);
+	perfTest('matchesPrefix', filters.matchesPrefix);
+	perfTest('matchesContiguousSubString', filters.matchesContiguousSubString);
+	perfTest('matchesCamelCase', filters.matchesCamelCase);
 });

@@ -3,37 +3,32 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import {
-  IEncryptionService,
-  KnownStorageProvider,
-} from '../../../../platform/encryption/common/encryptionService.js';
-import {
-  InstantiationType,
-  registerSingleton,
-} from '../../../../platform/instantiation/common/extensions.js';
+import { IEncryptionService, KnownStorageProvider } from '../../../../platform/encryption/common/encryptionService.js';
+import { InstantiationType, registerSingleton } from '../../../../platform/instantiation/common/extensions.js';
 
 export class EncryptionService implements IEncryptionService {
-  declare readonly _serviceBrand: undefined;
 
-  encrypt(value: string): Promise<string> {
-    return Promise.resolve(value);
-  }
+	declare readonly _serviceBrand: undefined;
 
-  decrypt(value: string): Promise<string> {
-    return Promise.resolve(value);
-  }
+	encrypt(value: string): Promise<string> {
+		return Promise.resolve(value);
+	}
 
-  isEncryptionAvailable(): Promise<boolean> {
-    return Promise.resolve(false);
-  }
+	decrypt(value: string): Promise<string> {
+		return Promise.resolve(value);
+	}
 
-  getKeyStorageProvider(): Promise<KnownStorageProvider> {
-    return Promise.resolve(KnownStorageProvider.basicText);
-  }
+	isEncryptionAvailable(): Promise<boolean> {
+		return Promise.resolve(false);
+	}
 
-  setUsePlainTextEncryption(): Promise<void> {
-    return Promise.resolve(undefined);
-  }
+	getKeyStorageProvider(): Promise<KnownStorageProvider> {
+		return Promise.resolve(KnownStorageProvider.basicText);
+	}
+
+	setUsePlainTextEncryption(): Promise<void> {
+		return Promise.resolve(undefined);
+	}
 }
 
 registerSingleton(IEncryptionService, EncryptionService, InstantiationType.Delayed);

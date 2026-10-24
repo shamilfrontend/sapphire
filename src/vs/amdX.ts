@@ -3,218 +3,200 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import {
-  AppResourcePath,
-  FileAccess,
-  nodeModulesAsarPath,
-  nodeModulesPath,
-  Schemas,
-  VSCODE_AUTHORITY,
-} from './base/common/network.js';
+import { AppResourcePath, FileAccess, nodeModulesAsarPath, nodeModulesPath, Schemas, VSCODE_AUTHORITY } from './base/common/network.js';
 import * as platform from './base/common/platform.js';
 import { IProductConfiguration } from './base/common/product.js';
 import { URI } from './base/common/uri.js';
 import { generateUuid } from './base/common/uuid.js';
 
-export const canASAR = false; // TODO@esm: ASAR disabled in ESM
+declare const window: any;
+declare const document: any;
+declare const self: any;
+declare const globalThis: any;
 
 class DefineCall {
-  constructor(
-    public readonly id: string | null | undefined,
-    public readonly dependencies: string[] | null | undefined,
-    public readonly callback: any,
-  ) {}
+	constructor(
+		public readonly id: string | null | undefined,
+		public readonly dependencies: string[] | null | undefined,
+		public readonly callback: any
+	) { }
 }
 
 enum AMDModuleImporterState {
-  Uninitialized = 1,
-  InitializedInternal,
-  InitializedExternal,
+	Uninitialized = 1,
+	InitializedInternal,
+	InitializedExternal
 }
 
 class AMDModuleImporter {
-  public static INSTANCE = new AMDModuleImporter();
+	public static INSTANCE = new AMDModuleImporter();
 
-  private readonly _isWebWorker =
-    typeof self === 'object' &&
-    self.constructor &&
-    self.constructor.name === 'DedicatedWorkerGlobalScope';
+	private readonly _isWebWorker = (typeof self === 'object' && self.constructor && self.constructor.name === 'DedicatedWorkerGlobalScope');
+	private readonly _isRenderer = typeof document === 'object';
 
-  private readonly _isRenderer = typeof document === 'object';
+	private readonly _defineCalls: DefineCall[] = [];
+	private _state = AMDModuleImporterState.Uninitialized;
+	private _amdPolicy: Pick<TrustedTypePolicy, 'name' | 'createScriptURL'> | undefined;
 
-  private readonly _defineCalls: DefineCall[] = [];
+	constructor() { }
 
-  private _state = AMDModuleImporterState.Uninitialized;
+	private _initialize(): void {
+		if (this._state === AMDModuleImporterState.Uninitialized) {
+			if (globalThis.define) {
+				this._state = AMDModuleImporterState.InitializedExternal;
+				return;
+			}
+		} else {
+			return;
+		}
 
-  private _amdPolicy:
-    | Pick<
-        TrustedTypePolicy<{
-          createScriptURL(value: string): string;
-        }>,
-        'name' | 'createScriptURL'
-      >
-    | undefined;
+		this._state = AMDModuleImporterState.InitializedInternal;
 
-  constructor() {}
+		globalThis.define = (id: any, dependencies: any, callback: any) => {
+			if (typeof id !== 'string') {
+				callback = dependencies;
+				dependencies = id;
+				id = null;
+			}
+			if (typeof dependencies !== 'object' || !Array.isArray(dependencies)) {
+				callback = dependencies;
+				dependencies = null;
+			}
+			// if (!dependencies) {
+			// 	dependencies = ['require', 'exports', 'module'];
+			// }
+			this._defineCalls.push(new DefineCall(id, dependencies, callback));
+		};
 
-  private _initialize(): void {
-    if (this._state === AMDModuleImporterState.Uninitialized) {
-      if ((globalThis as any).define) {
-        this._state = AMDModuleImporterState.InitializedExternal;
-        return;
-      }
-    } else {
-      return;
-    }
+		globalThis.define.amd = true;
 
-    this._state = AMDModuleImporterState.InitializedInternal;
+		if (this._isRenderer) {
+			this._amdPolicy = globalThis._VSCODE_WEB_PACKAGE_TTP ?? window.trustedTypes?.createPolicy('amdLoader', {
+				createScriptURL(value: any) {
+					if (value.startsWith(window.location.origin)) {
+						return value;
+					}
+					if (value.startsWith(`${Schemas.vscodeFileResource}://${VSCODE_AUTHORITY}`)) {
+						return value;
+					}
+					throw new Error(`[trusted_script_src] Invalid script url: ${value}`);
+				}
+			});
+		} else if (this._isWebWorker) {
+			this._amdPolicy = globalThis._VSCODE_WEB_PACKAGE_TTP ?? globalThis.trustedTypes?.createPolicy('amdLoader', {
+				createScriptURL(value: string) {
+					return value;
+				}
+			});
+		}
+	}
 
-    (globalThis as any).define = (id: any, dependencies: any, callback: any) => {
-      if (typeof id !== 'string') {
-        callback = dependencies;
-        dependencies = id;
-        id = null;
-      }
-      if (typeof dependencies !== 'object' || !Array.isArray(dependencies)) {
-        callback = dependencies;
-        dependencies = null;
-      }
-      // if (!dependencies) {
-      // 	dependencies = ['require', 'exports', 'module'];
-      // }
-      this._defineCalls.push(new DefineCall(id, dependencies, callback));
-    };
+	public async load<T>(scriptSrc: string): Promise<T> {
+		this._initialize();
 
-    (globalThis as any).define.amd = true;
+		if (this._state === AMDModuleImporterState.InitializedExternal) {
+			return new Promise<T>(resolve => {
+				const tmpModuleId = generateUuid();
+				globalThis.define(tmpModuleId, [scriptSrc], function (moduleResult: T) {
+					resolve(moduleResult);
+				});
+			});
+		}
 
-    if (this._isRenderer) {
-      this._amdPolicy =
-        (globalThis as any)._VSCODE_WEB_PACKAGE_TTP ??
-        window.trustedTypes?.createPolicy('amdLoader', {
-          createScriptURL(value) {
-            if (value.startsWith(window.location.origin)) {
-              return value;
-            }
-            if (value.startsWith(`${Schemas.vscodeFileResource}://${VSCODE_AUTHORITY}`)) {
-              return value;
-            }
-            throw new Error(`[trusted_script_src] Invalid script url: ${value}`);
-          },
-        });
-    } else if (this._isWebWorker) {
-      this._amdPolicy =
-        (globalThis as any)._VSCODE_WEB_PACKAGE_TTP ??
-        (globalThis as any).trustedTypes?.createPolicy('amdLoader', {
-          createScriptURL(value: string) {
-            return value;
-          },
-        });
-    }
-  }
+		const defineCall = await (this._isWebWorker ? this._workerLoadScript(scriptSrc) : this._isRenderer ? this._rendererLoadScript(scriptSrc) : this._nodeJSLoadScript(scriptSrc));
+		if (!defineCall) {
+			console.warn(`Did not receive a define call from script ${scriptSrc}`);
+			return <T>undefined;
+		}
+		// TODO@esm require, module
+		const exports = {};
+		const dependencyObjs: any[] = [];
+		const dependencyModules: string[] = [];
 
-  public async load<T>(scriptSrc: string): Promise<T> {
-    this._initialize();
+		if (Array.isArray(defineCall.dependencies)) {
 
-    if (this._state === AMDModuleImporterState.InitializedExternal) {
-      return new Promise<T>((resolve) => {
-        const tmpModuleId = generateUuid();
-        (globalThis as any).define(tmpModuleId, [scriptSrc], (moduleResult: T) => {
-          resolve(moduleResult);
-        });
-      });
-    }
+			for (const mod of defineCall.dependencies) {
+				if (mod === 'exports') {
+					dependencyObjs.push(exports);
+				} else {
+					dependencyModules.push(mod);
+				}
+			}
+		}
 
-    const defineCall = await (this._isWebWorker
-      ? this._workerLoadScript(scriptSrc)
-      : this._isRenderer
-        ? this._rendererLoadScript(scriptSrc)
-        : this._nodeJSLoadScript(scriptSrc));
-    if (!defineCall) {
-      console.warn(`Did not receive a define call from script ${scriptSrc}`);
-      return <T>undefined;
-    }
-    // TODO@esm require, module
-    const exports = {};
-    const dependencyObjs: any[] = [];
-    const dependencyModules: string[] = [];
+		if (dependencyModules.length > 0) {
+			throw new Error(`Cannot resolve dependencies for script ${scriptSrc}. The dependencies are: ${dependencyModules.join(', ')}`);
+		}
+		if (typeof defineCall.callback === 'function') {
+			return defineCall.callback(...dependencyObjs) ?? exports;
+		} else {
+			return defineCall.callback;
+		}
+	}
 
-    if (Array.isArray(defineCall.dependencies)) {
-      for (const mod of defineCall.dependencies) {
-        if (mod === 'exports') {
-          dependencyObjs.push(exports);
-        } else {
-          dependencyModules.push(mod);
-        }
-      }
-    }
+	private _rendererLoadScript(scriptSrc: string): Promise<DefineCall | undefined> {
+		return new Promise<DefineCall | undefined>((resolve, reject) => {
+			const scriptElement = document.createElement('script');
+			scriptElement.setAttribute('async', 'async');
+			scriptElement.setAttribute('type', 'text/javascript');
 
-    if (dependencyModules.length > 0) {
-      throw new Error(
-        `Cannot resolve dependencies for script ${scriptSrc}. The dependencies are: ${dependencyModules.join(', ')}`,
-      );
-    }
-    if (typeof defineCall.callback === 'function') {
-      return defineCall.callback(...dependencyObjs) ?? exports;
-    }
-    return defineCall.callback;
-  }
+			const unbind = () => {
+				scriptElement.removeEventListener('load', loadEventListener);
+				scriptElement.removeEventListener('error', errorEventListener);
+			};
 
-  private _rendererLoadScript(scriptSrc: string): Promise<DefineCall | undefined> {
-    return new Promise<DefineCall | undefined>((resolve, reject) => {
-      const scriptElement = document.createElement('script');
-      scriptElement.setAttribute('async', 'async');
-      scriptElement.setAttribute('type', 'text/javascript');
+			const loadEventListener = (e: any) => {
+				unbind();
+				resolve(this._defineCalls.pop());
+			};
 
-      const unbind = () => {
-        scriptElement.removeEventListener('load', loadEventListener);
-        scriptElement.removeEventListener('error', errorEventListener);
-      };
+			const errorEventListener = (e: any) => {
+				unbind();
+				reject(e);
+			};
 
-      const loadEventListener = (e: any) => {
-        unbind();
-        resolve(this._defineCalls.pop());
-      };
+			scriptElement.addEventListener('load', loadEventListener);
+			scriptElement.addEventListener('error', errorEventListener);
+			if (this._amdPolicy) {
+				scriptSrc = this._amdPolicy.createScriptURL(scriptSrc) as unknown as string;
+			}
+			scriptElement.setAttribute('src', scriptSrc);
+			window.document.getElementsByTagName('head')[0].appendChild(scriptElement);
+		});
+	}
 
-      const errorEventListener = (e: any) => {
-        unbind();
-        reject(e);
-      };
+	private async _workerLoadScript(scriptSrc: string): Promise<DefineCall | undefined> {
+		if (this._amdPolicy) {
+			scriptSrc = this._amdPolicy.createScriptURL(scriptSrc) as unknown as string;
+		}
+		await import(/* webpackIgnore: true */ /* @vite-ignore */ scriptSrc);
+		return this._defineCalls.pop();
+	}
 
-      scriptElement.addEventListener('load', loadEventListener);
-      scriptElement.addEventListener('error', errorEventListener);
-      if (this._amdPolicy) {
-        scriptSrc = this._amdPolicy.createScriptURL(scriptSrc) as any as string;
-      }
-      scriptElement.setAttribute('src', scriptSrc);
-      window.document.getElementsByTagName('head')[0].appendChild(scriptElement);
-    });
-  }
+	private async _nodeJSLoadScript(scriptSrc: string): Promise<DefineCall | undefined> {
+		try {
+			// `import('module')` is not remapped (only `fs` is), so it yields the real
+			// `module` builtin. We use its `createRequire` to obtain `fs`/`vm`: the ESM
+			// resolution hook maps `import('fs')` to the ASAR-unaware `original-fs`, but
+			// `scriptSrc` may point inside the `node_modules.asar` archive. The `fs`
+			// returned by `require` stays ASAR-aware in Electron, so it can read module
+			// files from within the archive.
+			const module = (await import(/* webpackIgnore: true */ /* @vite-ignore */ `${'module'}`)).default;
+			const nodeRequire = module.createRequire(import.meta.url);
+			const fs = nodeRequire('fs');
+			const vm = nodeRequire('vm');
 
-  private async _workerLoadScript(scriptSrc: string): Promise<DefineCall | undefined> {
-    if (this._amdPolicy) {
-      scriptSrc = this._amdPolicy.createScriptURL(scriptSrc) as any as string;
-    }
-    await import(scriptSrc);
-    return this._defineCalls.pop();
-  }
-
-  private async _nodeJSLoadScript(scriptSrc: string): Promise<DefineCall | undefined> {
-    try {
-      const fs = (await import(`${'fs'}`)).default;
-      const vm = (await import(`${'vm'}`)).default;
-      const module = (await import(`${'module'}`)).default;
-
-      const filePath = URI.parse(scriptSrc).fsPath;
-      const content = fs.readFileSync(filePath).toString();
-      const scriptSource = module.wrap(content.replace(/^#!.*/, ''));
-      const script = new vm.Script(scriptSource);
-      const compileWrapper = script.runInThisContext();
-      compileWrapper.apply();
-      return this._defineCalls.pop();
-    } catch (error) {
-      throw error;
-    }
-  }
+			const filePath = URI.parse(scriptSrc).fsPath;
+			const content = fs.readFileSync(filePath).toString();
+			const scriptSource = module.wrap(content.replace(/^#!.*/, ''));
+			const script = new vm.Script(scriptSource);
+			const compileWrapper = script.runInThisContext();
+			compileWrapper.apply();
+			return this._defineCalls.pop();
+		} catch (error) {
+			throw error;
+		}
+	}
 }
 
 const cache = new Map<string, Promise<any>>();
@@ -225,52 +207,39 @@ const cache = new Map<string, Promise<any>>();
  *
  * e.g. pass in `vscode-textmate/release/main.js`
  */
-export async function importAMDNodeModule<T>(
-  nodeModuleName: string,
-  pathInsideNodeModule: string,
-  isBuilt?: boolean,
-): Promise<T> {
-  if (isBuilt === undefined) {
-    const product = globalThis._VSCODE_PRODUCT_JSON as unknown as IProductConfiguration;
-    isBuilt = Boolean(
-      (product ?? (globalThis as any).vscode?.context?.configuration()?.product)?.commit,
-    );
-  }
+export async function importAMDNodeModule<T>(nodeModuleName: string, pathInsideNodeModule: string, isBuilt?: boolean): Promise<T> {
+	if (isBuilt === undefined) {
+		const product = globalThis._VSCODE_PRODUCT_JSON as unknown as IProductConfiguration;
+		isBuilt = Boolean((product ?? globalThis.vscode?.context?.configuration()?.product)?.commit);
+	}
 
-  const nodeModulePath = pathInsideNodeModule
-    ? `${nodeModuleName}/${pathInsideNodeModule}`
-    : nodeModuleName;
-  if (cache.has(nodeModulePath)) {
-    return cache.get(nodeModulePath)!;
-  }
-  let scriptSrc: string;
-  if (/^\w[\w\d+.-]*:\/\//.test(nodeModulePath)) {
-    // looks like a URL
-    // bit of a special case for: src/vs/workbench/services/languageDetection/browser/languageDetectionWebWorker.ts
-    scriptSrc = nodeModulePath;
-  } else {
-    const useASAR = canASAR && isBuilt && !platform.isWeb;
-    const actualNodeModulesPath = useASAR ? nodeModulesAsarPath : nodeModulesPath;
-    const resourcePath: AppResourcePath = `${actualNodeModulesPath}/${nodeModulePath}`;
-    scriptSrc = FileAccess.asBrowserUri(resourcePath).toString(true);
-  }
-  const result = AMDModuleImporter.INSTANCE.load<T>(scriptSrc);
-  cache.set(nodeModulePath, result);
-  return result;
+	const nodeModulePath = pathInsideNodeModule ? `${nodeModuleName}/${pathInsideNodeModule}` : nodeModuleName;
+	if (cache.has(nodeModulePath)) {
+		return cache.get(nodeModulePath)!;
+	}
+	let scriptSrc: string;
+	if (/^\w[\w\d+.-]*:\/\//.test(nodeModulePath)) {
+		// looks like a URL
+		// bit of a special case for: src/vs/workbench/services/languageDetection/browser/languageDetectionWebWorker.ts
+		scriptSrc = nodeModulePath;
+	} else {
+		const useASAR = (isBuilt && (platform.isElectron || (platform.isWebWorker && platform.hasElectronUserAgent)));
+		const actualNodeModulesPath = (useASAR ? nodeModulesAsarPath : nodeModulesPath);
+		const resourcePath: AppResourcePath = `${actualNodeModulesPath}/${nodeModulePath}`;
+		scriptSrc = FileAccess.asBrowserUri(resourcePath).toString(true);
+	}
+	const result = AMDModuleImporter.INSTANCE.load<T>(scriptSrc);
+	cache.set(nodeModulePath, result);
+	return result;
 }
 
-export function resolveAmdNodeModulePath(
-  nodeModuleName: string,
-  pathInsideNodeModule: string,
-): string {
-  const product = globalThis._VSCODE_PRODUCT_JSON as unknown as IProductConfiguration;
-  const isBuilt = Boolean(
-    (product ?? (globalThis as any).vscode?.context?.configuration()?.product)?.commit,
-  );
-  const useASAR = canASAR && isBuilt && !platform.isWeb;
+export function resolveAmdNodeModulePath(nodeModuleName: string, pathInsideNodeModule: string): string {
+	const product = globalThis._VSCODE_PRODUCT_JSON as unknown as IProductConfiguration;
+	const isBuilt = Boolean((product ?? globalThis.vscode?.context?.configuration()?.product)?.commit);
+	const useASAR = (isBuilt && (platform.isElectron || (platform.isWebWorker && platform.hasElectronUserAgent)));
 
-  const nodeModulePath = `${nodeModuleName}/${pathInsideNodeModule}`;
-  const actualNodeModulesPath = useASAR ? nodeModulesAsarPath : nodeModulesPath;
-  const resourcePath: AppResourcePath = `${actualNodeModulesPath}/${nodeModulePath}`;
-  return FileAccess.asBrowserUri(resourcePath).toString(true);
+	const nodeModulePath = `${nodeModuleName}/${pathInsideNodeModule}`;
+	const actualNodeModulesPath = (useASAR ? nodeModulesAsarPath : nodeModulesPath);
+	const resourcePath: AppResourcePath = `${actualNodeModulesPath}/${nodeModulePath}`;
+	return FileAccess.asBrowserUri(resourcePath).toString(true);
 }

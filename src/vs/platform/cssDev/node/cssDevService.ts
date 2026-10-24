@@ -4,82 +4,72 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { spawn } from 'child_process';
-import { relative } from 'path';
+import { relative } from '../../../base/common/path.js';
 import { FileAccess } from '../../../base/common/network.js';
+import { rgDiskPath } from '../../../base/node/ripgrep.js';
 import { StopWatch } from '../../../base/common/stopwatch.js';
 import { IEnvironmentService } from '../../environment/common/environment.js';
 import { createDecorator } from '../../instantiation/common/instantiation.js';
 import { ILogService } from '../../log/common/log.js';
 
-export const ICSSDevelopmentService =
-  createDecorator<ICSSDevelopmentService>('ICSSDevelopmentService');
+export const ICSSDevelopmentService = createDecorator<ICSSDevelopmentService>('ICSSDevelopmentService');
 
 export interface ICSSDevelopmentService {
-  _serviceBrand: undefined;
-  isEnabled: boolean;
-  getCssModules(): Promise<string[]>;
+	_serviceBrand: undefined;
+	isEnabled: boolean;
+	getCssModules(): Promise<string[]>;
 }
 
 export class CSSDevelopmentService implements ICSSDevelopmentService {
-  declare _serviceBrand: undefined;
 
-  private _cssModules?: Promise<string[]>;
+	declare _serviceBrand: undefined;
 
-  constructor(
-    @IEnvironmentService private readonly envService: IEnvironmentService,
-    @ILogService private readonly logService: ILogService,
-  ) {}
+	private _cssModules?: Promise<string[]>;
 
-  get isEnabled(): boolean {
-    return !this.envService.isBuilt;
-  }
+	constructor(
+		@IEnvironmentService private readonly envService: IEnvironmentService,
+		@ILogService private readonly logService: ILogService
+	) { }
 
-  getCssModules(): Promise<string[]> {
-    this._cssModules ??= this.computeCssModules();
-    return this._cssModules;
-  }
+	get isEnabled(): boolean {
+		return !this.envService.isBuilt;
+	}
 
-  private async computeCssModules(): Promise<string[]> {
-    if (!this.isEnabled) {
-      return [];
-    }
+	getCssModules(): Promise<string[]> {
+		this._cssModules ??= this.computeCssModules();
+		return this._cssModules;
+	}
 
-    const rg = await import('@vscode/ripgrep');
-    return await new Promise<string[]>((resolve) => {
-      const sw = StopWatch.create();
+	private async computeCssModules(): Promise<string[]> {
+		if (!this.isEnabled) {
+			return [];
+		}
 
-      // Buffer incomplete lines across stdout chunks. Splitting each chunk
-      // independently can cut a path mid-string and invent entries like
-      // `../../../../../`, which become trailing-slash import-map keys and
-      // break CSS module loading (black workbench in dev).
-      let stdout = '';
-      const decoder = new TextDecoder();
-      const basePath = FileAccess.asFileUri('').fsPath;
-      const process = spawn(rg.rgPath, ['-g', '**/*.css', '--files', '--no-ignore', basePath], {});
+		const rgBinPath = await rgDiskPath();
+		return await new Promise<string[]>((resolve) => {
 
-      process.stdout.on('data', (data) => {
-        stdout += decoder.decode(data, { stream: true });
-      });
-      process.on('error', (err) => {
-        this.logService.error('[CSS_DEV] FAILED to compute CSS data', err);
-        resolve([]);
-      });
-      process.on('close', () => {
-        stdout += decoder.decode();
-        const result = stdout
-          .split('\n')
-          .map((path) => path.trim())
-          .filter((path) => path.endsWith('.css'))
-          .map((path) => relative(basePath, path).replace(/\\/g, '/'))
-          .filter(
-            (path) => path.endsWith('.css') && !path.startsWith('..') && !path.includes('/../'),
-          )
-          .sort();
-        resolve(result);
-        this.logService.info(
-          `[CSS_DEV] DONE, ${result.length} css modules (${Math.round(sw.elapsed())}ms)`,
-        );
-      });
-    });
-  }
+			const sw = StopWatch.create();
+
+			const chunks: Buffer[] = [];
+			const basePath = FileAccess.asFileUri('').fsPath;
+			const process = spawn(rgBinPath, ['-g', '**/*.css', '--files', '--no-ignore', basePath], {});
+
+			process.stdout.on('data', data => {
+				chunks.push(data);
+			});
+			process.on('error', err => {
+				this.logService.error('[CSS_DEV] FAILED to compute CSS data', err);
+				resolve([]);
+			});
+			process.on('close', () => {
+				const data = Buffer.concat(chunks).toString('utf8');
+				const result = data.split('\n').filter(Boolean).map(path => relative(basePath, path).replace(/\\/g, '/')).filter(Boolean).sort();
+				if (result.some(path => path.indexOf('vs/') !== 0)) {
+					this.logService.error(`[CSS_DEV] Detected invalid paths in css modules, raw output: ${data}`);
+				}
+				resolve(result);
+				this.logService.info(`[CSS_DEV] DONE, ${result.length} css modules (${Math.round(sw.elapsed())}ms)`);
+			});
+		});
+	}
 }

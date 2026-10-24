@@ -7,79 +7,68 @@ import { bufferToStream, streamToBuffer, VSBuffer } from '../../../base/common/b
 import { CancellationToken } from '../../../base/common/cancellation.js';
 import { Event } from '../../../base/common/event.js';
 import { IChannel, IServerChannel } from '../../../base/parts/ipc/common/ipc.js';
-import {
-  IHeaders,
-  IRequestContext,
-  IRequestOptions,
-} from '../../../base/parts/request/common/request.js';
-import { AuthInfo, Credentials, IRequestService } from './request.js';
+import { IHeaders, IRequestContext, IRequestOptions } from '../../../base/parts/request/common/request.js';
+import { AuthInfo, Credentials, IRequestCompleteEvent, IRequestService } from './request.js';
 
 type RequestResponse = [
-  {
-    headers: IHeaders;
-    statusCode?: number;
-  },
-  VSBuffer,
+	{
+		headers: IHeaders;
+		statusCode?: number;
+	},
+	VSBuffer,
+	IRequestContext['timings']?
 ];
 
 export class RequestChannel implements IServerChannel {
-  constructor(private readonly service: IRequestService) {}
 
-  listen(context: any, event: string): Event<any> {
-    throw new Error('Invalid listen');
-  }
+	constructor(private readonly service: IRequestService) { }
 
-  call(
-    context: any,
-    command: string,
-    args?: any,
-    token: CancellationToken = CancellationToken.None,
-  ): Promise<any> {
-    switch (command) {
-      case 'request':
-        return this.service.request(args[0], token).then(async ({ res, stream }) => {
-          const buffer = await streamToBuffer(stream);
-          return <RequestResponse>[{ statusCode: res.statusCode, headers: res.headers }, buffer];
-        });
-      case 'resolveProxy':
-        return this.service.resolveProxy(args[0]);
-      case 'lookupAuthorization':
-        return this.service.lookupAuthorization(args[0]);
-      case 'lookupKerberosAuthorization':
-        return this.service.lookupKerberosAuthorization(args[0]);
-      case 'loadCertificates':
-        return this.service.loadCertificates();
-    }
-    throw new Error('Invalid call');
-  }
+	listen(context: any, event: string): Event<any> {
+		throw new Error('Invalid listen');
+	}
+
+	call(context: any, command: string, args?: any, token: CancellationToken = CancellationToken.None): Promise<any> {
+		switch (command) {
+			case 'request': return this.service.request(args[0], token)
+				.then(async ({ res, stream, timings }) => {
+					const buffer = await streamToBuffer(stream);
+					return <RequestResponse>[{ statusCode: res.statusCode, headers: res.headers }, buffer, timings];
+				});
+			case 'resolveProxy': return this.service.resolveProxy(args[0]);
+			case 'lookupAuthorization': return this.service.lookupAuthorization(args[0]);
+			case 'lookupKerberosAuthorization': return this.service.lookupKerberosAuthorization(args[0]);
+			case 'loadCertificates': return this.service.loadCertificates();
+		}
+		throw new Error('Invalid call');
+	}
 }
 
 export class RequestChannelClient implements IRequestService {
-  declare readonly _serviceBrand: undefined;
 
-  constructor(private readonly channel: IChannel) {}
+	declare readonly _serviceBrand: undefined;
 
-  async request(options: IRequestOptions, token: CancellationToken): Promise<IRequestContext> {
-    const [res, buffer] = await this.channel.call<RequestResponse>('request', [options], token);
-    return { res, stream: bufferToStream(buffer) };
-  }
+	readonly onDidCompleteRequest = Event.None as Event<IRequestCompleteEvent>;
 
-  async resolveProxy(url: string): Promise<string | undefined> {
-    return this.channel.call<string | undefined>('resolveProxy', [url]);
-  }
+	constructor(private readonly channel: IChannel) { }
 
-  async lookupAuthorization(authInfo: AuthInfo): Promise<Credentials | undefined> {
-    return this.channel.call<{ username: string; password: string } | undefined>(
-      'lookupAuthorization',
-      [authInfo],
-    );
-  }
+	async request(options: IRequestOptions, token: CancellationToken): Promise<IRequestContext> {
+		const [res, buffer, timings] = await this.channel.call<RequestResponse>('request', [options], token);
+		return { res, stream: bufferToStream(buffer), ...(timings ? { timings } : {}) };
+	}
 
-  async lookupKerberosAuthorization(url: string): Promise<string | undefined> {
-    return this.channel.call<string | undefined>('lookupKerberosAuthorization', [url]);
-  }
+	async resolveProxy(url: string): Promise<string | undefined> {
+		return this.channel.call<string | undefined>('resolveProxy', [url]);
+	}
 
-  async loadCertificates(): Promise<string[]> {
-    return this.channel.call<string[]>('loadCertificates');
-  }
+	async lookupAuthorization(authInfo: AuthInfo): Promise<Credentials | undefined> {
+		return this.channel.call<{ username: string; password: string } | undefined>('lookupAuthorization', [authInfo]);
+	}
+
+	async lookupKerberosAuthorization(url: string): Promise<string | undefined> {
+		return this.channel.call<string | undefined>('lookupKerberosAuthorization', [url]);
+	}
+
+	async loadCertificates(): Promise<string[]> {
+		return this.channel.call<string[]>('loadCertificates');
+	}
 }

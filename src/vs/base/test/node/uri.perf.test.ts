@@ -9,63 +9,61 @@ import { FileAccess } from '../../common/network.js';
 import { URI } from '../../common/uri.js';
 import { ensureNoDisposablesAreLeakedInTestSuite } from '../common/utils.js';
 
-suite('URI - perf', () => {
-  // COMMENT THIS OUT TO RUN TEST
-  if (1) {
-    return;
-  }
+suite('URI - perf', function () {
 
-  ensureNoDisposablesAreLeakedInTestSuite();
+	// COMMENT THIS OUT TO RUN TEST
+	if (1) {
+		return;
+	}
 
-  let manyFileUris: URI[];
-  setup(() => {
-    manyFileUris = [];
-    const data = readFileSync(
-      FileAccess.asFileUri('vs/base/test/node/uri.perf.data.txt').fsPath,
-    ).toString();
-    const lines = data.split('\n');
-    for (const line of lines) {
-      manyFileUris.push(URI.file(line));
-    }
-  });
+	ensureNoDisposablesAreLeakedInTestSuite();
 
-  function perfTest(name: string, callback: Function) {
-    test(name, (_done) => {
-      const t1 = Date.now();
-      callback();
-      const d = Date.now() - t1;
-      console.log(
-        `${name} took ${d}ms (${(d / manyFileUris.length).toPrecision(3)} ms/uri) (${manyFileUris.length} uris)`,
-      );
-      _done();
-    });
-  }
+	let manyFileUris: URI[];
+	setup(function () {
+		manyFileUris = [];
+		const data = readFileSync(FileAccess.asFileUri('vs/base/test/node/uri.perf.data.txt').fsPath).toString();
+		const lines = data.split('\n');
+		for (const line of lines) {
+			manyFileUris.push(URI.file(line));
+		}
+	});
 
-  perfTest('toString', () => {
-    for (const uri of manyFileUris) {
-      const data = uri.toString();
-      assert.ok(data);
-    }
-  });
+	function perfTest(name: string, callback: Function) {
+		test(name, _done => {
+			const t1 = Date.now();
+			callback();
+			const d = Date.now() - t1;
+			console.log(`${name} took ${d}ms (${(d / manyFileUris.length).toPrecision(3)} ms/uri) (${manyFileUris.length} uris)`);
+			_done();
+		});
+	}
 
-  perfTest('toString(skipEncoding)', () => {
-    for (const uri of manyFileUris) {
-      const data = uri.toString(true);
-      assert.ok(data);
-    }
-  });
+	perfTest('toString', function () {
+		for (const uri of manyFileUris) {
+			const data = uri.toString();
+			assert.ok(data);
+		}
+	});
 
-  perfTest('fsPath', () => {
-    for (const uri of manyFileUris) {
-      const data = uri.fsPath;
-      assert.ok(data);
-    }
-  });
+	perfTest('toString(skipEncoding)', function () {
+		for (const uri of manyFileUris) {
+			const data = uri.toString(true);
+			assert.ok(data);
+		}
+	});
 
-  perfTest('toJSON', () => {
-    for (const uri of manyFileUris) {
-      const data = uri.toJSON();
-      assert.ok(data);
-    }
-  });
+	perfTest('fsPath', function () {
+		for (const uri of manyFileUris) {
+			const data = uri.fsPath;
+			assert.ok(data);
+		}
+	});
+
+	perfTest('toJSON', function () {
+		for (const uri of manyFileUris) {
+			const data = uri.toJSON();
+			assert.ok(data);
+		}
+	});
+
 });

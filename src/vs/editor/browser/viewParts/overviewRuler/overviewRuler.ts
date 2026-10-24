@@ -6,11 +6,7 @@
 import { FastDomNode, createFastDomNode } from '../../../../base/browser/fastDomNode.js';
 import { IOverviewRuler } from '../../editorBrowser.js';
 import { OverviewRulerPosition, EditorOption } from '../../../common/config/editorOptions.js';
-import {
-  ColorZone,
-  OverviewRulerZone,
-  OverviewZoneManager,
-} from '../../../common/viewModel/overviewZoneManager.js';
+import { ColorZone, OverviewRulerZone, OverviewZoneManager } from '../../../common/viewModel/overviewZoneManager.js';
 import { ViewContext } from '../../../common/viewModel/viewContext.js';
 import * as viewEvents from '../../../common/viewEvents.js';
 import { ViewEventHandler } from '../../../common/viewEventHandler.js';
@@ -20,161 +16,157 @@ import { ViewEventHandler } from '../../../common/viewEventHandler.js';
  * like the cursor, various decorations, etc.
  */
 export class OverviewRuler extends ViewEventHandler implements IOverviewRuler {
-  private readonly _context: ViewContext;
 
-  private readonly _domNode: FastDomNode<HTMLCanvasElement>;
+	private readonly _context: ViewContext;
+	private readonly _domNode: FastDomNode<HTMLCanvasElement>;
+	private readonly _zoneManager: OverviewZoneManager;
 
-  private readonly _zoneManager: OverviewZoneManager;
+	constructor(context: ViewContext, cssClassName: string) {
+		super();
+		this._context = context;
+		const options = this._context.configuration.options;
 
-  constructor(context: ViewContext, cssClassName: string) {
-    super();
-    this._context = context;
-    const options = this._context.configuration.options;
+		this._domNode = createFastDomNode(document.createElement('canvas'));
+		this._domNode.setClassName(cssClassName);
+		this._domNode.setPosition('absolute');
+		this._domNode.setLayerHinting(true);
+		this._domNode.setContain('strict');
 
-    this._domNode = createFastDomNode(document.createElement('canvas'));
-    this._domNode.setClassName(cssClassName);
-    this._domNode.setPosition('absolute');
-    this._domNode.setLayerHinting(true);
-    this._domNode.setContain('strict');
+		this._zoneManager = new OverviewZoneManager((lineNumber: number) => this._context.viewLayout.getVerticalOffsetForLineNumber(lineNumber));
+		this._zoneManager.setDOMWidth(0);
+		this._zoneManager.setDOMHeight(0);
+		this._zoneManager.setOuterHeight(this._context.viewLayout.getScrollHeight());
+		this._zoneManager.setLineHeight(options.get(EditorOption.lineHeight));
 
-    this._zoneManager = new OverviewZoneManager((lineNumber: number) =>
-      this._context.viewLayout.getVerticalOffsetForLineNumber(lineNumber),
-    );
-    this._zoneManager.setDOMWidth(0);
-    this._zoneManager.setDOMHeight(0);
-    this._zoneManager.setOuterHeight(this._context.viewLayout.getScrollHeight());
-    this._zoneManager.setLineHeight(options.get(EditorOption.lineHeight));
+		this._zoneManager.setPixelRatio(options.get(EditorOption.pixelRatio));
 
-    this._zoneManager.setPixelRatio(options.get(EditorOption.pixelRatio));
+		this._context.addEventHandler(this);
+	}
 
-    this._context.addEventHandler(this);
-  }
+	public override dispose(): void {
+		this._context.removeEventHandler(this);
+		super.dispose();
+	}
 
-  public override dispose(): void {
-    this._context.removeEventHandler(this);
-    super.dispose();
-  }
+	// ---- begin view event handlers
 
-  // ---- begin view event handlers
+	public override onConfigurationChanged(e: viewEvents.ViewConfigurationChangedEvent): boolean {
+		const options = this._context.configuration.options;
 
-  public override onConfigurationChanged(e: viewEvents.ViewConfigurationChangedEvent): boolean {
-    const options = this._context.configuration.options;
+		if (e.hasChanged(EditorOption.lineHeight)) {
+			this._zoneManager.setLineHeight(options.get(EditorOption.lineHeight));
+			this._render();
+		}
 
-    if (e.hasChanged(EditorOption.lineHeight)) {
-      this._zoneManager.setLineHeight(options.get(EditorOption.lineHeight));
-      this._render();
-    }
+		if (e.hasChanged(EditorOption.pixelRatio)) {
+			this._zoneManager.setPixelRatio(options.get(EditorOption.pixelRatio));
+			this._domNode.setWidth(this._zoneManager.getDOMWidth());
+			this._domNode.setHeight(this._zoneManager.getDOMHeight());
+			this._domNode.domNode.width = this._zoneManager.getCanvasWidth();
+			this._domNode.domNode.height = this._zoneManager.getCanvasHeight();
+			this._render();
+		}
 
-    if (e.hasChanged(EditorOption.pixelRatio)) {
-      this._zoneManager.setPixelRatio(options.get(EditorOption.pixelRatio));
-      this._domNode.setWidth(this._zoneManager.getDOMWidth());
-      this._domNode.setHeight(this._zoneManager.getDOMHeight());
-      this._domNode.domNode.width = this._zoneManager.getCanvasWidth();
-      this._domNode.domNode.height = this._zoneManager.getCanvasHeight();
-      this._render();
-    }
+		return true;
+	}
+	public override onFlushed(e: viewEvents.ViewFlushedEvent): boolean {
+		this._render();
+		return true;
+	}
+	public override onScrollChanged(e: viewEvents.ViewScrollChangedEvent): boolean {
+		if (e.scrollHeightChanged) {
+			this._zoneManager.setOuterHeight(e.scrollHeight);
+			this._render();
+		}
+		return true;
+	}
+	public override onZonesChanged(e: viewEvents.ViewZonesChangedEvent): boolean {
+		this._render();
+		return true;
+	}
 
-    return true;
-  }
+	// ---- end view event handlers
 
-  public override onFlushed(e: viewEvents.ViewFlushedEvent): boolean {
-    this._render();
-    return true;
-  }
+	public getDomNode(): HTMLElement {
+		return this._domNode.domNode;
+	}
 
-  public override onScrollChanged(e: viewEvents.ViewScrollChangedEvent): boolean {
-    if (e.scrollHeightChanged) {
-      this._zoneManager.setOuterHeight(e.scrollHeight);
-      this._render();
-    }
-    return true;
-  }
+	public setLayout(position: OverviewRulerPosition): void {
+		this._domNode.setTop(position.top);
+		this._domNode.setRight(position.right);
 
-  public override onZonesChanged(e: viewEvents.ViewZonesChangedEvent): boolean {
-    this._render();
-    return true;
-  }
+		let hasChanged = false;
+		hasChanged = this._zoneManager.setDOMWidth(position.width) || hasChanged;
+		hasChanged = this._zoneManager.setDOMHeight(position.height) || hasChanged;
 
-  // ---- end view event handlers
+		if (hasChanged) {
+			this._domNode.setWidth(this._zoneManager.getDOMWidth());
+			this._domNode.setHeight(this._zoneManager.getDOMHeight());
+			this._domNode.domNode.width = this._zoneManager.getCanvasWidth();
+			this._domNode.domNode.height = this._zoneManager.getCanvasHeight();
 
-  public getDomNode(): HTMLElement {
-    return this._domNode.domNode;
-  }
+			this._render();
+		}
+	}
 
-  public setLayout(position: OverviewRulerPosition): void {
-    this._domNode.setTop(position.top);
-    this._domNode.setRight(position.right);
+	public setZones(zones: OverviewRulerZone[]): void {
+		this._zoneManager.setZones(zones);
+		this._render();
+	}
 
-    let hasChanged = false;
-    hasChanged = this._zoneManager.setDOMWidth(position.width) || hasChanged;
-    hasChanged = this._zoneManager.setDOMHeight(position.height) || hasChanged;
+	private _render(): boolean {
+		if (this._zoneManager.getOuterHeight() === 0) {
+			return false;
+		}
 
-    if (hasChanged) {
-      this._domNode.setWidth(this._zoneManager.getDOMWidth());
-      this._domNode.setHeight(this._zoneManager.getDOMHeight());
-      this._domNode.domNode.width = this._zoneManager.getCanvasWidth();
-      this._domNode.domNode.height = this._zoneManager.getCanvasHeight();
+		const width = this._zoneManager.getCanvasWidth();
+		const height = this._zoneManager.getCanvasHeight();
 
-      this._render();
-    }
-  }
+		const colorZones = this._zoneManager.resolveColorZones();
+		const id2Color = this._zoneManager.getId2Color();
 
-  public setZones(zones: OverviewRulerZone[]): void {
-    this._zoneManager.setZones(zones);
-    this._render();
-  }
+		const ctx = this._domNode.domNode.getContext('2d')!;
+		ctx.clearRect(0, 0, width, height);
+		if (colorZones.length > 0) {
+			this._renderOneLane(ctx, colorZones, id2Color, width);
+		}
 
-  private _render(): boolean {
-    if (this._zoneManager.getOuterHeight() === 0) {
-      return false;
-    }
+		return true;
+	}
 
-    const width = this._zoneManager.getCanvasWidth();
-    const height = this._zoneManager.getCanvasHeight();
+	private _renderOneLane(ctx: CanvasRenderingContext2D, colorZones: ColorZone[], id2Color: string[], width: number): void {
 
-    const colorZones = this._zoneManager.resolveColorZones();
-    const id2Color = this._zoneManager.getId2Color();
+		let currentColorId = 0; // will never match a real color id which is > 0
+		let currentFrom = 0;
+		let currentTo = 0;
 
-    const ctx = this._domNode.domNode.getContext('2d')!;
-    ctx.clearRect(0, 0, width, height);
-    if (colorZones.length > 0) {
-      this._renderOneLane(ctx, colorZones, id2Color, width);
-    }
+		for (const zone of colorZones) {
 
-    return true;
-  }
+			const zoneColorId = zone.colorId;
+			const zoneFrom = zone.from;
+			const zoneTo = zone.to;
 
-  private _renderOneLane(
-    ctx: CanvasRenderingContext2D,
-    colorZones: ColorZone[],
-    id2Color: string[],
-    width: number,
-  ): void {
-    let currentColorId = 0;
-    let currentFrom = 0;
-    let currentTo = 0;
+			if (zoneColorId !== currentColorId) {
+				if (currentColorId !== 0) {
+					ctx.fillRect(0, currentFrom, width, currentTo - currentFrom);
+				}
 
-    for (const zone of colorZones) {
-      const zoneColorId = zone.colorId;
-      const zoneFrom = zone.from;
-      const zoneTo = zone.to;
+				currentColorId = zoneColorId;
+				ctx.fillStyle = id2Color[currentColorId];
+				currentFrom = zoneFrom;
+				currentTo = zoneTo;
+			} else {
+				if (currentTo >= zoneFrom) {
+					currentTo = Math.max(currentTo, zoneTo);
+				} else {
+					ctx.fillRect(0, currentFrom, width, currentTo - currentFrom);
+					currentFrom = zoneFrom;
+					currentTo = zoneTo;
+				}
+			}
+		}
 
-      if (zoneColorId !== currentColorId) {
-        ctx.fillRect(0, currentFrom, width, currentTo - currentFrom);
+		ctx.fillRect(0, currentFrom, width, currentTo - currentFrom);
 
-        currentColorId = zoneColorId;
-        ctx.fillStyle = id2Color[currentColorId];
-        currentFrom = zoneFrom;
-        currentTo = zoneTo;
-      } else if (currentTo >= zoneFrom) {
-        currentTo = Math.max(currentTo, zoneTo);
-      } else {
-        ctx.fillRect(0, currentFrom, width, currentTo - currentFrom);
-        currentFrom = zoneFrom;
-        currentTo = zoneTo;
-      }
-    }
-
-    ctx.fillRect(0, currentFrom, width, currentTo - currentFrom);
-  }
+	}
 }

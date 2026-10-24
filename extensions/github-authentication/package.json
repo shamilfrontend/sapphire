@@ -17,13 +17,20 @@
     "ui",
     "workspace"
   ],
+  "enabledApiProposals": [
+    "authIssuers",
+    "authProviderSpecific",
+    "authSessionAccountIcon",
+    "authSessionExpiration"
+  ],
   "activationEvents": [],
   "capabilities": {
     "virtualWorkspaces": true,
     "untrustedWorkspaces": {
       "supported": "limited",
       "restrictedConfigurations": [
-        "github-enterprise.uri"
+        "github-enterprise.uri",
+        "github-enterprise.uris"
       ]
     }
   },
@@ -31,11 +38,17 @@
     "authentication": [
       {
         "label": "GitHub",
-        "id": "github"
+        "id": "github",
+        "authorizationServerGlobs": [
+          "https://github.com/login/oauth"
+        ]
       },
       {
         "label": "GitHub Enterprise Server",
-        "id": "github-enterprise"
+        "id": "github-enterprise",
+        "authorizationServerGlobs": [
+          "*"
+        ]
       }
     ],
     "configuration": [
@@ -45,7 +58,29 @@
           "github-enterprise.uri": {
             "type": "string",
             "markdownDescription": "%config.github-enterprise.uri.description%",
+            "markdownDeprecationMessage": "%config.github-enterprise.uri.deprecation%",
             "pattern": "^(?:$|(https?)://(?!github\\.com).*)"
+          },
+          "github-enterprise.uris": {
+            "type": "array",
+            "markdownDescription": "%config.github-enterprise.uris.description%",
+            "items": {
+              "type": "string",
+              "pattern": "^(https?)://(?!github\\.com).*"
+            },
+            "uniqueItems": true
+          },
+          "github-authentication.useElectronFetch": {
+            "type": "boolean",
+            "default": true,
+            "scope": "application",
+            "markdownDescription": "%config.github-authentication.useElectronFetch.description%"
+          },
+          "github-authentication.preferDeviceCodeFlow": {
+            "type": "boolean",
+            "default": false,
+            "scope": "application",
+            "markdownDescription": "%config.github-authentication.preferDeviceCodeFlow.description%"
           }
         }
       }
@@ -55,10 +90,10 @@
   "main": "./out/extension.js",
   "browser": "./dist/browser/extension.js",
   "scripts": {
-    "compile": "node ../../scripts/build/main.mjs run compile-extension:github-authentication",
-    "compile-web": "npx webpack-cli --config extension-browser.webpack.config --mode none",
-    "watch": "node ../../scripts/build/main.mjs run watch-extension:github-authentication",
-    "watch-web": "npx webpack-cli --config extension-browser.webpack.config --mode none --watch --info-verbosity verbose",
+    "compile": "gulp compile-extension:github-authentication",
+    "compile-web": "node esbuild.browser.mts",
+    "watch": "gulp watch-extension:github-authentication",
+    "watch-web": "node esbuild.browser.mts --watch",
     "vscode:prepublish": "npm run compile"
   },
   "dependencies": {
@@ -67,8 +102,8 @@
     "vscode-tas-client": "^0.1.84"
   },
   "devDependencies": {
-    "@types/mocha": "^9.1.1",
-    "@types/node": "20.x",
+    "@types/mocha": "^10.0.10",
+    "@types/node": "24.x",
     "@types/node-fetch": "^2.5.7"
   },
   "repository": {

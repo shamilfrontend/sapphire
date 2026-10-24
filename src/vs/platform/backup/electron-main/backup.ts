@@ -10,25 +10,23 @@ import { IFolderBackupInfo, IWorkspaceBackupInfo } from '../common/backup.js';
 export const IBackupMainService = createDecorator<IBackupMainService>('backupMainService');
 
 export interface IBackupMainService {
-  readonly _serviceBrand: undefined;
 
-  isHotExitEnabled(): boolean;
+	readonly _serviceBrand: undefined;
 
-  getEmptyWindowBackups(): IEmptyWindowBackupInfo[];
+	isHotExitEnabled(): boolean;
 
-  registerWorkspaceBackup(workspaceInfo: IWorkspaceBackupInfo): string;
-  registerWorkspaceBackup(
-    workspaceInfo: IWorkspaceBackupInfo,
-    migrateFrom: string,
-  ): Promise<string>;
-  registerFolderBackup(folderInfo: IFolderBackupInfo): string;
-  registerEmptyWindowBackup(emptyWindowInfo: IEmptyWindowBackupInfo): string;
+	getEmptyWindowBackups(): IEmptyWindowBackupInfo[];
 
-  /**
-   * All folders or workspaces that are known to have
-   * backups stored. This call is long running because
-   * it checks for each backup location if any backups
-   * are stored.
-   */
-  getDirtyWorkspaces(): Promise<Array<IWorkspaceBackupInfo | IFolderBackupInfo>>;
+	registerWorkspaceBackup(workspaceInfo: IWorkspaceBackupInfo): string;
+	registerWorkspaceBackup(workspaceInfo: IWorkspaceBackupInfo, migrateFrom: string): Promise<string>;
+	registerFolderBackup(folderInfo: IFolderBackupInfo): string;
+	registerEmptyWindowBackup(emptyWindowInfo: IEmptyWindowBackupInfo): string;
+
+	/**
+	 * All folders or workspaces that are known to have
+	 * backups stored. This call is long running because
+	 * it checks for each backup location if any backups
+	 * are stored.
+	 */
+	getDirtyWorkspaces(): Promise<Array<IWorkspaceBackupInfo | IFolderBackupInfo>>;
 }

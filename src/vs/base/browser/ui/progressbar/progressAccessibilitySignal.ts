@@ -5,30 +5,19 @@
 
 import { IDisposable } from '../../../common/lifecycle.js';
 
-export interface IScopedAccessibilityProgressSignalDelegate extends IDisposable {}
+export interface IScopedAccessibilityProgressSignalDelegate extends IDisposable { }
 
 const nullScopedAccessibilityProgressSignalFactory = () => ({
-  msLoopTime: -1,
-  msDelayTime: -1,
-  dispose: () => {},
+	msLoopTime: -1,
+	msDelayTime: -1,
+	dispose: () => { },
 });
-let progressAccessibilitySignalSchedulerFactory: (
-  msDelayTime: number,
-  msLoopTime?: number,
-) => IScopedAccessibilityProgressSignalDelegate = nullScopedAccessibilityProgressSignalFactory;
+let progressAccessibilitySignalSchedulerFactory: (msDelayTime: number, msLoopTime?: number) => IScopedAccessibilityProgressSignalDelegate = nullScopedAccessibilityProgressSignalFactory;
 
-export function setProgressAcccessibilitySignalScheduler(
-  progressAccessibilitySignalScheduler: (
-    msDelayTime: number,
-    msLoopTime?: number,
-  ) => IScopedAccessibilityProgressSignalDelegate,
-) {
-  progressAccessibilitySignalSchedulerFactory = progressAccessibilitySignalScheduler;
+export function setProgressAccessibilitySignalScheduler(progressAccessibilitySignalScheduler: (msDelayTime: number, msLoopTime?: number) => IScopedAccessibilityProgressSignalDelegate) {
+	progressAccessibilitySignalSchedulerFactory = progressAccessibilitySignalScheduler;
 }
 
-export function getProgressAcccessibilitySignalScheduler(
-  msDelayTime: number,
-  msLoopTime?: number,
-): IScopedAccessibilityProgressSignalDelegate {
-  return progressAccessibilitySignalSchedulerFactory(msDelayTime, msLoopTime);
+export function getProgressAccessibilitySignalScheduler(msDelayTime: number, msLoopTime?: number): IScopedAccessibilityProgressSignalDelegate {
+	return progressAccessibilitySignalSchedulerFactory(msDelayTime, msLoopTime);
 }

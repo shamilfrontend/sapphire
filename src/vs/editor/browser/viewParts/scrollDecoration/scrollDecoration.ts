@@ -9,89 +9,80 @@ import { ViewPart } from '../../view/viewPart.js';
 import { RenderingContext, RestrictedRenderingContext } from '../../view/renderingContext.js';
 import { ViewContext } from '../../../common/viewModel/viewContext.js';
 import * as viewEvents from '../../../common/viewEvents.js';
-import { EditorOption } from '../../../common/config/editorOptions.js';
+import { EditorOption, RenderMinimap } from '../../../common/config/editorOptions.js';
+
 
 export class ScrollDecorationViewPart extends ViewPart {
-  private readonly _domNode: FastDomNode<HTMLElement>;
 
-  private _scrollTop: number;
+	private readonly _domNode: FastDomNode<HTMLElement>;
+	private _scrollTop: number;
+	private _width: number;
+	private _shouldShow: boolean;
+	private _useShadows: boolean;
 
-  private _width: number;
+	constructor(context: ViewContext) {
+		super(context);
 
-  private _shouldShow: boolean;
+		this._scrollTop = 0;
+		this._width = 0;
+		this._updateWidth();
+		this._shouldShow = false;
+		const options = this._context.configuration.options;
+		const scrollbar = options.get(EditorOption.scrollbar);
+		this._useShadows = scrollbar.useShadows;
+		this._domNode = createFastDomNode(document.createElement('div'));
+		this._domNode.setAttribute('role', 'presentation');
+		this._domNode.setAttribute('aria-hidden', 'true');
+	}
 
-  private _useShadows: boolean;
 
-  constructor(context: ViewContext) {
-    super(context);
+	private _updateShouldShow(): boolean {
+		const newShouldShow = (this._useShadows && this._scrollTop > 0);
+		if (this._shouldShow !== newShouldShow) {
+			this._shouldShow = newShouldShow;
+			return true;
+		}
+		return false;
+	}
 
-    this._scrollTop = 0;
-    this._width = 0;
-    this._updateWidth();
-    this._shouldShow = false;
-    const options = this._context.configuration.options;
-    const scrollbar = options.get(EditorOption.scrollbar);
-    this._useShadows = scrollbar.useShadows;
-    this._domNode = createFastDomNode(document.createElement('div'));
-    this._domNode.setAttribute('role', 'presentation');
-    this._domNode.setAttribute('aria-hidden', 'true');
-  }
+	public getDomNode(): FastDomNode<HTMLElement> {
+		return this._domNode;
+	}
 
-  public override dispose(): void {
-    super.dispose();
-  }
+	private _updateWidth(): void {
+		const options = this._context.configuration.options;
+		const layoutInfo = options.get(EditorOption.layoutInfo);
 
-  private _updateShouldShow(): boolean {
-    const newShouldShow = this._useShadows && this._scrollTop > 0;
-    if (this._shouldShow !== newShouldShow) {
-      this._shouldShow = newShouldShow;
-      return true;
-    }
-    return false;
-  }
+		if (layoutInfo.minimap.renderMinimap === RenderMinimap.None || (layoutInfo.minimap.minimapWidth > 0 && layoutInfo.minimap.minimapLeft === 0)) {
+			this._width = layoutInfo.width;
+		} else {
+			this._width = layoutInfo.width - layoutInfo.verticalScrollbarWidth;
+		}
+	}
 
-  public getDomNode(): FastDomNode<HTMLElement> {
-    return this._domNode;
-  }
+	// --- begin event handlers
 
-  private _updateWidth(): void {
-    const options = this._context.configuration.options;
-    const layoutInfo = options.get(EditorOption.layoutInfo);
+	public override onConfigurationChanged(e: viewEvents.ViewConfigurationChangedEvent): boolean {
+		const options = this._context.configuration.options;
+		const scrollbar = options.get(EditorOption.scrollbar);
+		this._useShadows = scrollbar.useShadows;
+		this._updateWidth();
+		this._updateShouldShow();
+		return true;
+	}
+	public override onScrollChanged(e: viewEvents.ViewScrollChangedEvent): boolean {
+		this._scrollTop = e.scrollTop;
+		return this._updateShouldShow();
+	}
 
-    if (
-      layoutInfo.minimap.renderMinimap === 0 ||
-      (layoutInfo.minimap.minimapWidth > 0 && layoutInfo.minimap.minimapLeft === 0)
-    ) {
-      this._width = layoutInfo.width;
-    } else {
-      this._width = layoutInfo.width - layoutInfo.verticalScrollbarWidth;
-    }
-  }
+	// --- end event handlers
 
-  // --- begin event handlers
+	public prepareRender(ctx: RenderingContext): void {
+		// Nothing to read
+	}
 
-  public override onConfigurationChanged(e: viewEvents.ViewConfigurationChangedEvent): boolean {
-    const options = this._context.configuration.options;
-    const scrollbar = options.get(EditorOption.scrollbar);
-    this._useShadows = scrollbar.useShadows;
-    this._updateWidth();
-    this._updateShouldShow();
-    return true;
-  }
-
-  public override onScrollChanged(e: viewEvents.ViewScrollChangedEvent): boolean {
-    this._scrollTop = e.scrollTop;
-    return this._updateShouldShow();
-  }
-
-  // --- end event handlers
-
-  public prepareRender(ctx: RenderingContext): void {
-    // Nothing to read
-  }
-
-  public render(ctx: RestrictedRenderingContext): void {
-    this._domNode.setWidth(this._width);
-    this._domNode.setClassName(this._shouldShow ? 'scroll-decoration' : '');
-  }
+	public render(ctx: RestrictedRenderingContext): void {
+		this._domNode.setWidth(this._width);
+		this._domNode.setClassName(this._shouldShow ? 'scroll-decoration' : '');
+	}
 }

@@ -17,88 +17,79 @@ import { EditorOption } from '../../../common/config/editorOptions.js';
  * decorations that provide additional information about the lines of code.
  */
 export class Margin extends ViewPart {
-  public static readonly CLASS_NAME = 'glyph-margin';
 
-  public static readonly OUTER_CLASS_NAME = 'margin';
+	public static readonly CLASS_NAME = 'glyph-margin';
+	public static readonly OUTER_CLASS_NAME = 'margin';
 
-  private readonly _domNode: FastDomNode<HTMLElement>;
+	private readonly _domNode: FastDomNode<HTMLElement>;
+	private _canUseLayerHinting: boolean;
+	private _contentLeft: number;
+	private _glyphMarginLeft: number;
+	private _glyphMarginWidth: number;
+	private _glyphMarginBackgroundDomNode: FastDomNode<HTMLElement>;
 
-  private _canUseLayerHinting: boolean;
+	constructor(context: ViewContext) {
+		super(context);
+		const options = this._context.configuration.options;
+		const layoutInfo = options.get(EditorOption.layoutInfo);
 
-  private _contentLeft: number;
+		this._canUseLayerHinting = !options.get(EditorOption.disableLayerHinting);
+		this._contentLeft = layoutInfo.contentLeft;
+		this._glyphMarginLeft = layoutInfo.glyphMarginLeft;
+		this._glyphMarginWidth = layoutInfo.glyphMarginWidth;
 
-  private _glyphMarginLeft: number;
+		this._domNode = createFastDomNode(document.createElement('div'));
+		this._domNode.setClassName(Margin.OUTER_CLASS_NAME);
+		this._domNode.setPosition('absolute');
+		this._domNode.setAttribute('role', 'presentation');
+		this._domNode.setAttribute('aria-hidden', 'true');
 
-  private _glyphMarginWidth: number;
+		this._glyphMarginBackgroundDomNode = createFastDomNode(document.createElement('div'));
+		this._glyphMarginBackgroundDomNode.setClassName(Margin.CLASS_NAME);
 
-  private _glyphMarginBackgroundDomNode: FastDomNode<HTMLElement>;
+		this._domNode.appendChild(this._glyphMarginBackgroundDomNode);
+	}
 
-  constructor(context: ViewContext) {
-    super(context);
-    const options = this._context.configuration.options;
-    const layoutInfo = options.get(EditorOption.layoutInfo);
 
-    this._canUseLayerHinting = !options.get(EditorOption.disableLayerHinting);
-    this._contentLeft = layoutInfo.contentLeft;
-    this._glyphMarginLeft = layoutInfo.glyphMarginLeft;
-    this._glyphMarginWidth = layoutInfo.glyphMarginWidth;
+	public getDomNode(): FastDomNode<HTMLElement> {
+		return this._domNode;
+	}
 
-    this._domNode = createFastDomNode(document.createElement('div'));
-    this._domNode.setClassName(Margin.OUTER_CLASS_NAME);
-    this._domNode.setPosition('absolute');
-    this._domNode.setAttribute('role', 'presentation');
-    this._domNode.setAttribute('aria-hidden', 'true');
+	// --- begin event handlers
 
-    this._glyphMarginBackgroundDomNode = createFastDomNode(document.createElement('div'));
-    this._glyphMarginBackgroundDomNode.setClassName(Margin.CLASS_NAME);
+	public override onConfigurationChanged(e: viewEvents.ViewConfigurationChangedEvent): boolean {
+		const options = this._context.configuration.options;
+		const layoutInfo = options.get(EditorOption.layoutInfo);
 
-    this._domNode.appendChild(this._glyphMarginBackgroundDomNode);
-  }
+		this._canUseLayerHinting = !options.get(EditorOption.disableLayerHinting);
+		this._contentLeft = layoutInfo.contentLeft;
+		this._glyphMarginLeft = layoutInfo.glyphMarginLeft;
+		this._glyphMarginWidth = layoutInfo.glyphMarginWidth;
 
-  public override dispose(): void {
-    super.dispose();
-  }
+		return true;
+	}
+	public override onScrollChanged(e: viewEvents.ViewScrollChangedEvent): boolean {
+		return super.onScrollChanged(e) || e.scrollTopChanged;
+	}
 
-  public getDomNode(): FastDomNode<HTMLElement> {
-    return this._domNode;
-  }
+	// --- end event handlers
 
-  // --- begin event handlers
+	public prepareRender(ctx: RenderingContext): void {
+		// Nothing to read
+	}
 
-  public override onConfigurationChanged(e: viewEvents.ViewConfigurationChangedEvent): boolean {
-    const options = this._context.configuration.options;
-    const layoutInfo = options.get(EditorOption.layoutInfo);
+	public render(ctx: RestrictedRenderingContext): void {
+		this._domNode.setLayerHinting(this._canUseLayerHinting);
+		this._domNode.setContain('strict');
+		const adjustedScrollTop = ctx.scrollTop - ctx.bigNumbersDelta;
+		this._domNode.setTop(-adjustedScrollTop);
 
-    this._canUseLayerHinting = !options.get(EditorOption.disableLayerHinting);
-    this._contentLeft = layoutInfo.contentLeft;
-    this._glyphMarginLeft = layoutInfo.glyphMarginLeft;
-    this._glyphMarginWidth = layoutInfo.glyphMarginWidth;
+		const height = Math.min(ctx.scrollHeight, 1000000);
+		this._domNode.setHeight(height);
+		this._domNode.setWidth(this._contentLeft);
 
-    return true;
-  }
-
-  public override onScrollChanged(e: viewEvents.ViewScrollChangedEvent): boolean {
-    return super.onScrollChanged(e) || e.scrollTopChanged;
-  }
-
-  // --- end event handlers
-
-  public prepareRender(ctx: RenderingContext): void {
-    // Nothing to read
-  }
-
-  public render(ctx: RestrictedRenderingContext): void {
-    this._domNode.setLayerHinting(this._canUseLayerHinting);
-    this._domNode.setContain('strict');
-    const adjustedScrollTop = ctx.scrollTop - ctx.bigNumbersDelta;
-    this._domNode.setTop(-adjustedScrollTop);
-
-    const height = Math.min(ctx.scrollHeight, 1000000);
-    this._domNode.setHeight(height);
-    this._domNode.setWidth(this._contentLeft);
-
-    this._glyphMarginBackgroundDomNode.setLeft(this._glyphMarginLeft);
-    this._glyphMarginBackgroundDomNode.setWidth(this._glyphMarginWidth);
-    this._glyphMarginBackgroundDomNode.setHeight(height);
-  }
+		this._glyphMarginBackgroundDomNode.setLeft(this._glyphMarginLeft);
+		this._glyphMarginBackgroundDomNode.setWidth(this._glyphMarginWidth);
+		this._glyphMarginBackgroundDomNode.setHeight(height);
+	}
 }

@@ -4,34 +4,46 @@
  *--------------------------------------------------------------------------------------------*/
 
 declare module 'vscode' {
-  export interface ChatPromptReference {
-    /**
-     * The value of this reference. The `string | Uri | Location` types are used today, but this could expand in the future.
-     */
-    readonly value: string | Uri | Location | ChatReferenceBinaryData | unknown;
-  }
 
-  export class ChatReferenceBinaryData {
-    /**
-     * The MIME type of the binary data.
-     */
-    readonly mimeType: string;
+	export interface ChatPromptReference {
+		/**
+		 * The value of this reference. The `string | Uri | Location` types are used today, but this could expand in the future.
+		 */
+		readonly value: string | Uri | Location | ChatReferenceBinaryData | unknown;
+	}
 
-    /**
-     * Retrieves the binary data of the reference. This is primarily used to receive image attachments from the chat.
-     * @returns A promise that resolves to the binary data as a Uint8Array.
-     */
-    data(): Thenable<Uint8Array>;
+	export class ChatReferenceBinaryData {
+		/**
+		 * The MIME type of the binary data.
+		 */
+		readonly mimeType: string;
 
-    /**
-     * Retrieves a URI reference to the binary data, if available.
-     */
-    readonly reference?: Uri;
+		/**
+		 * Retrieves the binary data of the reference. This is primarily used to receive image attachments from the chat.
+		 * @returns A promise that resolves to the binary data as a Uint8Array.
+		 */
+		data(): Thenable<Uint8Array>;
 
-    /**
-     * @param mimeType The MIME type of the binary data.
-     * @param data The binary data of the reference.
-     */
-    constructor(mimeType: string, data: () => Thenable<Uint8Array>);
-  }
+		/**
+		 * Retrieves a URI reference to the binary data, if available.
+		 */
+		readonly reference?: Uri;
+
+		/**
+		 * Whether this image was pasted from the clipboard.
+		 */
+		readonly isPasted?: boolean;
+
+		/**
+		 * Whether this image originated from a URL. `true` when it was attached from a URL,
+		 * `false` when it came from a local file, and `undefined` when the origin is unknown.
+		 */
+		readonly isURL?: boolean;
+
+		/**
+		 * @param mimeType The MIME type of the binary data.
+		 * @param data The binary data of the reference.
+		 */
+		constructor(mimeType: string, data: () => Thenable<Uint8Array>);
+	}
 }

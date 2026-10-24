@@ -10,33 +10,26 @@ import { ensureNoDisposablesAreLeakedInTestSuite } from '../common/utils.js';
 import { flakySuite } from './testUtils.js';
 
 flakySuite('Ports', () => {
-  (process.env.VSCODE_PID ? test.skip /* this test fails when run from within VS Code */ : test)(
-    'Finds a free port (no timeout)',
-    (done) => {
-      // get an initial freeport >= 7000
-      ports.findFreePort(7000, 100, 300000).then(
-        (initialPort) => {
-          assert.ok(initialPort >= 7000);
+	(process.env['VSCODE_PID'] ? test.skip /* this test fails when run from within VS Code */ : test)('Finds a free port (no timeout)', function (done) {
 
-          // create a server to block this port
-          const server = net.createServer();
-          server.listen(initialPort, undefined, undefined, () => {
-            // once listening, find another free port and assert that the port is different from the opened one
-            ports.findFreePort(7000, 50, 300000).then(
-              (freePort) => {
-                assert.ok(freePort >= 7000 && freePort !== initialPort);
-                server.close();
+		// get an initial freeport >= 7000
+		ports.findFreePort(7000, 100, 300000).then(initialPort => {
+			assert.ok(initialPort >= 7000);
 
-                done();
-              },
-              (err) => done(err),
-            );
-          });
-        },
-        (err) => done(err),
-      );
-    },
-  );
+			// create a server to block this port
+			const server = net.createServer();
+			server.listen(initialPort, undefined, undefined, () => {
 
-  ensureNoDisposablesAreLeakedInTestSuite();
+				// once listening, find another free port and assert that the port is different from the opened one
+				ports.findFreePort(7000, 50, 300000).then(freePort => {
+					assert.ok(freePort >= 7000 && freePort !== initialPort);
+					server.close();
+
+					done();
+				}, err => done(err));
+			});
+		}, err => done(err));
+	});
+
+	ensureNoDisposablesAreLeakedInTestSuite();
 });

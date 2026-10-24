@@ -1,8 +1,16 @@
 {
-  "extends": "../../tsconfig.base.json",
-  "compilerOptions": {
-    "outDir": "./dist/",
-    "jsx": "react",
-    "lib": ["es2018", "DOM", "DOM.Iterable"]
-  }
+	"extends": "../../tsconfig.base.json",
+	"compilerOptions": {
+		"rootDir": ".",
+		"outDir": "./dist/",
+		"jsx": "react",
+		"lib": [
+			"ES2024",
+			"DOM",
+			"DOM.Iterable"
+		],
+		"typeRoots": [
+			"../node_modules/@types"
+		]
+	}
 }

@@ -13,219 +13,214 @@ import { localize } from '../../../../nls.js';
  * Missing is how this API communicates with the debug adapter.
  */
 export abstract class AbstractDebugAdapter implements IDebugAdapter {
-  private sequence: number;
+	private sequence: number;
+	private pendingRequests = new Map<number, (e: DebugProtocol.Response) => void>();
+	private pendingRequestTimers = new Map<number, Timeout>();
+	private requestCallback: ((request: DebugProtocol.Request) => void) | undefined;
+	private eventCallback: ((request: DebugProtocol.Event) => void) | undefined;
+	private messageCallback: ((message: DebugProtocol.ProtocolMessage) => void) | undefined;
+	private queue: DebugProtocol.ProtocolMessage[] = [];
+	protected readonly _onError = new Emitter<Error>();
+	protected readonly _onExit = new Emitter<number | null>();
 
-  private pendingRequests = new Map<number, (e: DebugProtocol.Response) => void>();
+	constructor() {
+		this.sequence = 1;
+	}
 
-  private requestCallback: ((request: DebugProtocol.Request) => void) | undefined;
+	abstract startSession(): Promise<void>;
 
-  private eventCallback: ((request: DebugProtocol.Event) => void) | undefined;
+	abstract stopSession(): Promise<void>;
 
-  private messageCallback: ((message: DebugProtocol.ProtocolMessage) => void) | undefined;
+	abstract sendMessage(message: DebugProtocol.ProtocolMessage): void;
 
-  private queue: DebugProtocol.ProtocolMessage[] = [];
+	get onError(): Event<Error> {
+		return this._onError.event;
+	}
 
-  protected readonly _onError = new Emitter<Error>();
+	get onExit(): Event<number | null> {
+		return this._onExit.event;
+	}
 
-  protected readonly _onExit = new Emitter<number | null>();
+	onMessage(callback: (message: DebugProtocol.ProtocolMessage) => void): void {
+		if (this.messageCallback) {
+			this._onError.fire(new Error(`attempt to set more than one 'Message' callback`));
+		}
+		this.messageCallback = callback;
+	}
 
-  constructor() {
-    this.sequence = 1;
-  }
+	onEvent(callback: (event: DebugProtocol.Event) => void): void {
+		if (this.eventCallback) {
+			this._onError.fire(new Error(`attempt to set more than one 'Event' callback`));
+		}
+		this.eventCallback = callback;
+	}
 
-  abstract startSession(): Promise<void>;
+	onRequest(callback: (request: DebugProtocol.Request) => void): void {
+		if (this.requestCallback) {
+			this._onError.fire(new Error(`attempt to set more than one 'Request' callback`));
+		}
+		this.requestCallback = callback;
+	}
 
-  abstract stopSession(): Promise<void>;
+	sendResponse(response: DebugProtocol.Response): void {
+		if (response.seq > 0) {
+			this._onError.fire(new Error(`attempt to send more than one response for command ${response.command}`));
+		} else {
+			this.internalSend('response', response);
+		}
+	}
 
-  abstract sendMessage(message: DebugProtocol.ProtocolMessage): void;
+	sendRequest(command: string, args: any, clb: (result: DebugProtocol.Response) => void, timeout?: number): number {
+		const request: any = {
+			command: command
+		};
+		if (args && Object.keys(args).length > 0) {
+			request.arguments = args;
+		}
+		this.internalSend('request', request);
+		if (typeof timeout === 'number') {
+			const timer = setTimeout(() => {
+				this.pendingRequestTimers.delete(request.seq);
+				const clb = this.pendingRequests.get(request.seq);
+				if (clb) {
+					this.pendingRequests.delete(request.seq);
+					const err: DebugProtocol.Response = {
+						type: 'response',
+						seq: 0,
+						request_seq: request.seq,
+						success: false,
+						command,
+						message: localize('timeout', "Timeout after {0} ms for '{1}'", timeout, command)
+					};
+					clb(err);
+				}
+			}, timeout);
+			this.pendingRequestTimers.set(request.seq, timer);
+		}
+		if (clb) {
+			// store callback for this request
+			this.pendingRequests.set(request.seq, clb);
+		}
 
-  get onError(): Event<Error> {
-    return this._onError.event;
-  }
+		return request.seq;
+	}
 
-  get onExit(): Event<number | null> {
-    return this._onExit.event;
-  }
+	acceptMessage(message: DebugProtocol.ProtocolMessage): void {
+		if (this.messageCallback) {
+			this.messageCallback(message);
+		} else {
+			this.queue.push(message);
+			if (this.queue.length === 1) {
+				// first item = need to start processing loop
+				this.processQueue();
+			}
+		}
+	}
 
-  onMessage(callback: (message: DebugProtocol.ProtocolMessage) => void): void {
-    if (this.messageCallback) {
-      this._onError.fire(new Error(`attempt to set more than one 'Message' callback`));
-    }
-    this.messageCallback = callback;
-  }
+	/**
+	 * Returns whether we should insert a timeout between processing messageA
+	 * and messageB. Artificially queueing protocol messages guarantees that any
+	 * microtasks for previous message finish before next message is processed.
+	 * This is essential ordering when using promises anywhere along the call path.
+	 *
+	 * For example, take the following, where `chooseAndSendGreeting` returns
+	 * a person name and then emits a greeting event:
+	 *
+	 * ```
+	 * let person: string;
+	 * adapter.onGreeting(() => console.log('hello', person));
+	 * person = await adapter.chooseAndSendGreeting();
+	 * ```
+	 *
+	 * Because the event is dispatched synchronously, it may fire before person
+	 * is assigned if they're processed in the same task. Inserting a task
+	 * boundary avoids this issue.
+	 */
+	protected needsTaskBoundaryBetween(messageA: DebugProtocol.ProtocolMessage, messageB: DebugProtocol.ProtocolMessage) {
+		return messageA.type !== 'event' || messageB.type !== 'event';
+	}
 
-  onEvent(callback: (event: DebugProtocol.Event) => void): void {
-    if (this.eventCallback) {
-      this._onError.fire(new Error(`attempt to set more than one 'Event' callback`));
-    }
-    this.eventCallback = callback;
-  }
+	/**
+	 * Reads and dispatches items from the queue until it is empty.
+	 */
+	private async processQueue() {
+		let message: DebugProtocol.ProtocolMessage | undefined;
+		while (this.queue.length) {
+			if (!message || this.needsTaskBoundaryBetween(this.queue[0], message)) {
+				await timeout(0);
+			}
 
-  onRequest(callback: (request: DebugProtocol.Request) => void): void {
-    if (this.requestCallback) {
-      this._onError.fire(new Error(`attempt to set more than one 'Request' callback`));
-    }
-    this.requestCallback = callback;
-  }
+			message = this.queue.shift();
+			if (!message) {
+				return; // may have been disposed of
+			}
 
-  sendResponse(response: DebugProtocol.Response): void {
-    if (response.seq > 0) {
-      this._onError.fire(
-        new Error(`attempt to send more than one response for command ${response.command}`),
-      );
-    } else {
-      this.internalSend('response', response);
-    }
-  }
+			switch (message.type) {
+				case 'event':
+					this.eventCallback?.(<DebugProtocol.Event>message);
+					break;
+				case 'request':
+					this.requestCallback?.(<DebugProtocol.Request>message);
+					break;
+				case 'response': {
+					const response = <DebugProtocol.Response>message;
+					const clb = this.pendingRequests.get(response.request_seq);
+					if (clb) {
+						this.pendingRequests.delete(response.request_seq);
+						this.clearPendingRequestTimer(response.request_seq);
+						clb(response);
+					}
+					break;
+				}
+			}
+		}
+	}
 
-  sendRequest(
-    command: string,
-    args: any,
-    clb: (result: DebugProtocol.Response) => void,
-    timeout?: number,
-  ): number {
-    const request: any = {
-      command,
-    };
-    if (args && Object.keys(args).length > 0) {
-      request.arguments = args;
-    }
-    this.internalSend('request', request);
-    if (typeof timeout === 'number') {
-      const timer = setTimeout(() => {
-        clearTimeout(timer);
-        const clb = this.pendingRequests.get(request.seq);
-        if (clb) {
-          this.pendingRequests.delete(request.seq);
-          const err: DebugProtocol.Response = {
-            type: 'response',
-            seq: 0,
-            request_seq: request.seq,
-            success: false,
-            command,
-            message: localize('timeout', "Timeout after {0} ms for '{1}'", timeout, command),
-          };
-          clb(err);
-        }
-      }, timeout);
-    }
-    if (clb) {
-      // store callback for this request
-      this.pendingRequests.set(request.seq, clb);
-    }
+	private internalSend(typ: 'request' | 'response' | 'event', message: DebugProtocol.ProtocolMessage): void {
+		message.type = typ;
+		message.seq = this.sequence++;
+		this.sendMessage(message);
+	}
 
-    return request.seq;
-  }
+	protected async cancelPendingRequests(): Promise<void> {
+		if (this.pendingRequests.size === 0) {
+			return Promise.resolve();
+		}
 
-  acceptMessage(message: DebugProtocol.ProtocolMessage): void {
-    if (this.messageCallback) {
-      this.messageCallback(message);
-    } else {
-      this.queue.push(message);
-      if (this.queue.length === 1) {
-        // first item = need to start processing loop
-        this.processQueue();
-      }
-    }
-  }
+		const pending = new Map<number, (e: DebugProtocol.Response) => void>();
+		this.pendingRequests.forEach((value, key) => pending.set(key, value));
+		await timeout(500);
+		pending.forEach((callback, request_seq) => {
+			const err: DebugProtocol.Response = {
+				type: 'response',
+				seq: 0,
+				request_seq,
+				success: false,
+				command: 'canceled',
+				message: 'canceled'
+			};
+			callback(err);
+			this.pendingRequests.delete(request_seq);
+			this.clearPendingRequestTimer(request_seq);
+		});
+	}
 
-  /**
-   * Returns whether we should insert a timeout between processing messageA
-   * and messageB. Artificially queueing protocol messages guarantees that any
-   * microtasks for previous message finish before next message is processed.
-   * This is essential ordering when using promises anywhere along the call path.
-   *
-   * For example, take the following, where `chooseAndSendGreeting` returns
-   * a person name and then emits a greeting event:
-   *
-   * ```
-   * let person: string;
-   * adapter.onGreeting(() => console.log('hello', person));
-   * person = await adapter.chooseAndSendGreeting();
-   * ```
-   *
-   * Because the event is dispatched synchronously, it may fire before person
-   * is assigned if they're processed in the same task. Inserting a task
-   * boundary avoids this issue.
-   */
-  protected needsTaskBoundaryBetween(
-    messageA: DebugProtocol.ProtocolMessage,
-    messageB: DebugProtocol.ProtocolMessage,
-  ) {
-    return messageA.type !== 'event' || messageB.type !== 'event';
-  }
+	private clearPendingRequestTimer(requestSeq: number): void {
+		clearTimeout(this.pendingRequestTimers.get(requestSeq));
+		this.pendingRequestTimers.delete(requestSeq);
+	}
 
-  /**
-   * Reads and dispatches items from the queue until it is empty.
-   */
-  private async processQueue() {
-    let message: DebugProtocol.ProtocolMessage | undefined;
-    while (this.queue.length) {
-      if (!message || this.needsTaskBoundaryBetween(this.queue[0], message)) {
-        await timeout(0);
-      }
+	getPendingRequestIds(): number[] {
+		return Array.from(this.pendingRequests.keys());
+	}
 
-      message = this.queue.shift();
-      if (!message) {
-        return; // may have been disposed of
-      }
-
-      switch (message.type) {
-        case 'event':
-          this.eventCallback?.(<DebugProtocol.Event>message);
-          break;
-        case 'request':
-          this.requestCallback?.(<DebugProtocol.Request>message);
-          break;
-        case 'response': {
-          const response = <DebugProtocol.Response>message;
-          const clb = this.pendingRequests.get(response.request_seq);
-          if (clb) {
-            this.pendingRequests.delete(response.request_seq);
-            clb(response);
-          }
-          break;
-        }
-      }
-    }
-  }
-
-  private internalSend(
-    typ: 'request' | 'response' | 'event',
-    message: DebugProtocol.ProtocolMessage,
-  ): void {
-    message.type = typ;
-    message.seq = this.sequence++;
-    this.sendMessage(message);
-  }
-
-  protected async cancelPendingRequests(): Promise<void> {
-    if (this.pendingRequests.size === 0) {
-      return Promise.resolve();
-    }
-
-    const pending = new Map<number, (e: DebugProtocol.Response) => void>();
-    this.pendingRequests.forEach((value, key) => pending.set(key, value));
-    await timeout(500);
-    pending.forEach((callback, request_seq) => {
-      const err: DebugProtocol.Response = {
-        type: 'response',
-        seq: 0,
-        request_seq,
-        success: false,
-        command: 'canceled',
-        message: 'canceled',
-      };
-      callback(err);
-      this.pendingRequests.delete(request_seq);
-    });
-  }
-
-  getPendingRequestIds(): number[] {
-    return Array.from(this.pendingRequests.keys());
-  }
-
-  dispose(): void {
-    this.queue = [];
-  }
+	dispose(): void {
+		for (const timer of this.pendingRequestTimers.values()) {
+			clearTimeout(timer);
+		}
+		this.pendingRequestTimers.clear();
+		this._onError.dispose();
+		this._onExit.dispose();
+		this.queue = [];
+	}
 }

@@ -6,30 +6,26 @@
 // import * as DOM from 'vs/base/browser/dom';
 
 class NotebookLogger {
-  constructor() {
-    this._domFrameLog();
-  }
+	constructor() {
+		this._domFrameLog();
+	}
+	private _frameId = 0;
+	private _domFrameLog() {
+		// DOM.scheduleAtNextAnimationFrame(() => {
+		// 	this._frameId++;
 
-  private _frameId = 0;
+		// 	this._domFrameLog();
+		// }, 1000000);
+	}
 
-  private _domFrameLog() {
-    // DOM.scheduleAtNextAnimationFrame(() => {
-    // 	this._frameId++;
-    // 	this._domFrameLog();
-    // }, 1000000);
-  }
-
-  debug(...args: any[]) {
-    const date = new Date();
-    console.log(
-      `${date.getSeconds()}:${date.getMilliseconds().toString().padStart(3, '0')}`,
-      `frame #${this._frameId}: `,
-      ...args,
-    );
-  }
+	debug(...args: unknown[]) {
+		const date = new Date();
+		console.log(`${date.getSeconds()}:${date.getMilliseconds().toString().padStart(3, '0')}`, `frame #${this._frameId}: `, ...args);
+	}
 }
 
 const instance = new NotebookLogger();
-export function notebookDebug(...args: any[]) {
-  instance.debug(...args);
+export function notebookDebug(...args: unknown[]) {
+	instance.debug(...args);
 }
+

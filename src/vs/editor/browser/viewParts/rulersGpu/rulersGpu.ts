@@ -20,64 +20,61 @@ import { autorun, type IReader } from '../../../../base/common/observable.js';
  * at a time.
  */
 export class RulersGpu extends ViewPart {
-  private readonly _gpuShapes: IObjectCollectionBufferEntry<RectangleRendererEntrySpec>[] = [];
 
-  constructor(
-    context: ViewContext,
-    private readonly _viewGpuContext: ViewGpuContext,
-  ) {
-    super(context);
-    this._register(autorun((reader) => this._updateEntries(reader)));
-  }
+	private readonly _gpuShapes: IObjectCollectionBufferEntry<RectangleRendererEntrySpec>[] = [];
 
-  // --- begin event handlers
+	constructor(
+		context: ViewContext,
+		private readonly _viewGpuContext: ViewGpuContext
+	) {
+		super(context);
+		this._register(autorun(reader => this._updateEntries(reader)));
+	}
 
-  public override onConfigurationChanged(e: viewEvents.ViewConfigurationChangedEvent): boolean {
-    this._updateEntries(undefined);
-    return true;
-  }
+	// --- begin event handlers
 
-  // --- end event handlers
+	public override onConfigurationChanged(e: viewEvents.ViewConfigurationChangedEvent): boolean {
+		this._updateEntries(undefined);
+		return true;
+	}
 
-  public prepareRender(ctx: RenderingContext): void {
-    // Nothing to read
-  }
+	// --- end event handlers
 
-  public render(ctx: RestrictedRenderingContext): void {
-    // Rendering is handled by RectangleRenderer
-  }
+	public prepareRender(ctx: RenderingContext): void {
+		// Nothing to read
+	}
 
-  private _updateEntries(reader: IReader | undefined) {
-    const options = this._context.configuration.options;
-    const rulers = options.get(EditorOption.rulers);
-    const typicalHalfwidthCharacterWidth = options.get(
-      EditorOption.fontInfo,
-    ).typicalHalfwidthCharacterWidth;
-    const devicePixelRatio = this._viewGpuContext.devicePixelRatio.read(reader);
-    for (let i = 0, len = rulers.length; i < len; i++) {
-      const ruler = rulers[i];
-      const shape = this._gpuShapes[i];
-      const color = ruler.color
-        ? Color.fromHex(ruler.color)
-        : (this._context.theme.getColor(editorRuler) ?? Color.white);
-      const rulerData: Parameters<RectangleRenderer['register']> = [
-        ruler.column * typicalHalfwidthCharacterWidth * devicePixelRatio,
-        0,
-        Math.max(1, Math.ceil(devicePixelRatio)),
-        Number.MAX_SAFE_INTEGER,
-        color.rgba.r / 255,
-        color.rgba.g / 255,
-        color.rgba.b / 255,
-        color.rgba.a,
-      ];
-      if (!shape) {
-        this._gpuShapes[i] = this._viewGpuContext.rectangleRenderer.register(...rulerData);
-      } else {
-        shape.setRaw(rulerData);
-      }
-    }
-    while (this._gpuShapes.length > rulers.length) {
-      this._gpuShapes.splice(-1, 1)[0].dispose();
-    }
-  }
+	public render(ctx: RestrictedRenderingContext): void {
+		// Rendering is handled by RectangleRenderer
+	}
+
+	private _updateEntries(reader: IReader | undefined) {
+		const options = this._context.configuration.options;
+		const rulers = options.get(EditorOption.rulers);
+		const typicalHalfwidthCharacterWidth = options.get(EditorOption.fontInfo).typicalHalfwidthCharacterWidth;
+		const devicePixelRatio = this._viewGpuContext.devicePixelRatio.read(reader);
+		for (let i = 0, len = rulers.length; i < len; i++) {
+			const ruler = rulers[i];
+			const shape = this._gpuShapes[i];
+			const color = ruler.color ? Color.fromHex(ruler.color) : this._context.theme.getColor(editorRuler) ?? Color.white;
+			const rulerData: Parameters<RectangleRenderer['register']> = [
+				ruler.column * typicalHalfwidthCharacterWidth * devicePixelRatio,
+				0,
+				Math.max(1, Math.ceil(devicePixelRatio)),
+				Number.MAX_SAFE_INTEGER,
+				color.rgba.r / 255,
+				color.rgba.g / 255,
+				color.rgba.b / 255,
+				color.rgba.a,
+			];
+			if (!shape) {
+				this._gpuShapes[i] = this._viewGpuContext.rectangleRenderer.register(...rulerData);
+			} else {
+				shape.setRaw(rulerData);
+			}
+		}
+		while (this._gpuShapes.length > rulers.length) {
+			this._gpuShapes.splice(-1, 1)[0].dispose();
+		}
+	}
 }

@@ -15,7 +15,7 @@ const close: string = nls.localize('close', 'close');
 const find: string = nls.localize('find', 'find');
 
 export default {
-  open,
-  close,
-  find,
+	open: open,
+	close: close,
+	find: find
 };

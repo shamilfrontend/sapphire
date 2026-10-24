@@ -8,8 +8,4 @@ import { WorkbenchPhase, registerWorkbenchContribution2 } from '../../../common/
 import { LocalHistoryTimeline } from './localHistoryTimeline.js';
 
 // Register Local History Timeline
-registerWorkbenchContribution2(
-  LocalHistoryTimeline.ID,
-  LocalHistoryTimeline,
-  WorkbenchPhase.BlockRestore /* registrations only */,
-);
+registerWorkbenchContribution2(LocalHistoryTimeline.ID, LocalHistoryTimeline, WorkbenchPhase.BlockRestore /* registrations only */);

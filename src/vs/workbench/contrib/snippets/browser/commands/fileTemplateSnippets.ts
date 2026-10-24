@@ -10,117 +10,105 @@ import { ILanguageService } from '../../../../../editor/common/languages/languag
 import { SnippetController2 } from '../../../../../editor/contrib/snippet/browser/snippetController2.js';
 import { localize, localize2 } from '../../../../../nls.js';
 import { ServicesAccessor } from '../../../../../platform/instantiation/common/instantiation.js';
-import {
-  IQuickInputService,
-  IQuickPickItem,
-  IQuickPickSeparator,
-} from '../../../../../platform/quickinput/common/quickInput.js';
+import { IQuickInputService, IQuickPickItem, IQuickPickSeparator } from '../../../../../platform/quickinput/common/quickInput.js';
 import { SnippetsAction } from './abstractSnippetsActions.js';
 import { ISnippetsService } from '../snippets.js';
 import { Snippet } from '../snippetsFile.js';
 import { IEditorService } from '../../../../services/editor/common/editorService.js';
 
 export class ApplyFileSnippetAction extends SnippetsAction {
-  static readonly Id = 'workbench.action.populateFileFromSnippet';
 
-  constructor() {
-    super({
-      id: ApplyFileSnippetAction.Id,
-      title: localize2('label', 'Fill File with Snippet'),
-      f1: true,
-    });
-  }
+	static readonly Id = 'workbench.action.populateFileFromSnippet';
 
-  async run(accessor: ServicesAccessor): Promise<void> {
-    const snippetService = accessor.get(ISnippetsService);
-    const quickInputService = accessor.get(IQuickInputService);
-    const editorService = accessor.get(IEditorService);
-    const langService = accessor.get(ILanguageService);
+	constructor() {
+		super({
+			id: ApplyFileSnippetAction.Id,
+			title: localize2('label', "Fill File with Snippet"),
+			f1: true,
+		});
+	}
 
-    const editor = getCodeEditor(editorService.activeTextEditorControl);
-    if (!editor || !editor.hasModel()) {
-      return;
-    }
+	async run(accessor: ServicesAccessor): Promise<void> {
+		const snippetService = accessor.get(ISnippetsService);
+		const quickInputService = accessor.get(IQuickInputService);
+		const editorService = accessor.get(IEditorService);
+		const langService = accessor.get(ILanguageService);
 
-    const snippets = await snippetService.getSnippets(undefined, {
-      fileTemplateSnippets: true,
-      noRecencySort: true,
-      includeNoPrefixSnippets: true,
-    });
-    if (snippets.length === 0) {
-      return;
-    }
+		const editor = getCodeEditor(editorService.activeTextEditorControl);
+		if (!editor || !editor.hasModel()) {
+			return;
+		}
 
-    const selection = await this._pick(quickInputService, langService, snippets);
-    if (!selection) {
-      return;
-    }
+		const resourceUri = editor.getModel().uri;
+		const snippets = await snippetService.getSnippets(undefined, resourceUri, { fileTemplateSnippets: true, noRecencySort: true, includeNoPrefixSnippets: true });
+		if (snippets.length === 0) {
+			return;
+		}
 
-    if (editor.hasModel()) {
-      // apply snippet edit -> replaces everything
-      SnippetController2.get(editor)?.apply([
-        {
-          range: editor.getModel().getFullModelRange(),
-          template: selection.snippet.body,
-        },
-      ]);
+		const selection = await this._pick(quickInputService, langService, snippets);
+		if (!selection) {
+			return;
+		}
 
-      // set language if possible
-      editor
-        .getModel()
-        .setLanguage(langService.createById(selection.langId), ApplyFileSnippetAction.Id);
+		if (editor.hasModel()) {
+			// set language before applying so snippet comment variables resolve against this language
+			editor.getModel().setLanguage(langService.createById(selection.langId), ApplyFileSnippetAction.Id);
 
-      editor.focus();
-    }
-  }
+			// apply snippet edit -> replaces everything
+			SnippetController2.get(editor)?.apply([{
+				range: editor.getModel().getFullModelRange(),
+				template: selection.snippet.body
+			}]);
 
-  private async _pick(
-    quickInputService: IQuickInputService,
-    langService: ILanguageService,
-    snippets: Snippet[],
-  ) {
-    // spread snippet onto each language it supports
-    type SnippetAndLanguage = { langId: string; snippet: Snippet };
-    const all: SnippetAndLanguage[] = [];
-    for (const snippet of snippets) {
-      if (isFalsyOrEmpty(snippet.scopes)) {
-        all.push({ langId: '', snippet });
-      } else {
-        for (const langId of snippet.scopes) {
-          all.push({ langId, snippet });
-        }
-      }
-    }
+			editor.focus();
+		}
+	}
 
-    type SnippetAndLanguagePick = IQuickPickItem & { snippet: SnippetAndLanguage };
-    const picks: (SnippetAndLanguagePick | IQuickPickSeparator)[] = [];
+	private async _pick(quickInputService: IQuickInputService, langService: ILanguageService, snippets: Snippet[]) {
 
-    const groups = groupBy(all, (a, b) => compare(a.langId, b.langId));
+		// spread snippet onto each language it supports
+		type SnippetAndLanguage = { langId: string; snippet: Snippet };
+		const all: SnippetAndLanguage[] = [];
+		for (const snippet of snippets) {
+			if (isFalsyOrEmpty(snippet.scopes)) {
+				all.push({ langId: '', snippet });
+			} else {
+				for (const langId of snippet.scopes) {
+					all.push({ langId, snippet });
+				}
+			}
+		}
 
-    for (const group of groups) {
-      let first = true;
-      for (const item of group) {
-        if (first) {
-          picks.push({
-            type: 'separator',
-            label: langService.getLanguageName(item.langId) ?? item.langId,
-          });
-          first = false;
-        }
+		type SnippetAndLanguagePick = IQuickPickItem & { snippet: SnippetAndLanguage };
+		const picks: (SnippetAndLanguagePick | IQuickPickSeparator)[] = [];
 
-        picks.push({
-          snippet: item,
-          label: item.snippet.prefix || item.snippet.name,
-          detail: item.snippet.description,
-        });
-      }
-    }
+		const groups = groupBy(all, (a, b) => compare(a.langId, b.langId));
 
-    const pick = await quickInputService.pick(picks, {
-      placeHolder: localize('placeholder', 'Select a snippet'),
-      matchOnDetail: true,
-    });
+		for (const group of groups) {
+			let first = true;
+			for (const item of group) {
 
-    return pick?.snippet;
-  }
+				if (first) {
+					picks.push({
+						type: 'separator',
+						label: langService.getLanguageName(item.langId) ?? item.langId
+					});
+					first = false;
+				}
+
+				picks.push({
+					snippet: item,
+					label: item.snippet.prefix || item.snippet.name,
+					detail: item.snippet.description
+				});
+			}
+		}
+
+		const pick = await quickInputService.pick(picks, {
+			placeHolder: localize('placeholder', 'Select a snippet'),
+			matchOnDetail: true,
+		});
+
+		return pick?.snippet;
+	}
 }

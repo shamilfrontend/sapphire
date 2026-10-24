@@ -12,49 +12,51 @@ import { GlyphMarginLane } from '../../../common/model.js';
 export type LaneOrLineNumber = GlyphMarginLane | 'lineNo';
 
 export interface IHoverMessage {
-  value: IMarkdownString;
+	value: IMarkdownString;
 }
 
 export interface GlyphHoverComputerOptions {
-  lineNumber: number;
-  laneOrLine: LaneOrLineNumber;
+	lineNumber: number;
+	laneOrLine: LaneOrLineNumber;
 }
 
-export class GlyphHoverComputer implements IHoverComputer<
-  GlyphHoverComputerOptions,
-  IHoverMessage
-> {
-  constructor(private readonly _editor: ICodeEditor) {}
+export class GlyphHoverComputer implements IHoverComputer<GlyphHoverComputerOptions, IHoverMessage> {
 
-  public computeSync(opts: GlyphHoverComputerOptions): IHoverMessage[] {
-    const toHoverMessage = (contents: IMarkdownString): IHoverMessage => ({
-      value: contents,
-    });
+	constructor(
+		private readonly _editor: ICodeEditor
+	) {
+	}
 
-    const lineDecorations = this._editor.getLineDecorations(opts.lineNumber);
+	public computeSync(opts: GlyphHoverComputerOptions): IHoverMessage[] {
 
-    const result: IHoverMessage[] = [];
-    const isLineHover = opts.laneOrLine === 'lineNo';
-    if (!lineDecorations) {
-      return result;
-    }
+		const toHoverMessage = (contents: IMarkdownString): IHoverMessage => {
+			return {
+				value: contents
+			};
+		};
 
-    for (const d of lineDecorations) {
-      const lane = d.options.glyphMargin?.position ?? GlyphMarginLane.Center;
-      if (!isLineHover && lane !== opts.laneOrLine) {
-        continue;
-      }
+		const lineDecorations = this._editor.getLineDecorations(opts.lineNumber);
 
-      const hoverMessage = isLineHover
-        ? d.options.lineNumberHoverMessage
-        : d.options.glyphMarginHoverMessage;
-      if (!hoverMessage || isEmptyMarkdownString(hoverMessage)) {
-        continue;
-      }
+		const result: IHoverMessage[] = [];
+		const isLineHover = opts.laneOrLine === 'lineNo';
+		if (!lineDecorations) {
+			return result;
+		}
 
-      result.push(...asArray(hoverMessage).map(toHoverMessage));
-    }
+		for (const d of lineDecorations) {
+			const lane = d.options.glyphMargin?.position ?? GlyphMarginLane.Center;
+			if (!isLineHover && lane !== opts.laneOrLine) {
+				continue;
+			}
 
-    return result;
-  }
+			const hoverMessage = isLineHover ? d.options.lineNumberHoverMessage : d.options.glyphMarginHoverMessage;
+			if (!hoverMessage || isEmptyMarkdownString(hoverMessage)) {
+				continue;
+			}
+
+			result.push(...asArray(hoverMessage).map(toHoverMessage));
+		}
+
+		return result;
+	}
 }

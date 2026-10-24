@@ -8,12 +8,18 @@ import { Command } from '../commandManager';
 import { MarkdownPreviewManager } from '../preview/previewManager';
 
 export class OpenImageCommand implements Command {
-  public readonly id = '_markdown.openImage';
+	public readonly id = '_markdown.openImage';
 
-  public constructor(private readonly _webviewManager: MarkdownPreviewManager) {}
+	readonly #webviewManager: MarkdownPreviewManager;
 
-  public execute(args: { resource: string; imageSource: string }) {
-    const source = vscode.Uri.parse(args.resource);
-    this._webviewManager.openDocumentLink(args.imageSource, source);
-  }
+	public constructor(
+		webviewManager: MarkdownPreviewManager,
+	) {
+		this.#webviewManager = webviewManager;
+	}
+
+	public execute(args: { resource: string; imageSource: string }) {
+		const source = vscode.Uri.parse(args.resource);
+		this.#webviewManager.openDocumentLink(args.imageSource, source);
+	}
 }

@@ -8,85 +8,87 @@ import type { IPtyServiceContribution, ITerminalChildProcess } from '../../../co
 import { TerminalAutoResponder } from './terminalAutoResponder.js';
 
 export class AutoRepliesPtyServiceContribution implements IPtyServiceContribution {
-  private readonly _autoReplies: Map<string, string> = new Map();
+	private readonly _autoReplies: Map<string, string> = new Map();
+	private readonly _terminalProcesses: Map<number, ITerminalChildProcess> = new Map();
+	private readonly _autoResponders: Map<number, Map<string, TerminalAutoResponder>> = new Map();
 
-  private readonly _terminalProcesses: Map<number, ITerminalChildProcess> = new Map();
+	constructor(
+		@ILogService private readonly _logService: ILogService
+	) {
+	}
 
-  private readonly _autoResponders: Map<number, Map<string, TerminalAutoResponder>> = new Map();
+	async installAutoReply(match: string, reply: string) {
+		this._autoReplies.set(match, reply);
+		// If the auto reply exists on any existing terminals it will be overridden
+		for (const persistentProcessId of this._autoResponders.keys()) {
+			const process = this._terminalProcesses.get(persistentProcessId);
+			if (!process) {
+				this._logService.error('Could not find terminal process to install auto reply');
+				continue;
+			}
+			this._processInstallAutoReply(persistentProcessId, process, match, reply);
+		}
+	}
 
-  constructor(@ILogService private readonly _logService: ILogService) {}
+	async uninstallAllAutoReplies() {
+		for (const match of this._autoReplies.keys()) {
+			for (const processAutoResponders of this._autoResponders.values()) {
+				processAutoResponders.get(match)?.dispose();
+				processAutoResponders.delete(match);
+			}
+		}
+	}
 
-  async installAutoReply(match: string, reply: string) {
-    this._autoReplies.set(match, reply);
-    // If the auto reply exists on any existing terminals it will be overridden
-    for (const persistentProcessId of this._autoResponders.keys()) {
-      const process = this._terminalProcesses.get(persistentProcessId);
-      if (!process) {
-        this._logService.error('Could not find terminal process to install auto reply');
-        continue;
-      }
-      this._processInstallAutoReply(persistentProcessId, process, match, reply);
-    }
-  }
+	handleProcessReady(persistentProcessId: number, process: ITerminalChildProcess): void {
+		// Ready fires again when a persistent process is reattached, dispose the old responders
+		const existingAutoResponders = this._autoResponders.get(persistentProcessId);
+		if (existingAutoResponders) {
+			for (const e of existingAutoResponders.values()) {
+				e.dispose();
+			}
+		}
+		this._terminalProcesses.set(persistentProcessId, process);
+		this._autoResponders.set(persistentProcessId, new Map());
+		for (const [match, reply] of this._autoReplies.entries()) {
+			this._processInstallAutoReply(persistentProcessId, process, match, reply);
+		}
+	}
 
-  async uninstallAllAutoReplies() {
-    for (const match of this._autoReplies.keys()) {
-      for (const processAutoResponders of this._autoResponders.values()) {
-        processAutoResponders.get(match)?.dispose();
-        processAutoResponders.delete(match);
-      }
-    }
-  }
+	handleProcessDispose(persistentProcessId: number): void {
+		const processAutoResponders = this._autoResponders.get(persistentProcessId);
+		if (processAutoResponders) {
+			for (const e of processAutoResponders.values()) {
+				e.dispose();
+			}
+			processAutoResponders.clear();
+		}
+		this._autoResponders.delete(persistentProcessId);
+		this._terminalProcesses.delete(persistentProcessId);
+	}
 
-  handleProcessReady(persistentProcessId: number, process: ITerminalChildProcess): void {
-    this._terminalProcesses.set(persistentProcessId, process);
-    this._autoResponders.set(persistentProcessId, new Map());
-    for (const [match, reply] of this._autoReplies.entries()) {
-      this._processInstallAutoReply(persistentProcessId, process, match, reply);
-    }
-  }
+	handleProcessInput(persistentProcessId: number, data: string) {
+		const processAutoResponders = this._autoResponders.get(persistentProcessId);
+		if (processAutoResponders) {
+			for (const listener of processAutoResponders.values()) {
+				listener.handleInput();
+			}
+		}
+	}
 
-  handleProcessDispose(persistentProcessId: number): void {
-    const processAutoResponders = this._autoResponders.get(persistentProcessId);
-    if (processAutoResponders) {
-      for (const e of processAutoResponders.values()) {
-        e.dispose();
-      }
-      processAutoResponders.clear();
-    }
-  }
+	handleProcessResize(persistentProcessId: number, cols: number, rows: number) {
+		const processAutoResponders = this._autoResponders.get(persistentProcessId);
+		if (processAutoResponders) {
+			for (const listener of processAutoResponders.values()) {
+				listener.handleResize();
+			}
+		}
+	}
 
-  handleProcessInput(persistentProcessId: number, data: string) {
-    const processAutoResponders = this._autoResponders.get(persistentProcessId);
-    if (processAutoResponders) {
-      for (const listener of processAutoResponders.values()) {
-        listener.handleInput();
-      }
-    }
-  }
-
-  handleProcessResize(persistentProcessId: number, cols: number, rows: number) {
-    const processAutoResponders = this._autoResponders.get(persistentProcessId);
-    if (processAutoResponders) {
-      for (const listener of processAutoResponders.values()) {
-        listener.handleResize();
-      }
-    }
-  }
-
-  private _processInstallAutoReply(
-    persistentProcessId: number,
-    terminalProcess: ITerminalChildProcess,
-    match: string,
-    reply: string,
-  ) {
-    const processAutoResponders = this._autoResponders.get(persistentProcessId);
-    if (processAutoResponders) {
-      processAutoResponders.get(match)?.dispose();
-      processAutoResponders.set(
-        match,
-        new TerminalAutoResponder(terminalProcess, match, reply, this._logService),
-      );
-    }
-  }
+	private _processInstallAutoReply(persistentProcessId: number, terminalProcess: ITerminalChildProcess, match: string, reply: string) {
+		const processAutoResponders = this._autoResponders.get(persistentProcessId);
+		if (processAutoResponders) {
+			processAutoResponders.get(match)?.dispose();
+			processAutoResponders.set(match, new TerminalAutoResponder(terminalProcess, match, reply, this._logService));
+		}
+	}
 }

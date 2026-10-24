@@ -4,274 +4,258 @@
  *--------------------------------------------------------------------------------------------*/
 
 import assert from 'assert';
-import {
-  SerializedError,
-  errorHandler,
-  onUnexpectedError,
-} from '../../../../base/common/errors.js';
+import { SerializedError, errorHandler, onUnexpectedError } from '../../../../base/common/errors.js';
 import { isFirefox, isSafari } from '../../../../base/common/platform.js';
 import { TernarySearchTree } from '../../../../base/common/ternarySearchTree.js';
 import { URI } from '../../../../base/common/uri.js';
 import { mock } from '../../../../base/test/common/mock.js';
 import { ensureNoDisposablesAreLeakedInTestSuite } from '../../../../base/test/common/utils.js';
-import {
-  ExtensionIdentifier,
-  IExtensionDescription,
-} from '../../../../platform/extensions/common/extensions.js';
+import { ExtensionIdentifier, IExtensionDescription } from '../../../../platform/extensions/common/extensions.js';
 import { InstantiationService } from '../../../../platform/instantiation/common/instantiationService.js';
 import { ServiceCollection } from '../../../../platform/instantiation/common/serviceCollection.js';
 import { ILogService, NullLogService } from '../../../../platform/log/common/log.js';
-import {
-  MainThreadErrorsShape,
-  MainThreadExtensionServiceShape,
-} from '../../common/extHost.protocol.js';
+import { MainThreadErrorsShape, MainThreadExtensionServiceShape } from '../../common/extHost.protocol.js';
 import { ExtensionPaths, IExtHostExtensionService } from '../../common/extHostExtensionService.js';
 import { IExtHostRpcService } from '../../common/extHostRpcService.js';
 import { IExtHostTelemetry } from '../../common/extHostTelemetry.js';
 import { ErrorHandler } from '../../common/extensionHostMain.js';
 import { nullExtensionDescription } from '../../../services/extensions/common/extensions.js';
 import { ProxyIdentifier, Proxied } from '../../../services/extensions/common/proxyIdentifier.js';
+import { IExtHostApiDeprecationService, NullApiDeprecationService } from '../../common/extHostApiDeprecationService.js';
+import { ExtensionDescriptionRegistry, IActivationEventsReader } from '../../../services/extensions/common/extensionDescriptionRegistry.js';
 
-suite(
-  'ExtensionHostMain#ErrorHandler - Wrapping prepareStackTrace can cause slowdown and eventual stack overflow #184926 ',
-  () => {
-    if (isFirefox || isSafari) {
-      return;
-    }
 
-    const extensionsIndex = TernarySearchTree.forUris<IExtensionDescription>();
-    const mainThreadExtensionsService = new (class
-      extends mock<MainThreadExtensionServiceShape>()
-      implements MainThreadErrorsShape
-    {
-      override $onExtensionRuntimeError(
-        extensionId: ExtensionIdentifier,
-        data: SerializedError,
-      ): void {}
+suite('ExtensionHostMain#ErrorHandler - Wrapping prepareStackTrace can cause slowdown and eventual stack overflow #184926 ', function () {
 
-      $onUnexpectedError(err: any | SerializedError): void {}
-    })();
+	if (isFirefox || isSafari) {
+		return;
+	}
 
-    const collection = new ServiceCollection(
-      [ILogService, new NullLogService()],
-      [
-        IExtHostTelemetry,
-        new (class extends mock<IExtHostTelemetry>() {
-          declare readonly _serviceBrand: undefined;
+	const extensionsIndex = TernarySearchTree.forUris<IExtensionDescription>();
+	const mainThreadExtensionsService = new class extends mock<MainThreadExtensionServiceShape>() implements MainThreadErrorsShape {
+		override $onExtensionRuntimeError(extensionId: ExtensionIdentifier, data: SerializedError): void {
 
-          override onExtensionError(extension: ExtensionIdentifier, error: Error): boolean {
-            return true;
-          }
-        })(),
-      ],
-      [
-        IExtHostExtensionService,
-        new (class extends mock<IExtHostExtensionService & any>() {
-          declare readonly _serviceBrand: undefined;
+		}
+		$onUnexpectedError(err: any | SerializedError): void {
 
-          getExtensionPathIndex() {
-            return new (class extends ExtensionPaths {
-              override findSubstr(key: URI): IExtensionDescription | undefined {
-                findSubstrCount++;
-                return nullExtensionDescription;
-              }
-            })(extensionsIndex);
-          }
-        })(),
-      ],
-      [
-        IExtHostRpcService,
-        new (class extends mock<IExtHostRpcService>() {
-          declare readonly _serviceBrand: undefined;
+		}
+	};
 
-          override getProxy<T>(identifier: ProxyIdentifier<T>): Proxied<T> {
-            return <any>mainThreadExtensionsService;
-          }
-        })(),
-      ],
-    );
+	const basicActivationEventsReader: IActivationEventsReader = {
+		readActivationEvents: (extensionDescription: IExtensionDescription): string[] => {
+			return [];
+		}
+	};
 
-    const originalPrepareStackTrace = Error.prepareStackTrace;
-    const insta = new InstantiationService(collection, false);
+	const collection = new ServiceCollection(
+		[ILogService, new NullLogService()],
+		[IExtHostTelemetry, new class extends mock<IExtHostTelemetry>() {
+			declare readonly _serviceBrand: undefined;
+			override onExtensionError(extension: ExtensionIdentifier, error: Error): boolean {
+				return true;
+			}
+		}],
+		[IExtHostExtensionService, new class extends mock<IExtHostExtensionService & any>() {
+			declare readonly _serviceBrand: undefined;
+			getExtensionPathIndex() {
+				return new class extends ExtensionPaths {
+					override findSubstr(key: URI): IExtensionDescription | undefined {
+						findSubstrCount++;
+						return nullExtensionDescription;
+					}
 
-    let existingErrorHandler: (e: any) => void;
-    let findSubstrCount = 0;
+				}(extensionsIndex);
+			}
+			getExtensionRegistry() {
+				return new class extends ExtensionDescriptionRegistry {
+					override getExtensionDescription(extensionId: ExtensionIdentifier | string): IExtensionDescription | undefined {
+						return nullExtensionDescription;
+					}
+				}(basicActivationEventsReader, []);
+			}
+		}],
+		[IExtHostRpcService, new class extends mock<IExtHostRpcService>() {
+			declare readonly _serviceBrand: undefined;
+			override getProxy<T>(identifier: ProxyIdentifier<T>): Proxied<T> {
+				// eslint-disable-next-line local/code-no-any-casts
+				return <any>mainThreadExtensionsService;
+			}
+		}],
+		[IExtHostApiDeprecationService, NullApiDeprecationService],
+	);
 
-    ensureNoDisposablesAreLeakedInTestSuite();
+	const originalPrepareStackTrace = Error.prepareStackTrace;
+	const insta = new InstantiationService(collection, false);
 
-    suiteSetup(async () => {
-      existingErrorHandler = errorHandler.getUnexpectedErrorHandler();
-      await insta.invokeFunction(ErrorHandler.installFullHandler);
-    });
+	let existingErrorHandler: (e: any) => void;
+	let findSubstrCount = 0;
 
-    suiteTeardown(() => {
-      errorHandler.setUnexpectedErrorHandler(existingErrorHandler);
-    });
+	ensureNoDisposablesAreLeakedInTestSuite();
 
-    setup(async () => {
-      findSubstrCount = 0;
-    });
+	suiteSetup(async function () {
+		existingErrorHandler = errorHandler.getUnexpectedErrorHandler();
+		await insta.invokeFunction(ErrorHandler.installFullHandler);
+	});
 
-    teardown(() => {
-      Error.prepareStackTrace = originalPrepareStackTrace;
-    });
+	suiteTeardown(function () {
+		errorHandler.setUnexpectedErrorHandler(existingErrorHandler);
+	});
 
-    test('basics', () => {
-      const err = new Error('test1');
+	setup(async function () {
+		findSubstrCount = 0;
+	});
 
-      onUnexpectedError(err);
+	teardown(() => {
+		Error.prepareStackTrace = originalPrepareStackTrace;
+	});
 
-      assert.strictEqual(findSubstrCount, 1);
-    });
+	test('basics', function () {
 
-    test('set/reset prepareStackTrace-callback', () => {
-      const original = Error.prepareStackTrace;
-      Error.prepareStackTrace = (_error, _stack) => 'stack';
-      const probeErr = new Error();
-      const stack = probeErr.stack;
-      assert.ok(stack);
-      Error.prepareStackTrace = original;
-      assert.strictEqual(findSubstrCount, 1);
+		const err = new Error('test1');
 
-      // already checked
-      onUnexpectedError(probeErr);
-      assert.strictEqual(findSubstrCount, 1);
+		onUnexpectedError(err);
 
-      // one more error
-      const err = new Error('test2');
-      onUnexpectedError(err);
+		assert.strictEqual(findSubstrCount, 1);
 
-      assert.strictEqual(findSubstrCount, 2);
-    });
+	});
 
-    test('wrap prepareStackTrace-callback', () => {
-      function do_something_else(params: string) {
-        return params;
-      }
+	test('set/reset prepareStackTrace-callback', function () {
 
-      const original = Error.prepareStackTrace;
-      Error.prepareStackTrace = (...args) => do_something_else(original?.(...args));
-      const probeErr = new Error();
-      const stack = probeErr.stack;
-      assert.ok(stack);
+		const original = Error.prepareStackTrace;
+		Error.prepareStackTrace = (_error, _stack) => 'stack';
+		const probeErr = new Error();
+		const stack = probeErr.stack;
+		assert.ok(stack);
+		Error.prepareStackTrace = original;
+		assert.strictEqual(findSubstrCount, 1);
 
-      onUnexpectedError(probeErr);
-      assert.strictEqual(findSubstrCount, 1);
-    });
+		// already checked
+		onUnexpectedError(probeErr);
+		assert.strictEqual(findSubstrCount, 1);
 
-    test('prevent rewrapping', () => {
-      let do_something_count = 0;
-      function do_something(params: any) {
-        do_something_count++;
-      }
+		// one more error
+		const err = new Error('test2');
+		onUnexpectedError(err);
 
-      Error.prepareStackTrace = (result, stack) => {
-        do_something(stack);
-        return 'fakestack';
-      };
+		assert.strictEqual(findSubstrCount, 2);
+	});
 
-      for (let i = 0; i < 2_500; ++i) {
-        Error.prepareStackTrace = Error.prepareStackTrace;
-      }
+	test('wrap prepareStackTrace-callback', function () {
 
-      const probeErr = new Error();
-      const stack = probeErr.stack;
-      assert.strictEqual(stack, 'fakestack');
+		function do_something_else(params: string) {
+			return params;
+		}
 
-      onUnexpectedError(probeErr);
-      assert.strictEqual(findSubstrCount, 1);
+		const original = Error.prepareStackTrace;
+		Error.prepareStackTrace = (...args) => {
+			return do_something_else(original?.(...args));
+		};
+		const probeErr = new Error();
+		const stack = probeErr.stack;
+		assert.ok(stack);
 
-      const probeErr2 = new Error();
-      onUnexpectedError(probeErr2);
-      assert.strictEqual(findSubstrCount, 2);
-      assert.strictEqual(do_something_count, 2);
-    });
 
-    suite('https://gist.github.com/thecrypticace/f0f2e182082072efdaf0f8e1537d2cce', () => {
-      test('Restored, separate operations', () => {
-        // Actual Test
-        let original;
+		onUnexpectedError(probeErr);
+		assert.strictEqual(findSubstrCount, 1);
+	});
 
-        // Operation 1
-        original = Error.prepareStackTrace;
-        for (let i = 0; i < 12_500; ++i) {
-          Error.prepareStackTrace = Error.prepareStackTrace;
-        }
-        const err1 = new Error();
-        assert.ok(err1.stack);
-        assert.strictEqual(findSubstrCount, 1);
-        Error.prepareStackTrace = original;
+	test('prevent rewrapping', function () {
 
-        // Operation 2
-        original = Error.prepareStackTrace;
-        for (let i = 0; i < 12_500; ++i) {
-          Error.prepareStackTrace = Error.prepareStackTrace;
-        }
-        assert.ok(new Error().stack);
-        assert.strictEqual(findSubstrCount, 2);
-        Error.prepareStackTrace = original;
+		let do_something_count = 0;
+		function do_something(params: any) {
+			do_something_count++;
+		}
 
-        // Operation 3
-        original = Error.prepareStackTrace;
-        for (let i = 0; i < 12_500; ++i) {
-          Error.prepareStackTrace = Error.prepareStackTrace;
-        }
-        assert.ok(new Error().stack);
-        assert.strictEqual(findSubstrCount, 3);
-        Error.prepareStackTrace = original;
+		Error.prepareStackTrace = (result, stack) => {
+			do_something(stack);
+			return 'fakestack';
+		};
 
-        // Operation 4
-        original = Error.prepareStackTrace;
-        for (let i = 0; i < 12_500; ++i) {
-          Error.prepareStackTrace = Error.prepareStackTrace;
-        }
-        assert.ok(new Error().stack);
-        assert.strictEqual(findSubstrCount, 4);
-        Error.prepareStackTrace = original;
+		for (let i = 0; i < 2_500; ++i) {
+			Error.prepareStackTrace = Error.prepareStackTrace;
+		}
 
-        // Back to Operation 1
-        assert.ok(err1.stack);
-        assert.strictEqual(findSubstrCount, 4);
-      });
+		const probeErr = new Error();
+		const stack = probeErr.stack;
+		assert.strictEqual(stack, 'fakestack');
 
-      test('Never restored, separate operations', () => {
-        // Operation 1
-        for (let i = 0; i < 12_500; ++i) {
-          Error.prepareStackTrace = Error.prepareStackTrace;
-        }
-        assert.ok(new Error().stack);
+		onUnexpectedError(probeErr);
+		assert.strictEqual(findSubstrCount, 1);
 
-        // Operation 2
-        for (let i = 0; i < 12_500; ++i) {
-          Error.prepareStackTrace = Error.prepareStackTrace;
-        }
-        assert.ok(new Error().stack);
+		const probeErr2 = new Error();
+		onUnexpectedError(probeErr2);
+		assert.strictEqual(findSubstrCount, 2);
+		assert.strictEqual(do_something_count, 2);
+	});
 
-        // Operation 3
-        for (let i = 0; i < 12_500; ++i) {
-          Error.prepareStackTrace = Error.prepareStackTrace;
-        }
-        assert.ok(new Error().stack);
 
-        // Operation 4
-        for (let i = 0; i < 12_500; ++i) {
-          Error.prepareStackTrace = Error.prepareStackTrace;
-        }
-        assert.ok(new Error().stack);
-      });
+	suite('https://gist.github.com/thecrypticace/f0f2e182082072efdaf0f8e1537d2cce', function () {
 
-      test('Restored, too many uses before restoration', async () => {
-        const original = Error.prepareStackTrace;
-        Error.prepareStackTrace = (_, stack) => stack;
+		test('Restored, separate operations', () => {
+			// Actual Test
+			let original;
 
-        // Operation 1 — more uses of `prepareStackTrace`
-        for (let i = 0; i < 10_000; ++i) {
-          Error.prepareStackTrace = Error.prepareStackTrace;
-        }
-        assert.ok(new Error().stack);
+			// Operation 1
+			original = Error.prepareStackTrace;
+			for (let i = 0; i < 12_500; ++i) { Error.prepareStackTrace = Error.prepareStackTrace; }
+			const err1 = new Error();
+			assert.ok(err1.stack);
+			assert.strictEqual(findSubstrCount, 1);
+			Error.prepareStackTrace = original;
 
-        Error.prepareStackTrace = original;
-      });
-    });
-  },
-);
+			// Operation 2
+			original = Error.prepareStackTrace;
+			for (let i = 0; i < 12_500; ++i) { Error.prepareStackTrace = Error.prepareStackTrace; }
+			assert.ok(new Error().stack);
+			assert.strictEqual(findSubstrCount, 2);
+			Error.prepareStackTrace = original;
+
+			// Operation 3
+			original = Error.prepareStackTrace;
+			for (let i = 0; i < 12_500; ++i) { Error.prepareStackTrace = Error.prepareStackTrace; }
+			assert.ok(new Error().stack);
+			assert.strictEqual(findSubstrCount, 3);
+			Error.prepareStackTrace = original;
+
+			// Operation 4
+			original = Error.prepareStackTrace;
+			for (let i = 0; i < 12_500; ++i) { Error.prepareStackTrace = Error.prepareStackTrace; }
+			assert.ok(new Error().stack);
+			assert.strictEqual(findSubstrCount, 4);
+			Error.prepareStackTrace = original;
+
+			// Back to Operation 1
+			assert.ok(err1.stack);
+			assert.strictEqual(findSubstrCount, 4);
+		});
+
+		test('Never restored, separate operations', () => {
+			// Operation 1
+			for (let i = 0; i < 12_500; ++i) { Error.prepareStackTrace = Error.prepareStackTrace; }
+			assert.ok(new Error().stack);
+
+			// Operation 2
+			for (let i = 0; i < 12_500; ++i) { Error.prepareStackTrace = Error.prepareStackTrace; }
+			assert.ok(new Error().stack);
+
+			// Operation 3
+			for (let i = 0; i < 12_500; ++i) { Error.prepareStackTrace = Error.prepareStackTrace; }
+			assert.ok(new Error().stack);
+
+			// Operation 4
+			for (let i = 0; i < 12_500; ++i) { Error.prepareStackTrace = Error.prepareStackTrace; }
+			assert.ok(new Error().stack);
+		});
+
+		test('Restored, too many uses before restoration', async () => {
+			const original = Error.prepareStackTrace;
+			Error.prepareStackTrace = (_, stack) => stack;
+
+			// Operation 1 — more uses of `prepareStackTrace`
+			for (let i = 0; i < 10_000; ++i) { Error.prepareStackTrace = Error.prepareStackTrace; }
+			assert.ok(new Error().stack);
+
+			Error.prepareStackTrace = original;
+		});
+	});
+});

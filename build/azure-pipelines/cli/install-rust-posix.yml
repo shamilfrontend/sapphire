@@ -1,7 +1,7 @@
 parameters:
   - name: channel
     type: string
-    default: 1.85
+    default: 1.88
   - name: targets
     default: []
     type: object
@@ -36,16 +36,16 @@ steps:
       rustup component add clippy
     env:
       RUSTUP_TOOLCHAIN: ${{ parameters.channel }}
-    displayName: 'Set Rust version'
+    displayName: "Set Rust version"
     condition: and(succeeded(), eq(variables['CARGO_REGISTRY'], 'none'))
 
   - ${{ each target in parameters.targets }}:
-      - script: rustup target add ${{ target }}
-        displayName: "Adding Rust target '${{ target }}'"
-        condition: and(succeeded(), eq(variables['CARGO_REGISTRY'], 'none'))
+    - script: rustup target add ${{ target }}
+      displayName: "Adding Rust target '${{ target }}'"
+      condition: and(succeeded(), eq(variables['CARGO_REGISTRY'], 'none'))
 
   - script: |
       set -e
       rustc --version
       cargo --version
-    displayName: 'Check Rust versions'
+    displayName: "Check Rust versions"

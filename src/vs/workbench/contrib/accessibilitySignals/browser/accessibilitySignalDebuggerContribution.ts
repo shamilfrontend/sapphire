@@ -5,73 +5,63 @@
 
 import { Disposable, IDisposable, toDisposable } from '../../../../base/common/lifecycle.js';
 import { autorunWithStore, observableFromEvent } from '../../../../base/common/observable.js';
-import {
-  IAccessibilitySignalService,
-  AccessibilitySignal,
-  AccessibilitySignalService,
-} from '../../../../platform/accessibilitySignal/browser/accessibilitySignalService.js';
+import { IAccessibilitySignalService, AccessibilitySignal, AccessibilitySignalService } from '../../../../platform/accessibilitySignal/browser/accessibilitySignalService.js';
 import { IWorkbenchContribution } from '../../../common/contributions.js';
 import { IDebugService, IDebugSession } from '../../debug/common/debug.js';
 
 export class AccessibilitySignalLineDebuggerContribution
-  extends Disposable
-  implements IWorkbenchContribution
-{
-  constructor(
-    @IDebugService debugService: IDebugService,
-    @IAccessibilitySignalService
-    private readonly accessibilitySignalService: AccessibilitySignalService,
-  ) {
-    super();
+	extends Disposable
+	implements IWorkbenchContribution {
 
-    const isEnabled = observableFromEvent(
-      this,
-      accessibilitySignalService.onSoundEnabledChanged(AccessibilitySignal.onDebugBreak),
-      () => accessibilitySignalService.isSoundEnabled(AccessibilitySignal.onDebugBreak),
-    );
-    this._register(
-      autorunWithStore((reader, store) => {
-        /** @description subscribe to debug sessions */
-        if (!isEnabled.read(reader)) {
-          return;
-        }
+	constructor(
+		@IDebugService debugService: IDebugService,
+		@IAccessibilitySignalService private readonly accessibilitySignalService: AccessibilitySignalService,
+	) {
+		super();
 
-        const sessionDisposables = new Map<IDebugSession, IDisposable>();
-        store.add(
-          toDisposable(() => {
-            sessionDisposables.forEach((d) => d.dispose());
-            sessionDisposables.clear();
-          }),
-        );
+		const isEnabled = observableFromEvent(this,
+			accessibilitySignalService.onSoundEnabledChanged(AccessibilitySignal.onDebugBreak),
+			() => accessibilitySignalService.isSoundEnabled(AccessibilitySignal.onDebugBreak)
+		);
+		this._register(autorunWithStore((reader, store) => {
+			/** @description subscribe to debug sessions */
+			if (!isEnabled.read(reader)) {
+				return;
+			}
 
-        store.add(
-          debugService.onDidNewSession((session) =>
-            sessionDisposables.set(session, this.handleSession(session)),
-          ),
-        );
+			const sessionDisposables = new Map<IDebugSession, IDisposable>();
+			store.add(toDisposable(() => {
+				sessionDisposables.forEach(d => d.dispose());
+				sessionDisposables.clear();
+			}));
 
-        store.add(
-          debugService.onDidEndSession(({ session }) => {
-            sessionDisposables.get(session)?.dispose();
-            sessionDisposables.delete(session);
-          }),
-        );
+			store.add(
+				debugService.onDidNewSession((session) =>
+					sessionDisposables.set(session, this.handleSession(session))
+				)
+			);
 
-        debugService
-          .getModel()
-          .getSessions()
-          .forEach((session) => sessionDisposables.set(session, this.handleSession(session)));
-      }),
-    );
-  }
+			store.add(debugService.onDidEndSession(({ session }) => {
+				sessionDisposables.get(session)?.dispose();
+				sessionDisposables.delete(session);
+			}));
 
-  private handleSession(session: IDebugSession): IDisposable {
-    return session.onDidChangeState((e) => {
-      const stoppedDetails = session.getStoppedDetails();
-      const BREAKPOINT_STOP_REASON = 'breakpoint';
-      if (stoppedDetails && stoppedDetails.reason === BREAKPOINT_STOP_REASON) {
-        this.accessibilitySignalService.playSignal(AccessibilitySignal.onDebugBreak);
-      }
-    });
-  }
+			debugService
+				.getModel()
+				.getSessions()
+				.forEach((session) =>
+					sessionDisposables.set(session, this.handleSession(session))
+				);
+		}));
+	}
+
+	private handleSession(session: IDebugSession): IDisposable {
+		return session.onDidChangeState(e => {
+			const stoppedDetails = session.getStoppedDetails();
+			const BREAKPOINT_STOP_REASON = 'breakpoint';
+			if (stoppedDetails && stoppedDetails.reason === BREAKPOINT_STOP_REASON) {
+				this.accessibilitySignalService.playSignal(AccessibilitySignal.onDebugBreak);
+			}
+		});
+	}
 }

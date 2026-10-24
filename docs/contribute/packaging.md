@@ -10,10 +10,10 @@
 
 | ОС                  | Команда                            |
 | ------------------- | ---------------------------------- |
-| macOS Apple Silicon | `npm run build:task -- vscode-darwin-arm64` |
-| macOS Intel         | `npm run build:task -- vscode-darwin-x64`   |
-| Windows x64         | `npm run build:task -- vscode-win32-x64`    |
-| Linux x64           | `npm run build:task -- vscode-linux-x64`    |
+| macOS Apple Silicon | `npm run gulp vscode-darwin-arm64` |
+| macOS Intel         | `npm run gulp vscode-darwin-x64`   |
+| Windows x64         | `npm run gulp vscode-win32-x64`    |
+| Linux x64           | `npm run gulp vscode-linux-x64`    |
 
 Артефакт появится **рядом** с репозиторием, например `../VSCode-darwin-arm64/`.
 

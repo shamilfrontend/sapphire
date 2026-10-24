@@ -22,7 +22,7 @@ type RefreshableState =
     }
   | {
       state: 'refreshing';
-      timeoutId: NodeJS.Timeout | null; // timeoutId последнего вызова refreshModels
+      timeoutId: ReturnType<typeof setTimeout> | null; // timeoutId последнего вызова refreshModels
     }
   | {
       state: 'finished';
@@ -224,7 +224,7 @@ class RefreshModelService extends Disposable implements IRefreshModelService {
     }
   }
 
-  private _setTimeoutId(providerName: ProviderName, timeoutId: NodeJS.Timeout | null) {
+  private _setTimeoutId(providerName: ProviderName, timeoutId: ReturnType<typeof setTimeout> | null) {
     this.state[providerName].timeoutId = timeoutId;
   }
 

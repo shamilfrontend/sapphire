@@ -3,164 +3,180 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import {
-  window,
-  InputBoxOptions,
-  Uri,
-  Disposable,
-  workspace,
-  QuickPickOptions,
-  l10n,
-} from 'vscode';
-import * as path from 'path';
-import { IDisposable, EmptyDisposable, toDisposable } from './util';
+import { window, InputBoxOptions, Uri, Disposable, workspace, QuickPickOptions, l10n, LogOutputChannel } from 'vscode';
+import { IDisposable, EmptyDisposable, toDisposable, extractFilePathFromArgs } from './util';
 import { IIPCHandler, IIPCServer } from './ipc/ipcServer';
-import { CredentialsProvider, Credentials } from './api/git';
+import type { CredentialsProvider, Credentials } from './api/git';
 import { ITerminalEnvironmentProvider } from './terminal';
+import { AskpassPaths } from './askpassManager';
 
 export class Askpass implements IIPCHandler, ITerminalEnvironmentProvider {
-  private env: { [key: string]: string };
 
-  private sshEnv: { [key: string]: string };
+	private env: { [key: string]: string };
+	private sshEnv: { [key: string]: string };
+	private disposable: IDisposable = EmptyDisposable;
+	private cache = new Map<string, Credentials>();
+	private cacheEvictionTimers = new Map<string, ReturnType<typeof setTimeout>>();
+	private credentialsProviders = new Set<CredentialsProvider>();
 
-  private disposable: IDisposable = EmptyDisposable;
+	readonly featureDescription = 'git auth provider';
 
-  private cache = new Map<string, Credentials>();
+	constructor(
+		private ipc: IIPCServer | undefined,
+		private readonly logger: LogOutputChannel,
+		askpassPaths: AskpassPaths
+	) {
+		if (ipc) {
+			this.disposable = ipc.registerHandler('askpass', this);
+		}
 
-  private credentialsProviders = new Set<CredentialsProvider>();
+		const askpassScript = this.ipc ? askpassPaths.askpass : askpassPaths.askpassEmpty;
+		const sshAskpassScript = this.ipc ? askpassPaths.sshAskpass : askpassPaths.sshAskpassEmpty;
 
-  readonly featureDescription = 'git auth provider';
+		this.env = {
+			// GIT_ASKPASS
+			GIT_ASKPASS: askpassScript,
+			// VSCODE_GIT_ASKPASS
+			VSCODE_GIT_ASKPASS_NODE: process.execPath,
+			VSCODE_GIT_ASKPASS_EXTRA_ARGS: '',
+			VSCODE_GIT_ASKPASS_MAIN: askpassPaths.askpassMain
+		};
 
-  constructor(private ipc?: IIPCServer) {
-    if (ipc) {
-      this.disposable = ipc.registerHandler('askpass', this);
-    }
+		this.sshEnv = {
+			// SSH_ASKPASS
+			SSH_ASKPASS: sshAskpassScript,
+			SSH_ASKPASS_REQUIRE: 'force'
+		};
+	}
 
-    this.env = {
-      // GIT_ASKPASS
-      GIT_ASKPASS: path.join(__dirname, this.ipc ? 'askpass.sh' : 'askpass-empty.sh'),
-      // VSCODE_GIT_ASKPASS
-      VSCODE_GIT_ASKPASS_NODE: process.execPath,
-      VSCODE_GIT_ASKPASS_EXTRA_ARGS: '',
-      VSCODE_GIT_ASKPASS_MAIN: path.join(__dirname, 'askpass-main.js'),
-    };
+	async handle(payload: { askpassType: 'https' | 'ssh'; argv: string[] }): Promise<string> {
+		this.logger.trace(`[Askpass][handle] ${JSON.stringify(payload)}`);
 
-    this.sshEnv = {
-      // SSH_ASKPASS
-      SSH_ASKPASS: path.join(__dirname, this.ipc ? 'ssh-askpass.sh' : 'ssh-askpass-empty.sh'),
-      SSH_ASKPASS_REQUIRE: 'force',
-    };
-  }
+		const config = workspace.getConfiguration('git', null);
+		const enabled = config.get<boolean>('enabled');
 
-  async handle(
-    payload:
-      | { askpassType: 'https'; request: string; host: string }
-      | { askpassType: 'ssh'; request: string; host?: string; file?: string; fingerprint?: string },
-  ): Promise<string> {
-    const config = workspace.getConfiguration('git', null);
-    const enabled = config.get<boolean>('enabled');
+		if (!enabled) {
+			this.logger.trace(`[Askpass][handle] Git is disabled`);
+			return '';
+		}
 
-    if (!enabled) {
-      return '';
-    }
+		return payload.askpassType === 'https'
+			? await this.handleAskpass(payload.argv)
+			: await this.handleSSHAskpass(payload.argv);
+	}
 
-    // https
-    if (payload.askpassType === 'https') {
-      return await this.handleAskpass(payload.request, payload.host);
-    }
+	async handleAskpass(argv: string[]): Promise<string> {
+		// HTTPS (username | password)
+		// Username for 'https://github.com':
+		// Password for 'https://github.com':
+		const request = argv[2];
+		const host = argv[4].replace(/^["']+|["':]+$/g, '');
 
-    // ssh
-    return await this.handleSSHAskpass(
-      payload.request,
-      payload.host,
-      payload.file,
-      payload.fingerprint,
-    );
-  }
+		this.logger.trace(`[Askpass][handleAskpass] request: ${request}, host: ${host}`);
 
-  async handleAskpass(request: string, host: string): Promise<string> {
-    const uri = Uri.parse(host);
-    const authority = uri.authority.replace(/^.*@/, '');
-    const password = /password/i.test(request);
-    const cached = this.cache.get(authority);
+		const uri = Uri.parse(host);
+		const authority = uri.authority.replace(/^.*@/, '');
+		const password = /password/i.test(request);
+		const cached = this.cache.get(authority);
 
-    if (cached && password) {
-      this.cache.delete(authority);
-      return cached.password;
-    }
+		if (cached && password) {
+			this.cache.delete(authority);
+			clearTimeout(this.cacheEvictionTimers.get(authority));
+			this.cacheEvictionTimers.delete(authority);
+			return cached.password;
+		}
 
-    if (!password) {
-      for (const credentialsProvider of this.credentialsProviders) {
-        try {
-          const credentials = await credentialsProvider.getCredentials(uri);
+		if (!password) {
+			for (const credentialsProvider of this.credentialsProviders) {
+				try {
+					const credentials = await credentialsProvider.getCredentials(uri);
 
-          if (credentials) {
-            this.cache.set(authority, credentials);
-            setTimeout(() => this.cache.delete(authority), 60_000);
-            return credentials.username;
-          }
-        } catch {}
-      }
-    }
+					if (credentials) {
+						this.cache.set(authority, credentials);
+						clearTimeout(this.cacheEvictionTimers.get(authority));
+						this.cacheEvictionTimers.set(authority, setTimeout(() => {
+							this.cache.delete(authority);
+							this.cacheEvictionTimers.delete(authority);
+						}, 60_000));
+						return credentials.username;
+					}
+				} catch { }
+			}
+		}
 
-    const options: InputBoxOptions = {
-      password,
-      placeHolder: request,
-      prompt: `Git: ${host}`,
-      ignoreFocusOut: true,
-    };
+		const options: InputBoxOptions = {
+			password,
+			placeHolder: request,
+			prompt: `Git: ${host}`,
+			ignoreFocusOut: true
+		};
 
-    return (await window.showInputBox(options)) || '';
-  }
+		return await window.showInputBox(options) || '';
+	}
 
-  async handleSSHAskpass(
-    request: string,
-    host?: string,
-    file?: string,
-    fingerprint?: string,
-  ): Promise<string> {
-    // passphrase
-    if (/passphrase/i.test(request)) {
-      const options: InputBoxOptions = {
-        password: true,
-        placeHolder: l10n.t('Passphrase'),
-        prompt: file ? `SSH Key: ${file}` : undefined,
-        ignoreFocusOut: true,
-      };
+	async handleSSHAskpass(argv: string[]): Promise<string> {
+		// SSH (passphrase | authenticity)
+		const request = argv[3];
 
-      return (await window.showInputBox(options)) || '';
-    }
+		// passphrase
+		if (/passphrase/i.test(request)) {
+			// Commit signing - Enter passphrase:
+			// Commit signing - Enter passphrase for '/c/Users/<username>/.ssh/id_ed25519':
+			// Git operation  - Enter passphrase for key '/c/Users/<username>/.ssh/id_ed25519':
+			let file: string | undefined = undefined;
+			if (argv[5] && !/key/i.test(argv[5])) {
+				file = extractFilePathFromArgs(argv, 5);
+			} else if (argv[6]) {
+				file = extractFilePathFromArgs(argv, 6);
+			}
 
-    // authenticity
-    const options: QuickPickOptions = {
-      canPickMany: false,
-      ignoreFocusOut: true,
-      placeHolder: l10n.t('Are you sure you want to continue connecting?'),
-      title: l10n.t('"{0}" has fingerprint "{1}"', host ?? '', fingerprint ?? ''),
-    };
-    const items = [l10n.t('yes'), l10n.t('no')];
-    return (await window.showQuickPick(items, options)) ?? '';
-  }
+			this.logger.trace(`[Askpass][handleSSHAskpass] request: ${request}, file: ${file}`);
 
-  getEnv(): { [key: string]: string } {
-    const config = workspace.getConfiguration('git');
-    return config.get<boolean>('useIntegratedAskPass') ? { ...this.env, ...this.sshEnv } : {};
-  }
+			const options: InputBoxOptions = {
+				password: true,
+				placeHolder: l10n.t('Passphrase'),
+				prompt: file ? `SSH Key: ${file}` : undefined,
+				ignoreFocusOut: true
+			};
 
-  getTerminalEnv(): { [key: string]: string } {
-    const config = workspace.getConfiguration('git');
-    return config.get<boolean>('useIntegratedAskPass') &&
-      config.get<boolean>('terminalAuthentication')
-      ? this.env
-      : {};
-  }
+			return await window.showInputBox(options) || '';
+		}
 
-  registerCredentialsProvider(provider: CredentialsProvider): Disposable {
-    this.credentialsProviders.add(provider);
-    return toDisposable(() => this.credentialsProviders.delete(provider));
-  }
+		// authenticity
+		const host = argv[6].replace(/^["']+|["':]+$/g, '');
+		const fingerprint = argv[15];
 
-  dispose(): void {
-    this.disposable.dispose();
-  }
+		this.logger.trace(`[Askpass][handleSSHAskpass] request: ${request}, host: ${host}, fingerprint: ${fingerprint}`);
+
+		const options: QuickPickOptions = {
+			canPickMany: false,
+			ignoreFocusOut: true,
+			placeHolder: l10n.t('Are you sure you want to continue connecting?'),
+			title: l10n.t('"{0}" has fingerprint "{1}"', host ?? '', fingerprint ?? '')
+		};
+		const items = [l10n.t('yes'), l10n.t('no')];
+		return await window.showQuickPick(items, options) ?? '';
+	}
+
+	getEnv(): { [key: string]: string } {
+		const config = workspace.getConfiguration('git');
+		return config.get<boolean>('useIntegratedAskPass') ? { ...this.env, ...this.sshEnv } : {};
+	}
+
+	getTerminalEnv(): { [key: string]: string } {
+		const config = workspace.getConfiguration('git');
+		return config.get<boolean>('useIntegratedAskPass') && config.get<boolean>('terminalAuthentication') ? this.env : {};
+	}
+
+	registerCredentialsProvider(provider: CredentialsProvider): Disposable {
+		this.credentialsProviders.add(provider);
+		return toDisposable(() => this.credentialsProviders.delete(provider));
+	}
+
+	dispose(): void {
+		for (const timer of this.cacheEvictionTimers.values()) {
+			clearTimeout(timer);
+		}
+		this.disposable.dispose();
+	}
 }

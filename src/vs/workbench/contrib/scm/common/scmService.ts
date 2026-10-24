@@ -3,29 +3,12 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { Disposable, DisposableStore, toDisposable } from '../../../../base/common/lifecycle.js';
+import { Disposable, DisposableStore, IDisposable, toDisposable } from '../../../../base/common/lifecycle.js';
 import { Event, Emitter } from '../../../../base/common/event.js';
-import {
-  ISCMService,
-  ISCMProvider,
-  ISCMInput,
-  ISCMRepository,
-  IInputValidator,
-  ISCMInputChangeEvent,
-  SCMInputChangeReason,
-  InputValidationType,
-  IInputValidation,
-} from './scm.js';
+import { ISCMService, ISCMProvider, ISCMInput, ISCMRepository, IInputValidator, ISCMInputChangeEvent, SCMInputChangeReason, InputValidationType, IInputValidation } from './scm.js';
 import { ILogService } from '../../../../platform/log/common/log.js';
-import {
-  IContextKey,
-  IContextKeyService,
-} from '../../../../platform/contextkey/common/contextkey.js';
-import {
-  IStorageService,
-  StorageScope,
-  StorageTarget,
-} from '../../../../platform/storage/common/storage.js';
+import { IContextKey, IContextKeyService } from '../../../../platform/contextkey/common/contextkey.js';
+import { IStorageService, StorageScope, StorageTarget } from '../../../../platform/storage/common/storage.js';
 import { HistoryNavigator2 } from '../../../../base/common/history.js';
 import { IMarkdownString } from '../../../../base/common/htmlContent.js';
 import { ResourceMap } from '../../../../base/common/map.js';
@@ -37,490 +20,443 @@ import { IUriIdentityService } from '../../../../platform/uriIdentity/common/uri
 import { runOnChange } from '../../../../base/common/observable.js';
 
 class SCMInput extends Disposable implements ISCMInput {
-  private _value = '';
 
-  get value(): string {
-    return this._value;
-  }
+	private _value = '';
 
-  private readonly _onDidChange = new Emitter<ISCMInputChangeEvent>();
+	get value(): string {
+		return this._value;
+	}
 
-  readonly onDidChange: Event<ISCMInputChangeEvent> = this._onDidChange.event;
+	private readonly _onDidChange = this._register(new Emitter<ISCMInputChangeEvent>());
+	readonly onDidChange: Event<ISCMInputChangeEvent> = this._onDidChange.event;
 
-  private _placeholder = '';
+	private _placeholder = '';
 
-  get placeholder(): string {
-    return this._placeholder;
-  }
+	get placeholder(): string {
+		return this._placeholder;
+	}
 
-  set placeholder(placeholder: string) {
-    this._placeholder = placeholder;
-    this._onDidChangePlaceholder.fire(placeholder);
-  }
+	set placeholder(placeholder: string) {
+		this._placeholder = placeholder;
+		this._onDidChangePlaceholder.fire(placeholder);
+	}
 
-  private readonly _onDidChangePlaceholder = new Emitter<string>();
+	private readonly _onDidChangePlaceholder = this._register(new Emitter<string>());
+	readonly onDidChangePlaceholder: Event<string> = this._onDidChangePlaceholder.event;
 
-  readonly onDidChangePlaceholder: Event<string> = this._onDidChangePlaceholder.event;
+	private _enabled = true;
 
-  private _enabled = true;
+	get enabled(): boolean {
+		return this._enabled;
+	}
 
-  get enabled(): boolean {
-    return this._enabled;
-  }
+	set enabled(enabled: boolean) {
+		this._enabled = enabled;
+		this._onDidChangeEnablement.fire(enabled);
+	}
 
-  set enabled(enabled: boolean) {
-    this._enabled = enabled;
-    this._onDidChangeEnablement.fire(enabled);
-  }
+	private readonly _onDidChangeEnablement = this._register(new Emitter<boolean>());
+	readonly onDidChangeEnablement: Event<boolean> = this._onDidChangeEnablement.event;
 
-  private readonly _onDidChangeEnablement = new Emitter<boolean>();
+	private _visible = true;
 
-  readonly onDidChangeEnablement: Event<boolean> = this._onDidChangeEnablement.event;
+	get visible(): boolean {
+		return this._visible;
+	}
 
-  private _visible = true;
+	set visible(visible: boolean) {
+		this._visible = visible;
+		this._onDidChangeVisibility.fire(visible);
+	}
 
-  get visible(): boolean {
-    return this._visible;
-  }
+	private readonly _onDidChangeVisibility = this._register(new Emitter<boolean>());
+	readonly onDidChangeVisibility: Event<boolean> = this._onDidChangeVisibility.event;
 
-  set visible(visible: boolean) {
-    this._visible = visible;
-    this._onDidChangeVisibility.fire(visible);
-  }
+	setFocus(): void {
+		this._onDidChangeFocus.fire();
+	}
 
-  private readonly _onDidChangeVisibility = new Emitter<boolean>();
+	private readonly _onDidChangeFocus = this._register(new Emitter<void>());
+	readonly onDidChangeFocus: Event<void> = this._onDidChangeFocus.event;
 
-  readonly onDidChangeVisibility: Event<boolean> = this._onDidChangeVisibility.event;
+	showValidationMessage(message: string | IMarkdownString, type: InputValidationType): void {
+		this._onDidChangeValidationMessage.fire({ message: message, type: type });
+	}
 
-  setFocus(): void {
-    this._onDidChangeFocus.fire();
-  }
+	private readonly _onDidChangeValidationMessage = this._register(new Emitter<IInputValidation>());
+	readonly onDidChangeValidationMessage: Event<IInputValidation> = this._onDidChangeValidationMessage.event;
 
-  private readonly _onDidChangeFocus = new Emitter<void>();
+	clearValidation(): void {
+		this._onDidClearValidation.fire();
+	}
 
-  readonly onDidChangeFocus: Event<void> = this._onDidChangeFocus.event;
+	private readonly _onDidClearValidation = this._register(new Emitter<void>());
+	readonly onDidClearValidation: Event<void> = this._onDidClearValidation.event;
 
-  showValidationMessage(message: string | IMarkdownString, type: InputValidationType): void {
-    this._onDidChangeValidationMessage.fire({ message, type });
-  }
+	private _validateInput: IInputValidator = () => Promise.resolve(undefined);
 
-  private readonly _onDidChangeValidationMessage = new Emitter<IInputValidation>();
+	get validateInput(): IInputValidator {
+		return this._validateInput;
+	}
 
-  readonly onDidChangeValidationMessage: Event<IInputValidation> =
-    this._onDidChangeValidationMessage.event;
+	set validateInput(validateInput: IInputValidator) {
+		this._validateInput = validateInput;
+		this._onDidChangeValidateInput.fire();
+	}
 
-  private _validateInput: IInputValidator = () => Promise.resolve(undefined);
+	private readonly _onDidChangeValidateInput = this._register(new Emitter<void>());
+	readonly onDidChangeValidateInput: Event<void> = this._onDidChangeValidateInput.event;
 
-  get validateInput(): IInputValidator {
-    return this._validateInput;
-  }
+	private readonly historyNavigator: HistoryNavigator2<string>;
+	private didChangeHistory: boolean = false;
 
-  set validateInput(validateInput: IInputValidator) {
-    this._validateInput = validateInput;
-    this._onDidChangeValidateInput.fire();
-  }
+	constructor(
+		readonly repository: ISCMRepository,
+		private readonly history: SCMInputHistory
+	) {
+		super();
 
-  private readonly _onDidChangeValidateInput = new Emitter<void>();
+		if (this.repository.provider.rootUri) {
+			this.historyNavigator = history.getHistory(this.repository.provider.label, this.repository.provider.rootUri);
+			this._register(this.history.onWillSaveHistory(event => {
+				if (this.historyNavigator.isAtEnd()) {
+					this.saveValue();
+				}
 
-  readonly onDidChangeValidateInput: Event<void> = this._onDidChangeValidateInput.event;
+				if (this.didChangeHistory) {
+					event.historyDidIndeedChange();
+				}
 
-  private readonly historyNavigator: HistoryNavigator2<string>;
+				this.didChangeHistory = false;
+			}));
+		} else { // in memory only
+			this.historyNavigator = new HistoryNavigator2([''], 100);
+		}
 
-  private didChangeHistory: boolean = false;
+		this._value = this.historyNavigator.current();
+	}
 
-  constructor(
-    readonly repository: ISCMRepository,
-    private readonly history: SCMInputHistory,
-  ) {
-    super();
+	setValue(value: string, transient: boolean, reason?: SCMInputChangeReason) {
+		if (value === this._value) {
+			return;
+		}
 
-    if (this.repository.provider.rootUri) {
-      this.historyNavigator = history.getHistory(
-        this.repository.provider.label,
-        this.repository.provider.rootUri,
-      );
-      this._register(
-        this.history.onWillSaveHistory((event) => {
-          if (this.historyNavigator.isAtEnd()) {
-            this.saveValue();
-          }
+		if (!transient) {
+			this.historyNavigator.replaceLast(this._value);
+			this.historyNavigator.add(value);
+			this.didChangeHistory = true;
+		}
 
-          if (this.didChangeHistory) {
-            event.historyDidIndeedChange();
-          }
+		this._value = value;
+		this._onDidChange.fire({ value, reason });
+	}
 
-          this.didChangeHistory = false;
-        }),
-      );
-    } else {
-      // in memory only
-      this.historyNavigator = new HistoryNavigator2([''], 100);
-    }
+	showNextHistoryValue(): void {
+		if (this.historyNavigator.isAtEnd()) {
+			return;
+		} else if (!this.historyNavigator.has(this.value)) {
+			this.saveValue();
+			this.historyNavigator.resetCursor();
+		}
 
-    this._value = this.historyNavigator.current();
-  }
+		const value = this.historyNavigator.next();
+		this.setValue(value, true, SCMInputChangeReason.HistoryNext);
+	}
 
-  setValue(value: string, transient: boolean, reason?: SCMInputChangeReason) {
-    if (value === this._value) {
-      return;
-    }
+	showPreviousHistoryValue(): void {
+		if (this.historyNavigator.isAtEnd()) {
+			this.saveValue();
+		} else if (!this.historyNavigator.has(this._value)) {
+			this.saveValue();
+			this.historyNavigator.resetCursor();
+		}
 
-    if (!transient) {
-      this.historyNavigator.replaceLast(this._value);
-      this.historyNavigator.add(value);
-      this.didChangeHistory = true;
-    }
+		const value = this.historyNavigator.previous();
+		this.setValue(value, true, SCMInputChangeReason.HistoryPrevious);
+	}
 
-    this._value = value;
-    this._onDidChange.fire({ value, reason });
-  }
-
-  showNextHistoryValue(): void {
-    if (this.historyNavigator.isAtEnd()) {
-      return;
-    }
-    if (!this.historyNavigator.has(this.value)) {
-      this.saveValue();
-      this.historyNavigator.resetCursor();
-    }
-
-    const value = this.historyNavigator.next();
-    this.setValue(value, true, SCMInputChangeReason.HistoryNext);
-  }
-
-  showPreviousHistoryValue(): void {
-    if (this.historyNavigator.isAtEnd()) {
-      this.saveValue();
-    } else if (!this.historyNavigator.has(this._value)) {
-      this.saveValue();
-      this.historyNavigator.resetCursor();
-    }
-
-    const value = this.historyNavigator.previous();
-    this.setValue(value, true, SCMInputChangeReason.HistoryPrevious);
-  }
-
-  private saveValue(): void {
-    const oldValue = this.historyNavigator.replaceLast(this._value);
-    this.didChangeHistory = this.didChangeHistory || oldValue !== this._value;
-  }
+	private saveValue(): void {
+		const oldValue = this.historyNavigator.replaceLast(this._value);
+		this.didChangeHistory = this.didChangeHistory || (oldValue !== this._value);
+	}
 }
 
 class SCMRepository implements ISCMRepository {
-  private _selected = false;
 
-  get selected(): boolean {
-    return this._selected;
-  }
+	private _selected = false;
+	get selected(): boolean {
+		return this._selected;
+	}
 
-  private readonly _onDidChangeSelection = new Emitter<boolean>();
+	private readonly _onDidChangeSelection = new Emitter<boolean>();
+	readonly onDidChangeSelection: Event<boolean> = this._onDidChangeSelection.event;
 
-  readonly onDidChangeSelection: Event<boolean> = this._onDidChangeSelection.event;
+	readonly input: ISCMInput & IDisposable;
 
-  readonly input: ISCMInput;
+	constructor(
+		public readonly id: string,
+		public readonly provider: ISCMProvider,
+		private readonly disposables: DisposableStore,
+		inputHistory: SCMInputHistory
+	) {
+		this.input = new SCMInput(this, inputHistory);
+	}
 
-  constructor(
-    public readonly id: string,
-    public readonly provider: ISCMProvider,
-    private readonly disposables: DisposableStore,
-    inputHistory: SCMInputHistory,
-  ) {
-    this.input = new SCMInput(this, inputHistory);
-  }
+	setSelected(selected: boolean): void {
+		if (this._selected === selected) {
+			return;
+		}
 
-  setSelected(selected: boolean): void {
-    if (this._selected === selected) {
-      return;
-    }
+		this._selected = selected;
+		this._onDidChangeSelection.fire(selected);
+	}
 
-    this._selected = selected;
-    this._onDidChangeSelection.fire(selected);
-  }
-
-  dispose(): void {
-    this.disposables.dispose();
-    this.provider.dispose();
-  }
+	dispose(): void {
+		this.disposables.dispose();
+		this._onDidChangeSelection.dispose();
+		this.input.dispose();
+		this.provider.dispose();
+	}
 }
 
 class WillSaveHistoryEvent {
-  private _didChangeHistory = false;
-
-  get didChangeHistory() {
-    return this._didChangeHistory;
-  }
-
-  historyDidIndeedChange() {
-    this._didChangeHistory = true;
-  }
+	private _didChangeHistory = false;
+	get didChangeHistory() { return this._didChangeHistory; }
+	historyDidIndeedChange() { this._didChangeHistory = true; }
 }
 
 class SCMInputHistory {
-  private readonly disposables = new DisposableStore();
 
-  private readonly histories = new Map<string, ResourceMap<HistoryNavigator2<string>>>();
+	private readonly disposables = new DisposableStore();
+	private readonly histories = new Map<string, ResourceMap<HistoryNavigator2<string>>>();
 
-  private readonly _onWillSaveHistory = this.disposables.add(new Emitter<WillSaveHistoryEvent>());
+	private readonly _onWillSaveHistory = this.disposables.add(new Emitter<WillSaveHistoryEvent>());
+	readonly onWillSaveHistory = this._onWillSaveHistory.event;
 
-  readonly onWillSaveHistory = this._onWillSaveHistory.event;
+	constructor(
+		@IStorageService private storageService: IStorageService,
+		@IWorkspaceContextService private workspaceContextService: IWorkspaceContextService,
+	) {
+		this.histories = new Map();
 
-  constructor(
-    @IStorageService private storageService: IStorageService,
-    @IWorkspaceContextService private workspaceContextService: IWorkspaceContextService,
-  ) {
-    this.histories = new Map();
+		const entries = this.storageService.getObject<[string, URI, string[]][]>('scm.history', StorageScope.WORKSPACE, []);
 
-    const entries = this.storageService.getObject<[string, URI, string[]][]>(
-      'scm.history',
-      StorageScope.WORKSPACE,
-      [],
-    );
+		for (const [providerLabel, rootUri, history] of entries) {
+			let providerHistories = this.histories.get(providerLabel);
 
-    for (const [providerLabel, rootUri, history] of entries) {
-      let providerHistories = this.histories.get(providerLabel);
+			if (!providerHistories) {
+				providerHistories = new ResourceMap();
+				this.histories.set(providerLabel, providerHistories);
+			}
 
-      if (!providerHistories) {
-        providerHistories = new ResourceMap();
-        this.histories.set(providerLabel, providerHistories);
-      }
+			providerHistories.set(rootUri, new HistoryNavigator2(history, 100));
+		}
 
-      providerHistories.set(rootUri, new HistoryNavigator2(history, 100));
-    }
+		if (this.migrateStorage()) {
+			this.saveToStorage();
+		}
 
-    if (this.migrateStorage()) {
-      this.saveToStorage();
-    }
+		this.disposables.add(this.storageService.onDidChangeValue(StorageScope.WORKSPACE, 'scm.history', this.disposables)(e => {
+			if (e.external && e.key === 'scm.history') {
+				const raw = this.storageService.getObject<[string, URI, string[]][]>('scm.history', StorageScope.WORKSPACE, []);
 
-    this.disposables.add(
-      this.storageService.onDidChangeValue(
-        StorageScope.WORKSPACE,
-        'scm.history',
-        this.disposables,
-      )((e) => {
-        if (e.external && e.key === 'scm.history') {
-          const raw = this.storageService.getObject<[string, URI, string[]][]>(
-            'scm.history',
-            StorageScope.WORKSPACE,
-            [],
-          );
+				for (const [providerLabel, uri, rawHistory] of raw) {
+					const history = this.getHistory(providerLabel, uri);
 
-          for (const [providerLabel, uri, rawHistory] of raw) {
-            const history = this.getHistory(providerLabel, uri);
+					for (const value of Iterable.reverse(rawHistory)) {
+						history.prepend(value);
+					}
+				}
+			}
+		}));
 
-            for (const value of Iterable.reverse(rawHistory)) {
-              history.prepend(value);
-            }
-          }
-        }
-      }),
-    );
+		this.disposables.add(this.storageService.onWillSaveState(_ => {
+			const event = new WillSaveHistoryEvent();
+			this._onWillSaveHistory.fire(event);
 
-    this.disposables.add(
-      this.storageService.onWillSaveState((_) => {
-        const event = new WillSaveHistoryEvent();
-        this._onWillSaveHistory.fire(event);
+			if (event.didChangeHistory) {
+				this.saveToStorage();
+			}
+		}));
+	}
 
-        if (event.didChangeHistory) {
-          this.saveToStorage();
-        }
-      }),
-    );
-  }
+	private saveToStorage(): void {
+		const raw: [string, URI, string[]][] = [];
 
-  private saveToStorage(): void {
-    const raw: [string, URI, string[]][] = [];
+		for (const [providerLabel, providerHistories] of this.histories) {
+			for (const [rootUri, history] of providerHistories) {
+				if (!(history.size === 1 && history.current() === '')) {
+					raw.push([providerLabel, rootUri, [...history]]);
+				}
+			}
+		}
 
-    for (const [providerLabel, providerHistories] of this.histories) {
-      for (const [rootUri, history] of providerHistories) {
-        if (!(history.size === 1 && history.current() === '')) {
-          raw.push([providerLabel, rootUri, [...history]]);
-        }
-      }
-    }
+		this.storageService.store('scm.history', raw, StorageScope.WORKSPACE, StorageTarget.USER);
+	}
 
-    this.storageService.store('scm.history', raw, StorageScope.WORKSPACE, StorageTarget.USER);
-  }
+	getHistory(providerLabel: string, rootUri: URI): HistoryNavigator2<string> {
+		let providerHistories = this.histories.get(providerLabel);
 
-  getHistory(providerLabel: string, rootUri: URI): HistoryNavigator2<string> {
-    let providerHistories = this.histories.get(providerLabel);
+		if (!providerHistories) {
+			providerHistories = new ResourceMap();
+			this.histories.set(providerLabel, providerHistories);
+		}
 
-    if (!providerHistories) {
-      providerHistories = new ResourceMap();
-      this.histories.set(providerLabel, providerHistories);
-    }
+		let history = providerHistories.get(rootUri);
 
-    let history = providerHistories.get(rootUri);
+		if (!history) {
+			history = new HistoryNavigator2([''], 100);
+			providerHistories.set(rootUri, history);
+		}
 
-    if (!history) {
-      history = new HistoryNavigator2([''], 100);
-      providerHistories.set(rootUri, history);
-    }
+		return history;
+	}
 
-    return history;
-  }
+	// Migrates from Application scope storage to Workspace scope.
+	// TODO@joaomoreno: Change from January 2024 onwards such that the only code is to remove all `scm/input:` storage keys
+	private migrateStorage(): boolean {
+		let didSomethingChange = false;
+		const machineKeys = Iterable.filter(this.storageService.keys(StorageScope.APPLICATION, StorageTarget.MACHINE), key => key.startsWith('scm/input:'));
 
-  // Migrates from Application scope storage to Workspace scope.
-  // TODO@joaomoreno: Change from January 2024 onwards such that the only code is to remove all `scm/input:` storage keys
-  private migrateStorage(): boolean {
-    let didSomethingChange = false;
-    const machineKeys = Iterable.filter(
-      this.storageService.keys(StorageScope.APPLICATION, StorageTarget.MACHINE),
-      (key) => key.startsWith('scm/input:'),
-    );
+		for (const key of machineKeys) {
+			try {
+				const legacyHistory = JSON.parse(this.storageService.get(key, StorageScope.APPLICATION, ''));
+				const match = /^scm\/input:([^:]+):(.+)$/.exec(key);
 
-    for (const key of machineKeys) {
-      try {
-        const legacyHistory = JSON.parse(
-          this.storageService.get(key, StorageScope.APPLICATION, ''),
-        );
-        const match = /^scm\/input:([^:]+):(.+)$/.exec(key);
+				if (!match || !Array.isArray(legacyHistory?.history) || !Number.isInteger(legacyHistory?.timestamp)) {
+					this.storageService.remove(key, StorageScope.APPLICATION);
+					continue;
+				}
 
-        if (
-          !match ||
-          !Array.isArray(legacyHistory?.history) ||
-          !Number.isInteger(legacyHistory?.timestamp)
-        ) {
-          this.storageService.remove(key, StorageScope.APPLICATION);
-          continue;
-        }
+				const [, providerLabel, rootPath] = match;
+				const rootUri = URI.file(rootPath);
 
-        const [, providerLabel, rootPath] = match;
-        const rootUri = URI.file(rootPath);
+				if (this.workspaceContextService.getWorkspaceFolder(rootUri)) {
+					const history = this.getHistory(providerLabel, rootUri);
 
-        if (this.workspaceContextService.getWorkspaceFolder(rootUri)) {
-          const history = this.getHistory(providerLabel, rootUri);
+					for (const entry of Iterable.reverse(legacyHistory.history as string[])) {
+						history.prepend(entry);
+					}
 
-          for (const entry of Iterable.reverse(legacyHistory.history as string[])) {
-            history.prepend(entry);
-          }
+					didSomethingChange = true;
+					this.storageService.remove(key, StorageScope.APPLICATION);
+				}
+			} catch {
+				this.storageService.remove(key, StorageScope.APPLICATION);
+			}
+		}
 
-          didSomethingChange = true;
-          this.storageService.remove(key, StorageScope.APPLICATION);
-        }
-      } catch {
-        this.storageService.remove(key, StorageScope.APPLICATION);
-      }
-    }
+		return didSomethingChange;
+	}
 
-    return didSomethingChange;
-  }
-
-  dispose() {
-    this.disposables.dispose();
-  }
+	dispose() {
+		this.disposables.dispose();
+	}
 }
 
+
 export class SCMService implements ISCMService {
-  declare readonly _serviceBrand: undefined;
 
-  _repositories = new Map<string, ISCMRepository>(); // used in tests
+	declare readonly _serviceBrand: undefined;
 
-  get repositories(): Iterable<ISCMRepository> {
-    return this._repositories.values();
-  }
+	_repositories = new Map<string, ISCMRepository>();  // used in tests
+	get repositories(): Iterable<ISCMRepository> { return this._repositories.values(); }
+	get repositoryCount(): number { return this._repositories.size; }
 
-  get repositoryCount(): number {
-    return this._repositories.size;
-  }
+	private inputHistory: SCMInputHistory;
+	private providerCount: IContextKey<number>;
+	private historyProviderCount: IContextKey<number>;
 
-  private inputHistory: SCMInputHistory;
+	private readonly _onDidAddProvider = new Emitter<ISCMRepository>();
+	readonly onDidAddRepository: Event<ISCMRepository> = this._onDidAddProvider.event;
 
-  private providerCount: IContextKey<number>;
+	private readonly _onDidRemoveProvider = new Emitter<ISCMRepository>();
+	readonly onDidRemoveRepository: Event<ISCMRepository> = this._onDidRemoveProvider.event;
 
-  private historyProviderCount: IContextKey<number>;
+	constructor(
+		@ILogService private readonly logService: ILogService,
+		@IWorkspaceContextService workspaceContextService: IWorkspaceContextService,
+		@IContextKeyService contextKeyService: IContextKeyService,
+		@IStorageService storageService: IStorageService,
+		@IUriIdentityService private readonly uriIdentityService: IUriIdentityService
+	) {
+		this.inputHistory = new SCMInputHistory(storageService, workspaceContextService);
 
-  private readonly _onDidAddProvider = new Emitter<ISCMRepository>();
+		this.providerCount = contextKeyService.createKey('scm.providerCount', 0);
+		this.historyProviderCount = contextKeyService.createKey('scm.historyProviderCount', 0);
+	}
 
-  readonly onDidAddRepository: Event<ISCMRepository> = this._onDidAddProvider.event;
+	registerSCMProvider(provider: ISCMProvider): ISCMRepository {
+		this.logService.trace('SCMService#registerSCMProvider');
 
-  private readonly _onDidRemoveProvider = new Emitter<ISCMRepository>();
+		if (this._repositories.has(provider.id)) {
+			throw new Error(`SCM Provider ${provider.id} already exists.`);
+		}
 
-  readonly onDidRemoveRepository: Event<ISCMRepository> = this._onDidRemoveProvider.event;
+		const disposables = new DisposableStore();
 
-  constructor(
-    @ILogService private readonly logService: ILogService,
-    @IWorkspaceContextService workspaceContextService: IWorkspaceContextService,
-    @IContextKeyService contextKeyService: IContextKeyService,
-    @IStorageService storageService: IStorageService,
-    @IUriIdentityService private readonly uriIdentityService: IUriIdentityService,
-  ) {
-    this.inputHistory = new SCMInputHistory(storageService, workspaceContextService);
+		const historyProviderCount = () => {
+			return Array.from(this._repositories.values())
+				.filter(r => !!r.provider.historyProvider.get()).length;
+		};
 
-    this.providerCount = contextKeyService.createKey('scm.providerCount', 0);
-    this.historyProviderCount = contextKeyService.createKey('scm.historyProviderCount', 0);
-  }
+		disposables.add(toDisposable(() => {
+			this._repositories.delete(provider.id);
+			this._onDidRemoveProvider.fire(repository);
 
-  registerSCMProvider(provider: ISCMProvider): ISCMRepository {
-    this.logService.trace('SCMService#registerSCMProvider');
+			this.providerCount.set(this._repositories.size);
+			this.historyProviderCount.set(historyProviderCount());
+		}));
 
-    if (this._repositories.has(provider.id)) {
-      throw new Error(`SCM Provider ${provider.id} already exists.`);
-    }
+		const repository = new SCMRepository(provider.id, provider, disposables, this.inputHistory);
+		this._repositories.set(provider.id, repository);
 
-    const disposables = new DisposableStore();
+		disposables.add(runOnChange(provider.historyProvider, () => {
+			this.historyProviderCount.set(historyProviderCount());
+		}));
 
-    const historyProviderCount = () =>
-      Array.from(this._repositories.values()).filter((r) => !!r.provider.historyProvider.get())
-        .length;
+		this.providerCount.set(this._repositories.size);
+		this.historyProviderCount.set(historyProviderCount());
 
-    disposables.add(
-      toDisposable(() => {
-        this._repositories.delete(provider.id);
-        this._onDidRemoveProvider.fire(repository);
+		this._onDidAddProvider.fire(repository);
 
-        this.providerCount.set(this._repositories.size);
-        this.historyProviderCount.set(historyProviderCount());
-      }),
-    );
+		return repository;
+	}
 
-    const repository = new SCMRepository(provider.id, provider, disposables, this.inputHistory);
-    this._repositories.set(provider.id, repository);
+	getRepository(id: string): ISCMRepository | undefined;
+	getRepository(resource: URI): ISCMRepository | undefined;
+	getRepository(idOrResource: string | URI): ISCMRepository | undefined {
+		if (typeof idOrResource === 'string') {
+			return this._repositories.get(idOrResource);
+		}
 
-    disposables.add(
-      runOnChange(provider.historyProvider, () => {
-        this.historyProviderCount.set(historyProviderCount());
-      }),
-    );
+		if (idOrResource.scheme !== Schemas.file &&
+			idOrResource.scheme !== Schemas.vscodeRemote) {
+			return undefined;
+		}
 
-    this.providerCount.set(this._repositories.size);
-    this.historyProviderCount.set(historyProviderCount());
+		let bestRepository: ISCMRepository | undefined = undefined;
+		let bestMatchLength = Number.POSITIVE_INFINITY;
 
-    this._onDidAddProvider.fire(repository);
+		for (const repository of this.repositories) {
+			if (repository.provider.isHidden === true) {
+				continue;
+			}
 
-    return repository;
-  }
+			const root = repository.provider.rootUri;
 
-  getRepository(id: string): ISCMRepository | undefined;
+			if (!root) {
+				continue;
+			}
 
-  getRepository(resource: URI): ISCMRepository | undefined;
+			const path = this.uriIdentityService.extUri.relativePath(root, idOrResource);
 
-  getRepository(idOrResource: string | URI): ISCMRepository | undefined {
-    if (typeof idOrResource === 'string') {
-      return this._repositories.get(idOrResource);
-    }
+			if (path && !/^\.\./.test(path) && path.length < bestMatchLength) {
+				bestRepository = repository;
+				bestMatchLength = path.length;
+			}
+		}
 
-    if (idOrResource.scheme !== Schemas.file && idOrResource.scheme !== Schemas.vscodeRemote) {
-      return undefined;
-    }
-
-    let bestRepository: ISCMRepository | undefined;
-    let bestMatchLength = Number.POSITIVE_INFINITY;
-
-    for (const repository of this.repositories) {
-      const root = repository.provider.rootUri;
-
-      if (!root) {
-        continue;
-      }
-
-      const path = this.uriIdentityService.extUri.relativePath(root, idOrResource);
-
-      if (path && !/^\.\./.test(path) && path.length < bestMatchLength) {
-        bestRepository = repository;
-        bestMatchLength = path.length;
-      }
-    }
-
-    return bestRepository;
-  }
+		return bestRepository;
+	}
 }

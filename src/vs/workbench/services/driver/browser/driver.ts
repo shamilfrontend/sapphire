@@ -3,13 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import type { Terminal as XtermTerminal } from '@xterm/xterm';
-import {
-  getClientArea,
-  getTopLeftOffset,
-  isHTMLDivElement,
-  isHTMLTextAreaElement,
-} from '../../../../base/browser/dom.js';
+import { getClientArea, getTopLeftOffset, isHTMLDivElement, isHTMLTextAreaElement } from '../../../../base/browser/dom.js';
 import { mainWindow } from '../../../../base/browser/window.js';
 import { coalesce } from '../../../../base/common/arrays.js';
 import { language, locale } from '../../../../base/common/platform.js';
@@ -20,274 +14,263 @@ import localizedStrings from '../../../../platform/languagePacks/common/localize
 import { ILogFile, getLogs } from '../../../../platform/log/browser/log.js';
 import { ILogService } from '../../../../platform/log/common/log.js';
 import { Registry } from '../../../../platform/registry/common/platform.js';
-import {
-  IWorkbenchContributionsRegistry,
-  Extensions as WorkbenchExtensions,
-} from '../../../common/contributions.js';
+import { IWorkbenchContributionsRegistry, Extensions as WorkbenchExtensions } from '../../../common/contributions.js';
 import { IWindowDriver, IElement, ILocaleInfo, ILocalizedStrings } from '../common/driver.js';
 import { ILifecycleService, LifecyclePhase } from '../../lifecycle/common/lifecycle.js';
+import type { Terminal as XtermTerminal } from '@xterm/xterm';
 
 export class BrowserWindowDriver implements IWindowDriver {
-  constructor(
-    @IFileService private readonly fileService: IFileService,
-    @IEnvironmentService private readonly environmentService: IEnvironmentService,
-    @ILifecycleService private readonly lifecycleService: ILifecycleService,
-    @ILogService private readonly logService: ILogService,
-  ) {}
 
-  async getLogs(): Promise<ILogFile[]> {
-    return getLogs(this.fileService, this.environmentService);
-  }
+	constructor(
+		@IFileService private readonly fileService: IFileService,
+		@IEnvironmentService private readonly environmentService: IEnvironmentService,
+		@ILifecycleService private readonly lifecycleService: ILifecycleService,
+		@ILogService private readonly logService: ILogService
+	) {
+	}
 
-  async whenWorkbenchRestored(): Promise<void> {
-    this.logService.info('[driver] Waiting for restored lifecycle phase...');
-    await this.lifecycleService.when(LifecyclePhase.Restored);
-    this.logService.info('[driver] Restored lifecycle phase reached. Waiting for contributions...');
-    await Registry.as<IWorkbenchContributionsRegistry>(WorkbenchExtensions.Workbench).whenRestored;
-    this.logService.info('[driver] Workbench contributions created.');
-  }
+	async getLogs(): Promise<ILogFile[]> {
+		return getLogs(this.fileService, this.environmentService);
+	}
 
-  async setValue(selector: string, text: string): Promise<void> {
-    const element = mainWindow.document.querySelector(selector);
+	async whenWorkbenchRestored(): Promise<void> {
+		this.logService.info('[driver] Waiting for restored lifecycle phase...');
+		await this.lifecycleService.when(LifecyclePhase.Restored);
+		this.logService.info('[driver] Restored lifecycle phase reached. Waiting for contributions...');
+		await Registry.as<IWorkbenchContributionsRegistry>(WorkbenchExtensions.Workbench).whenRestored;
+		this.logService.info('[driver] Workbench contributions created.');
+	}
 
-    if (!element) {
-      return Promise.reject(new Error(`Element not found: ${selector}`));
-    }
+	async setValue(selector: string, text: string): Promise<void> {
+		// eslint-disable-next-line no-restricted-syntax
+		const element = mainWindow.document.querySelector(selector);
 
-    const inputElement = element as HTMLInputElement;
-    inputElement.value = text;
+		if (!element) {
+			return Promise.reject(new Error(`Element not found: ${selector}`));
+		}
 
-    const event = new Event('input', { bubbles: true, cancelable: true });
-    inputElement.dispatchEvent(event);
-  }
+		const inputElement = element as HTMLInputElement;
+		inputElement.value = text;
 
-  async isActiveElement(selector: string): Promise<boolean> {
-    const element = mainWindow.document.querySelector(selector);
+		const event = new Event('input', { bubbles: true, cancelable: true });
+		inputElement.dispatchEvent(event);
+	}
 
-    if (element !== mainWindow.document.activeElement) {
-      const chain: string[] = [];
-      let el = mainWindow.document.activeElement;
+	async isActiveElement(selector: string): Promise<boolean> {
+		// eslint-disable-next-line no-restricted-syntax
+		const element = mainWindow.document.querySelector(selector);
 
-      while (el) {
-        const tagName = el.tagName;
-        const id = el.id ? `#${el.id}` : '';
-        const classes = coalesce(el.className.split(/\s+/g).map((c) => c.trim()))
-          .map((c) => `.${c}`)
-          .join('');
-        chain.unshift(`${tagName}${id}${classes}`);
+		if (element !== mainWindow.document.activeElement) {
+			const chain: string[] = [];
+			let el = mainWindow.document.activeElement;
 
-        el = el.parentElement;
-      }
+			while (el) {
+				const tagName = el.tagName;
+				const id = el.id ? `#${el.id}` : '';
+				const classes = coalesce(el.className.split(/\s+/g).map(c => c.trim())).map(c => `.${c}`).join('');
+				chain.unshift(`${tagName}${id}${classes}`);
 
-      throw new Error(
-        `Active element not found. Current active element is '${chain.join(' > ')}'. Looking for ${selector}`,
-      );
-    }
+				el = el.parentElement;
+			}
 
-    return true;
-  }
+			throw new Error(`Active element not found. Current active element is '${chain.join(' > ')}'. Looking for ${selector}`);
+		}
 
-  async getElements(selector: string, recursive: boolean): Promise<IElement[]> {
-    const query = mainWindow.document.querySelectorAll(selector);
-    const result: IElement[] = [];
-    for (let i = 0; i < query.length; i++) {
-      const element = query.item(i);
-      result.push(this.serializeElement(element, recursive));
-    }
+		return true;
+	}
 
-    return result;
-  }
+	async getElements(selector: string, recursive: boolean): Promise<IElement[]> {
+		// eslint-disable-next-line no-restricted-syntax
+		const query = mainWindow.document.querySelectorAll(selector);
+		const result: IElement[] = [];
+		for (let i = 0; i < query.length; i++) {
+			const element = query.item(i);
+			result.push(this.serializeElement(element, recursive));
+		}
 
-  private serializeElement(element: Element, recursive: boolean): IElement {
-    const attributes = Object.create(null);
+		return result;
+	}
 
-    for (let j = 0; j < element.attributes.length; j++) {
-      const attr = element.attributes.item(j);
-      if (attr) {
-        attributes[attr.name] = attr.value;
-      }
-    }
+	private serializeElement(element: Element, recursive: boolean): IElement {
+		const attributes = Object.create(null);
 
-    const children: IElement[] = [];
+		for (let j = 0; j < element.attributes.length; j++) {
+			const attr = element.attributes.item(j);
+			if (attr) {
+				attributes[attr.name] = attr.value;
+			}
+		}
 
-    if (recursive) {
-      for (let i = 0; i < element.children.length; i++) {
-        const child = element.children.item(i);
-        if (child) {
-          children.push(this.serializeElement(child, true));
-        }
-      }
-    }
+		const children: IElement[] = [];
 
-    const { left, top } = getTopLeftOffset(element as HTMLElement);
+		if (recursive) {
+			for (let i = 0; i < element.children.length; i++) {
+				const child = element.children.item(i);
+				if (child) {
+					children.push(this.serializeElement(child, true));
+				}
+			}
+		}
 
-    return {
-      tagName: element.tagName,
-      className: element.className,
-      textContent: element.textContent || '',
-      attributes,
-      children,
-      left,
-      top,
-    };
-  }
+		const { left, top } = getTopLeftOffset(element as HTMLElement);
 
-  async getElementXY(
-    selector: string,
-    xoffset?: number,
-    yoffset?: number,
-  ): Promise<{ x: number; y: number }> {
-    const offset =
-      typeof xoffset === 'number' && typeof yoffset === 'number'
-        ? { x: xoffset, y: yoffset }
-        : undefined;
-    return this._getElementXY(selector, offset);
-  }
+		return {
+			tagName: element.tagName,
+			className: element.className,
+			textContent: element.textContent || '',
+			attributes,
+			children,
+			left,
+			top
+		};
+	}
 
-  async typeInEditor(selector: string, text: string): Promise<void> {
-    const element = mainWindow.document.querySelector(selector);
+	async getElementXY(selector: string, xoffset?: number, yoffset?: number): Promise<{ x: number; y: number }> {
+		const offset = typeof xoffset === 'number' && typeof yoffset === 'number' ? { x: xoffset, y: yoffset } : undefined;
+		return this._getElementXY(selector, offset);
+	}
 
-    if (!element) {
-      throw new Error(`Editor not found: ${selector}`);
-    }
-    if (isHTMLDivElement(element)) {
-      // Edit context is enabled
-      const editContext = element.editContext;
-      if (!editContext) {
-        throw new Error(`Edit context not found: ${selector}`);
-      }
-      const selectionStart = editContext.selectionStart;
-      const selectionEnd = editContext.selectionEnd;
-      const event = new TextUpdateEvent('textupdate', {
-        updateRangeStart: selectionStart,
-        updateRangeEnd: selectionEnd,
-        text,
-        selectionStart: selectionStart + text.length,
-        selectionEnd: selectionStart + text.length,
-        compositionStart: 0,
-        compositionEnd: 0,
-      });
-      editContext.dispatchEvent(event);
-    } else if (isHTMLTextAreaElement(element)) {
-      const start = element.selectionStart;
-      const newStart = start + text.length;
-      const value = element.value;
-      const newValue = value.substr(0, start) + text + value.substr(start);
+	async typeInEditor(selector: string, text: string): Promise<void> {
+		// eslint-disable-next-line no-restricted-syntax
+		const element = mainWindow.document.querySelector(selector);
 
-      element.value = newValue;
-      element.setSelectionRange(newStart, newStart);
+		if (!element) {
+			throw new Error(`Editor not found: ${selector}`);
+		}
+		if (isHTMLDivElement(element)) {
+			// Edit context is enabled
+			const editContext = element.editContext;
+			if (!editContext) {
+				throw new Error(`Edit context not found: ${selector}`);
+			}
+			const selectionStart = editContext.selectionStart;
+			const selectionEnd = editContext.selectionEnd;
+			const event = new TextUpdateEvent('textupdate', {
+				updateRangeStart: selectionStart,
+				updateRangeEnd: selectionEnd,
+				text,
+				selectionStart: selectionStart + text.length,
+				selectionEnd: selectionStart + text.length,
+				compositionStart: 0,
+				compositionEnd: 0
+			});
+			editContext.dispatchEvent(event);
+		} else if (isHTMLTextAreaElement(element)) {
+			const start = element.selectionStart;
+			const newStart = start + text.length;
+			const value = element.value;
+			const newValue = value.substr(0, start) + text + value.substr(start);
 
-      const event = new Event('input', { bubbles: true, cancelable: true });
-      element.dispatchEvent(event);
-    }
-  }
+			element.value = newValue;
+			element.setSelectionRange(newStart, newStart);
 
-  async getEditorSelection(
-    selector: string,
-  ): Promise<{ selectionStart: number; selectionEnd: number }> {
-    const element = mainWindow.document.querySelector(selector);
-    if (!element) {
-      throw new Error(`Editor not found: ${selector}`);
-    }
-    if (isHTMLDivElement(element)) {
-      const editContext = element.editContext;
-      if (!editContext) {
-        throw new Error(`Edit context not found: ${selector}`);
-      }
-      return { selectionStart: editContext.selectionStart, selectionEnd: editContext.selectionEnd };
-    }
-    if (isHTMLTextAreaElement(element)) {
-      return { selectionStart: element.selectionStart, selectionEnd: element.selectionEnd };
-    }
-    throw new Error(`Unknown type of element: ${selector}`);
-  }
+			const event = new Event('input', { 'bubbles': true, 'cancelable': true });
+			element.dispatchEvent(event);
+		}
+	}
 
-  async getTerminalBuffer(selector: string): Promise<string[]> {
-    const element = mainWindow.document.querySelector(selector);
+	async getEditorSelection(selector: string): Promise<{ selectionStart: number; selectionEnd: number }> {
+		// eslint-disable-next-line no-restricted-syntax
+		const element = mainWindow.document.querySelector(selector);
+		if (!element) {
+			throw new Error(`Editor not found: ${selector}`);
+		}
+		if (isHTMLDivElement(element)) {
+			const editContext = element.editContext;
+			if (!editContext) {
+				throw new Error(`Edit context not found: ${selector}`);
+			}
+			return { selectionStart: editContext.selectionStart, selectionEnd: editContext.selectionEnd };
+		} else if (isHTMLTextAreaElement(element)) {
+			return { selectionStart: element.selectionStart, selectionEnd: element.selectionEnd };
+		} else {
+			throw new Error(`Unknown type of element: ${selector}`);
+		}
+	}
 
-    if (!element) {
-      throw new Error(`Terminal not found: ${selector}`);
-    }
+	async getTerminalBuffer(selector: string): Promise<string[]> {
+		// eslint-disable-next-line no-restricted-syntax
+		const element = mainWindow.document.querySelector(selector);
 
-    const xterm = (element as any).xterm;
+		if (!element) {
+			throw new Error(`Terminal not found: ${selector}`);
+		}
 
-    if (!xterm) {
-      throw new Error(`Xterm not found: ${selector}`);
-    }
+		// eslint-disable-next-line local/code-no-any-casts, @typescript-eslint/no-explicit-any
+		const xterm = (element as any).xterm;
 
-    const lines: string[] = [];
-    for (let i = 0; i < xterm.buffer.active.length; i++) {
-      lines.push(xterm.buffer.active.getLine(i)!.translateToString(true));
-    }
+		if (!xterm) {
+			throw new Error(`Xterm not found: ${selector}`);
+		}
 
-    return lines;
-  }
+		const lines: string[] = [];
+		for (let i = 0; i < xterm.buffer.active.length; i++) {
+			lines.push(xterm.buffer.active.getLine(i)!.translateToString(true));
+		}
 
-  async writeInTerminal(selector: string, text: string): Promise<void> {
-    const element = mainWindow.document.querySelector(selector);
+		return lines;
+	}
 
-    if (!element) {
-      throw new Error(`Element not found: ${selector}`);
-    }
+	async writeInTerminal(selector: string, text: string): Promise<void> {
+		// eslint-disable-next-line no-restricted-syntax
+		const element = mainWindow.document.querySelector(selector);
 
-    const xterm = (element as any).xterm as XtermTerminal | undefined;
+		if (!element) {
+			throw new Error(`Element not found: ${selector}`);
+		}
 
-    if (!xterm) {
-      throw new Error(`Xterm not found: ${selector}`);
-    }
+		// eslint-disable-next-line local/code-no-any-casts, @typescript-eslint/no-explicit-any
+		const xterm = (element as any).xterm as (XtermTerminal | undefined);
 
-    xterm.input(text);
-  }
+		if (!xterm) {
+			throw new Error(`Xterm not found: ${selector}`);
+		}
 
-  getLocaleInfo(): Promise<ILocaleInfo> {
-    return Promise.resolve({
-      language,
-      locale,
-    });
-  }
+		xterm.input(text);
+	}
 
-  getLocalizedStrings(): Promise<ILocalizedStrings> {
-    return Promise.resolve({
-      open: localizedStrings.open,
-      close: localizedStrings.close,
-      find: localizedStrings.find,
-    });
-  }
+	getLocaleInfo(): Promise<ILocaleInfo> {
+		return Promise.resolve({
+			language: language,
+			locale: locale
+		});
+	}
 
-  protected async _getElementXY(
-    selector: string,
-    offset?: { x: number; y: number },
-  ): Promise<{ x: number; y: number }> {
-    const element = mainWindow.document.querySelector(selector);
+	getLocalizedStrings(): Promise<ILocalizedStrings> {
+		return Promise.resolve({
+			open: localizedStrings.open,
+			close: localizedStrings.close,
+			find: localizedStrings.find
+		});
+	}
 
-    if (!element) {
-      return Promise.reject(new Error(`Element not found: ${selector}`));
-    }
+	protected async _getElementXY(selector: string, offset?: { x: number; y: number }): Promise<{ x: number; y: number }> {
+		// eslint-disable-next-line no-restricted-syntax
+		const element = mainWindow.document.querySelector(selector);
 
-    const { left, top } = getTopLeftOffset(element as HTMLElement);
-    const { width, height } = getClientArea(element as HTMLElement);
-    let x: number;
-    let y: number;
+		if (!element) {
+			return Promise.reject(new Error(`Element not found: ${selector}`));
+		}
 
-    if (offset) {
-      x = left + offset.x;
-      y = top + offset.y;
-    } else {
-      x = left + width / 2;
-      y = top + height / 2;
-    }
+		const { left, top } = getTopLeftOffset(element as HTMLElement);
+		const { width, height } = getClientArea(element as HTMLElement);
+		let x: number, y: number;
 
-    x = Math.round(x);
-    y = Math.round(y);
+		if (offset) {
+			x = left + offset.x;
+			y = top + offset.y;
+		} else {
+			x = left + (width / 2);
+			y = top + (height / 2);
+		}
 
-    return { x, y };
-  }
+		x = Math.round(x);
+		y = Math.round(y);
 
-  async exitApplication(): Promise<void> {
-    // No-op in web
-  }
+		return { x, y };
+	}
 }
 
 export function registerWindowDriver(instantiationService: IInstantiationService): void {
-  Object.assign(mainWindow, { driver: instantiationService.createInstance(BrowserWindowDriver) });
+	Object.assign(mainWindow, { driver: instantiationService.createInstance(BrowserWindowDriver) });
 }

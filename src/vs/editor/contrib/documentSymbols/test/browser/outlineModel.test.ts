@@ -4,10 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 
 import assert from 'assert';
-import {
-  CancellationToken,
-  CancellationTokenSource,
-} from '../../../../../base/common/cancellation.js';
+import { CancellationToken, CancellationTokenSource } from '../../../../../base/common/cancellation.js';
 import { DisposableStore } from '../../../../../base/common/lifecycle.js';
 import { URI } from '../../../../../base/common/uri.js';
 import { Range } from '../../../../common/core/range.js';
@@ -18,271 +15,212 @@ import { IModelService } from '../../../../common/services/model.js';
 import { createModelServices, createTextModel } from '../../../../test/common/testTextModel.js';
 import { NullLogService } from '../../../../../platform/log/common/log.js';
 import { IMarker, MarkerSeverity } from '../../../../../platform/markers/common/markers.js';
-import {
-  OutlineElement,
-  OutlineGroup,
-  OutlineModel,
-  OutlineModelService,
-} from '../../browser/outlineModel.js';
+import { OutlineElement, OutlineGroup, OutlineModel, OutlineModelService } from '../../browser/outlineModel.js';
 import { mock } from '../../../../../base/test/common/mock.js';
 import { IEnvironmentService } from '../../../../../platform/environment/common/environment.js';
 import { ensureNoDisposablesAreLeakedInTestSuite } from '../../../../../base/test/common/utils.js';
 
-suite('OutlineModel', () => {
-  const disposables = new DisposableStore();
-  const languageFeaturesService = new LanguageFeaturesService();
+suite('OutlineModel', function () {
 
-  teardown(() => {
-    disposables.clear();
-  });
+	const disposables = new DisposableStore();
+	const languageFeaturesService = new LanguageFeaturesService();
 
-  ensureNoDisposablesAreLeakedInTestSuite();
+	teardown(function () {
+		disposables.clear();
+	});
 
-  test('OutlineModel#create, cached', async () => {
-    const insta = createModelServices(disposables);
-    const modelService = insta.get(IModelService);
-    const envService = new (class extends mock<IEnvironmentService>() {
-      override isBuilt: boolean = true;
+	ensureNoDisposablesAreLeakedInTestSuite();
 
-      override isExtensionDevelopment: boolean = false;
-    })();
-    const service = new OutlineModelService(
-      languageFeaturesService,
-      new LanguageFeatureDebounceService(new NullLogService(), envService),
-      modelService,
-    );
+	test('OutlineModel#create, cached', async function () {
 
-    const model = createTextModel('foo', undefined, undefined, URI.file('/fome/path.foo'));
-    let count = 0;
-    const reg = languageFeaturesService.documentSymbolProvider.register(
-      { pattern: '**/path.foo' },
-      {
-        provideDocumentSymbols() {
-          count += 1;
-          return [];
-        },
-      },
-    );
+		const insta = createModelServices(disposables);
+		const modelService = insta.get(IModelService);
+		const envService = new class extends mock<IEnvironmentService>() {
+			override isBuilt: boolean = true;
+			override isExtensionDevelopment: boolean = false;
+		};
+		const service = new OutlineModelService(languageFeaturesService, new LanguageFeatureDebounceService(new NullLogService(), envService), modelService);
 
-    await service.getOrCreate(model, CancellationToken.None);
-    assert.strictEqual(count, 1);
+		const model = createTextModel('foo', undefined, undefined, URI.file('/fome/path.foo'));
+		let count = 0;
+		const reg = languageFeaturesService.documentSymbolProvider.register({ pattern: '**/path.foo' }, {
+			provideDocumentSymbols() {
+				count += 1;
+				return [];
+			}
+		});
 
-    // cached
-    await service.getOrCreate(model, CancellationToken.None);
-    assert.strictEqual(count, 1);
+		await service.getOrCreate(model, CancellationToken.None);
+		assert.strictEqual(count, 1);
 
-    // new version
-    model.applyEdits([{ text: 'XXX', range: new Range(1, 1, 1, 1) }]);
-    await service.getOrCreate(model, CancellationToken.None);
-    assert.strictEqual(count, 2);
+		// cached
+		await service.getOrCreate(model, CancellationToken.None);
+		assert.strictEqual(count, 1);
 
-    reg.dispose();
-    model.dispose();
-    service.dispose();
-  });
+		// new version
+		model.applyEdits([{ text: 'XXX', range: new Range(1, 1, 1, 1) }]);
+		await service.getOrCreate(model, CancellationToken.None);
+		assert.strictEqual(count, 2);
 
-  test('OutlineModel#create, cached/cancel', async () => {
-    const insta = createModelServices(disposables);
-    const modelService = insta.get(IModelService);
-    const envService = new (class extends mock<IEnvironmentService>() {
-      override isBuilt: boolean = true;
+		reg.dispose();
+		model.dispose();
+		service.dispose();
+	});
 
-      override isExtensionDevelopment: boolean = false;
-    })();
-    const service = new OutlineModelService(
-      languageFeaturesService,
-      new LanguageFeatureDebounceService(new NullLogService(), envService),
-      modelService,
-    );
-    const model = createTextModel('foo', undefined, undefined, URI.file('/fome/path.foo'));
-    let isCancelled = false;
+	test('OutlineModel#create, cached/cancel', async function () {
 
-    const reg = languageFeaturesService.documentSymbolProvider.register(
-      { pattern: '**/path.foo' },
-      {
-        provideDocumentSymbols(d, token) {
-          return new Promise((resolve) => {
-            const l = token.onCancellationRequested((_) => {
-              isCancelled = true;
-              resolve(null);
-              l.dispose();
-            });
-          });
-        },
-      },
-    );
+		const insta = createModelServices(disposables);
+		const modelService = insta.get(IModelService);
+		const envService = new class extends mock<IEnvironmentService>() {
+			override isBuilt: boolean = true;
+			override isExtensionDevelopment: boolean = false;
+		};
+		const service = new OutlineModelService(languageFeaturesService, new LanguageFeatureDebounceService(new NullLogService(), envService), modelService);
+		const model = createTextModel('foo', undefined, undefined, URI.file('/fome/path.foo'));
+		let isCancelled = false;
 
-    assert.strictEqual(isCancelled, false);
-    const s1 = new CancellationTokenSource();
-    service.getOrCreate(model, s1.token);
-    const s2 = new CancellationTokenSource();
-    service.getOrCreate(model, s2.token);
+		const reg = languageFeaturesService.documentSymbolProvider.register({ pattern: '**/path.foo' }, {
+			provideDocumentSymbols(d, token) {
+				return new Promise(resolve => {
+					const l = token.onCancellationRequested(_ => {
+						isCancelled = true;
+						resolve(null);
+						l.dispose();
+					});
+				});
+			}
+		});
 
-    s1.cancel();
-    assert.strictEqual(isCancelled, false);
+		assert.strictEqual(isCancelled, false);
+		const s1 = new CancellationTokenSource();
+		service.getOrCreate(model, s1.token);
+		const s2 = new CancellationTokenSource();
+		service.getOrCreate(model, s2.token);
 
-    s2.cancel();
-    assert.strictEqual(isCancelled, true);
+		s1.cancel();
+		assert.strictEqual(isCancelled, false);
 
-    reg.dispose();
-    model.dispose();
-    service.dispose();
-  });
+		s2.cancel();
+		assert.strictEqual(isCancelled, true);
 
-  function fakeSymbolInformation(range: Range, name: string = 'foo'): DocumentSymbol {
-    return {
-      name,
-      detail: 'fake',
-      kind: SymbolKind.Boolean,
-      tags: [],
-      selectionRange: range,
-      range,
-    };
-  }
+		reg.dispose();
+		model.dispose();
+		service.dispose();
 
-  function fakeMarker(range: Range): IMarker {
-    return {
-      ...range,
-      owner: 'ffff',
-      message: 'test',
-      severity: MarkerSeverity.Error,
-      resource: null!,
-    };
-  }
+	});
 
-  test('OutlineElement - updateMarker', () => {
-    const e0 = new OutlineElement('foo1', null!, fakeSymbolInformation(new Range(1, 1, 1, 10)));
-    const e1 = new OutlineElement('foo2', null!, fakeSymbolInformation(new Range(2, 1, 5, 1)));
-    const e2 = new OutlineElement('foo3', null!, fakeSymbolInformation(new Range(6, 1, 10, 10)));
+	function fakeSymbolInformation(range: Range, name: string = 'foo'): DocumentSymbol {
+		return {
+			name,
+			detail: 'fake',
+			kind: SymbolKind.Boolean,
+			tags: [],
+			selectionRange: range,
+			range: range
+		};
+	}
 
-    const group = new OutlineGroup('group', null!, null!, 1);
-    group.children.set(e0.id, e0);
-    group.children.set(e1.id, e1);
-    group.children.set(e2.id, e2);
+	function fakeMarker(range: Range): IMarker {
+		return { ...range, owner: 'ffff', message: 'test', severity: MarkerSeverity.Error, resource: null! };
+	}
 
-    const data = [
-      fakeMarker(new Range(6, 1, 6, 7)),
-      fakeMarker(new Range(1, 1, 1, 4)),
-      fakeMarker(new Range(10, 2, 14, 1)),
-    ];
-    data.sort(Range.compareRangesUsingStarts); // model does this
+	test('OutlineElement - updateMarker', function () {
 
-    group.updateMarker(data);
-    assert.strictEqual(data.length, 0); // all 'stolen'
-    assert.strictEqual(e0.marker!.count, 1);
-    assert.strictEqual(e1.marker, undefined);
-    assert.strictEqual(e2.marker!.count, 2);
+		const e0 = new OutlineElement('foo1', null!, fakeSymbolInformation(new Range(1, 1, 1, 10)));
+		const e1 = new OutlineElement('foo2', null!, fakeSymbolInformation(new Range(2, 1, 5, 1)));
+		const e2 = new OutlineElement('foo3', null!, fakeSymbolInformation(new Range(6, 1, 10, 10)));
 
-    group.updateMarker([]);
-    assert.strictEqual(e0.marker, undefined);
-    assert.strictEqual(e1.marker, undefined);
-    assert.strictEqual(e2.marker, undefined);
-  });
+		const group = new OutlineGroup('group', null!, null!, 1);
+		group.children.set(e0.id, e0);
+		group.children.set(e1.id, e1);
+		group.children.set(e2.id, e2);
 
-  test('OutlineElement - updateMarker, 2', () => {
-    const p = new OutlineElement('A', null!, fakeSymbolInformation(new Range(1, 1, 11, 1)));
-    const c1 = new OutlineElement('A/B', null!, fakeSymbolInformation(new Range(2, 4, 5, 4)));
-    const c2 = new OutlineElement('A/C', null!, fakeSymbolInformation(new Range(6, 4, 9, 4)));
+		const data = [fakeMarker(new Range(6, 1, 6, 7)), fakeMarker(new Range(1, 1, 1, 4)), fakeMarker(new Range(10, 2, 14, 1))];
+		data.sort(Range.compareRangesUsingStarts); // model does this
 
-    const group = new OutlineGroup('group', null!, null!, 1);
-    group.children.set(p.id, p);
-    p.children.set(c1.id, c1);
-    p.children.set(c2.id, c2);
+		group.updateMarker(data);
+		assert.strictEqual(data.length, 0); // all 'stolen'
+		assert.strictEqual(e0.marker!.count, 1);
+		assert.strictEqual(e1.marker, undefined);
+		assert.strictEqual(e2.marker!.count, 2);
 
-    let data = [fakeMarker(new Range(2, 4, 5, 4))];
+		group.updateMarker([]);
+		assert.strictEqual(e0.marker, undefined);
+		assert.strictEqual(e1.marker, undefined);
+		assert.strictEqual(e2.marker, undefined);
+	});
 
-    group.updateMarker(data);
-    assert.strictEqual(p.marker!.count, 0);
-    assert.strictEqual(c1.marker!.count, 1);
-    assert.strictEqual(c2.marker, undefined);
+	test('OutlineElement - updateMarker, 2', function () {
 
-    data = [
-      fakeMarker(new Range(2, 4, 5, 4)),
-      fakeMarker(new Range(2, 6, 2, 8)),
-      fakeMarker(new Range(7, 6, 7, 8)),
-    ];
-    group.updateMarker(data);
-    assert.strictEqual(p.marker!.count, 0);
-    assert.strictEqual(c1.marker!.count, 2);
-    assert.strictEqual(c2.marker!.count, 1);
+		const p = new OutlineElement('A', null!, fakeSymbolInformation(new Range(1, 1, 11, 1)));
+		const c1 = new OutlineElement('A/B', null!, fakeSymbolInformation(new Range(2, 4, 5, 4)));
+		const c2 = new OutlineElement('A/C', null!, fakeSymbolInformation(new Range(6, 4, 9, 4)));
 
-    data = [fakeMarker(new Range(1, 4, 1, 11)), fakeMarker(new Range(7, 6, 7, 8))];
-    group.updateMarker(data);
-    assert.strictEqual(p.marker!.count, 1);
-    assert.strictEqual(c1.marker, undefined);
-    assert.strictEqual(c2.marker!.count, 1);
-  });
+		const group = new OutlineGroup('group', null!, null!, 1);
+		group.children.set(p.id, p);
+		p.children.set(c1.id, c1);
+		p.children.set(c2.id, c2);
 
-  test('OutlineElement - updateMarker/multiple groups', () => {
-    const model = new (class extends OutlineModel {
-      constructor() {
-        super(null!);
-      }
+		let data = [
+			fakeMarker(new Range(2, 4, 5, 4))
+		];
 
-      readyForTesting() {
-        this._groups = this.children as any;
-      }
-    })();
-    model.children.set('g1', new OutlineGroup('g1', model, null!, 1));
-    model.children
-      .get('g1')!
-      .children.set(
-        'c1',
-        new OutlineElement(
-          'c1',
-          model.children.get('g1')!,
-          fakeSymbolInformation(new Range(1, 1, 11, 1)),
-        ),
-      );
+		group.updateMarker(data);
+		assert.strictEqual(p.marker!.count, 0);
+		assert.strictEqual(c1.marker!.count, 1);
+		assert.strictEqual(c2.marker, undefined);
 
-    model.children.set('g2', new OutlineGroup('g2', model, null!, 1));
-    model.children
-      .get('g2')!
-      .children.set(
-        'c2',
-        new OutlineElement(
-          'c2',
-          model.children.get('g2')!,
-          fakeSymbolInformation(new Range(1, 1, 7, 1)),
-        ),
-      );
-    model.children
-      .get('g2')!
-      .children.get('c2')!
-      .children.set(
-        'c2.1',
-        new OutlineElement(
-          'c2.1',
-          model.children.get('g2')!.children.get('c2')!,
-          fakeSymbolInformation(new Range(1, 3, 2, 19)),
-        ),
-      );
-    model.children
-      .get('g2')!
-      .children.get('c2')!
-      .children.set(
-        'c2.2',
-        new OutlineElement(
-          'c2.2',
-          model.children.get('g2')!.children.get('c2')!,
-          fakeSymbolInformation(new Range(4, 1, 6, 10)),
-        ),
-      );
+		data = [
+			fakeMarker(new Range(2, 4, 5, 4)),
+			fakeMarker(new Range(2, 6, 2, 8)),
+			fakeMarker(new Range(7, 6, 7, 8)),
+		];
+		group.updateMarker(data);
+		assert.strictEqual(p.marker!.count, 0);
+		assert.strictEqual(c1.marker!.count, 2);
+		assert.strictEqual(c2.marker!.count, 1);
 
-    model.readyForTesting();
+		data = [
+			fakeMarker(new Range(1, 4, 1, 11)),
+			fakeMarker(new Range(7, 6, 7, 8)),
+		];
+		group.updateMarker(data);
+		assert.strictEqual(p.marker!.count, 1);
+		assert.strictEqual(c1.marker, undefined);
+		assert.strictEqual(c2.marker!.count, 1);
+	});
 
-    const data = [fakeMarker(new Range(1, 1, 2, 8)), fakeMarker(new Range(6, 1, 6, 98))];
+	test('OutlineElement - updateMarker/multiple groups', function () {
 
-    model.updateMarker(data);
+		const model = new class extends OutlineModel {
+			constructor() {
+				super(null!);
+			}
+			readyForTesting() {
+				// eslint-disable-next-line local/code-no-any-casts
+				this._groups = this.children as any;
+			}
+		};
+		model.children.set('g1', new OutlineGroup('g1', model, null!, 1));
+		model.children.get('g1')!.children.set('c1', new OutlineElement('c1', model.children.get('g1')!, fakeSymbolInformation(new Range(1, 1, 11, 1))));
 
-    assert.strictEqual(model.children.get('g1')!.children.get('c1')!.marker!.count, 2);
-    assert.strictEqual(
-      model.children.get('g2')!.children.get('c2')!.children.get('c2.1')!.marker!.count,
-      1,
-    );
-    assert.strictEqual(
-      model.children.get('g2')!.children.get('c2')!.children.get('c2.2')!.marker!.count,
-      1,
-    );
-  });
+		model.children.set('g2', new OutlineGroup('g2', model, null!, 1));
+		model.children.get('g2')!.children.set('c2', new OutlineElement('c2', model.children.get('g2')!, fakeSymbolInformation(new Range(1, 1, 7, 1))));
+		model.children.get('g2')!.children.get('c2')!.children.set('c2.1', new OutlineElement('c2.1', model.children.get('g2')!.children.get('c2')!, fakeSymbolInformation(new Range(1, 3, 2, 19))));
+		model.children.get('g2')!.children.get('c2')!.children.set('c2.2', new OutlineElement('c2.2', model.children.get('g2')!.children.get('c2')!, fakeSymbolInformation(new Range(4, 1, 6, 10))));
+
+		model.readyForTesting();
+
+		const data = [
+			fakeMarker(new Range(1, 1, 2, 8)),
+			fakeMarker(new Range(6, 1, 6, 98)),
+		];
+
+		model.updateMarker(data);
+
+		assert.strictEqual(model.children.get('g1')!.children.get('c1')!.marker!.count, 2);
+		assert.strictEqual(model.children.get('g2')!.children.get('c2')!.children.get('c2.1')!.marker!.count, 1);
+		assert.strictEqual(model.children.get('g2')!.children.get('c2')!.children.get('c2.2')!.marker!.count, 1);
+	});
+
 });

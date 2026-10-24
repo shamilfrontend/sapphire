@@ -7,177 +7,161 @@ import { Emitter, Event } from '../../../base/common/event.js';
 import { Disposable, IDisposable } from '../../../base/common/lifecycle.js';
 import { URI } from '../../../base/common/uri.js';
 import { LanguagesRegistry } from './languagesRegistry.js';
-import {
-  ILanguageNameIdPair,
-  ILanguageSelection,
-  ILanguageService,
-  ILanguageIcon,
-  ILanguageExtensionPoint,
-} from '../languages/language.js';
+import { ILanguageNameIdPair, ILanguageSelection, ILanguageService, ILanguageIcon, ILanguageExtensionPoint } from '../languages/language.js';
 import { ILanguageIdCodec, TokenizationRegistry } from '../languages.js';
 import { PLAINTEXT_LANGUAGE_ID } from '../languages/modesRegistry.js';
-import { IObservable, observableFromEvent } from '../../../base/common/observable.js';
+import { IObservable, observableSignalFromEvent } from '../../../base/common/observable.js';
 
 export class LanguageService extends Disposable implements ILanguageService {
-  public _serviceBrand: undefined;
+	public _serviceBrand: undefined;
 
-  static instanceCount = 0;
+	static instanceCount = 0;
 
-  private readonly _onDidRequestBasicLanguageFeatures = this._register(new Emitter<string>());
+	private readonly _onDidRequestBasicLanguageFeatures = this._register(new Emitter<string>());
+	public readonly onDidRequestBasicLanguageFeatures = this._onDidRequestBasicLanguageFeatures.event;
 
-  public readonly onDidRequestBasicLanguageFeatures = this._onDidRequestBasicLanguageFeatures.event;
+	private readonly _onDidRequestRichLanguageFeatures = this._register(new Emitter<string>());
+	public readonly onDidRequestRichLanguageFeatures = this._onDidRequestRichLanguageFeatures.event;
 
-  private readonly _onDidRequestRichLanguageFeatures = this._register(new Emitter<string>());
+	protected readonly _onDidChange = this._register(new Emitter<void>({ leakWarningThreshold: 200, leakWarningName: 'LanguageService._onDidChange' /* https://github.com/microsoft/vscode/issues/119968 */ }));
+	public readonly onDidChange: Event<void> = this._onDidChange.event;
 
-  public readonly onDidRequestRichLanguageFeatures = this._onDidRequestRichLanguageFeatures.event;
+	// Observed language selections share one subscription to the registry.
+	private readonly _languagesChanged = observableSignalFromEvent(this, this.onDidChange);
 
-  protected readonly _onDidChange = this._register(
-    new Emitter<void>({
-      leakWarningThreshold: 200 /* https://github.com/microsoft/vscode/issues/119968 */,
-    }),
-  );
+	private readonly _requestedBasicLanguages = new Set<string>();
+	private readonly _requestedRichLanguages = new Set<string>();
 
-  public readonly onDidChange: Event<void> = this._onDidChange.event;
+	protected readonly _registry: LanguagesRegistry;
+	public readonly languageIdCodec: ILanguageIdCodec;
 
-  private readonly _requestedBasicLanguages = new Set<string>();
+	constructor(warnOnOverwrite = false) {
+		super();
+		LanguageService.instanceCount++;
+		this._registry = this._register(new LanguagesRegistry(true, warnOnOverwrite));
+		this.languageIdCodec = this._registry.languageIdCodec;
+		this._register(this._registry.onDidChange(() => this._onDidChange.fire()));
+	}
 
-  private readonly _requestedRichLanguages = new Set<string>();
+	public override dispose(): void {
+		LanguageService.instanceCount--;
+		super.dispose();
+	}
 
-  protected readonly _registry: LanguagesRegistry;
+	public registerLanguage(def: ILanguageExtensionPoint): IDisposable {
+		return this._registry.registerLanguage(def);
+	}
 
-  public readonly languageIdCodec: ILanguageIdCodec;
+	public isRegisteredLanguageId(languageId: string | null | undefined): boolean {
+		return this._registry.isRegisteredLanguageId(languageId);
+	}
 
-  constructor(warnOnOverwrite = false) {
-    super();
-    LanguageService.instanceCount++;
-    this._registry = this._register(new LanguagesRegistry(true, warnOnOverwrite));
-    this.languageIdCodec = this._registry.languageIdCodec;
-    this._register(this._registry.onDidChange(() => this._onDidChange.fire()));
-  }
+	public getRegisteredLanguageIds(): string[] {
+		return this._registry.getRegisteredLanguageIds();
+	}
 
-  public override dispose(): void {
-    LanguageService.instanceCount--;
-    super.dispose();
-  }
+	public getSortedRegisteredLanguageNames(): ILanguageNameIdPair[] {
+		return this._registry.getSortedRegisteredLanguageNames();
+	}
 
-  public registerLanguage(def: ILanguageExtensionPoint): IDisposable {
-    return this._registry.registerLanguage(def);
-  }
+	public getLanguageName(languageId: string): string | null {
+		return this._registry.getLanguageName(languageId);
+	}
 
-  public isRegisteredLanguageId(languageId: string | null | undefined): boolean {
-    return this._registry.isRegisteredLanguageId(languageId);
-  }
+	public getMimeType(languageId: string): string | null {
+		return this._registry.getMimeType(languageId);
+	}
 
-  public getRegisteredLanguageIds(): string[] {
-    return this._registry.getRegisteredLanguageIds();
-  }
+	public getIcon(languageId: string): ILanguageIcon | null {
+		return this._registry.getIcon(languageId);
+	}
 
-  public getSortedRegisteredLanguageNames(): ILanguageNameIdPair[] {
-    return this._registry.getSortedRegisteredLanguageNames();
-  }
+	public getExtensions(languageId: string): ReadonlyArray<string> {
+		return this._registry.getExtensions(languageId);
+	}
 
-  public getLanguageName(languageId: string): string | null {
-    return this._registry.getLanguageName(languageId);
-  }
+	public getFilenames(languageId: string): ReadonlyArray<string> {
+		return this._registry.getFilenames(languageId);
+	}
 
-  public getMimeType(languageId: string): string | null {
-    return this._registry.getMimeType(languageId);
-  }
+	public getConfigurationFiles(languageId: string): ReadonlyArray<URI> {
+		return this._registry.getConfigurationFiles(languageId);
+	}
 
-  public getIcon(languageId: string): ILanguageIcon | null {
-    return this._registry.getIcon(languageId);
-  }
+	public getLanguageIdByLanguageName(languageName: string): string | null {
+		return this._registry.getLanguageIdByLanguageName(languageName);
+	}
 
-  public getExtensions(languageId: string): ReadonlyArray<string> {
-    return this._registry.getExtensions(languageId);
-  }
+	public getLanguageIdByMimeType(mimeType: string | null | undefined): string | null {
+		return this._registry.getLanguageIdByMimeType(mimeType);
+	}
 
-  public getFilenames(languageId: string): ReadonlyArray<string> {
-    return this._registry.getFilenames(languageId);
-  }
+	public guessLanguageIdByFilepathOrFirstLine(resource: URI | null, firstLine?: string): string | null {
+		const languageIds = this._registry.guessLanguageIdByFilepathOrFirstLine(resource, firstLine);
+		return languageIds.at(0) ?? null;
+	}
 
-  public getConfigurationFiles(languageId: string): ReadonlyArray<URI> {
-    return this._registry.getConfigurationFiles(languageId);
-  }
+	public createById(languageId: string | null | undefined): ILanguageSelection {
+		return new LanguageSelection(this._languagesChanged, () => {
+			return this._createAndGetLanguageIdentifier(languageId);
+		});
+	}
 
-  public getLanguageIdByLanguageName(languageName: string): string | null {
-    return this._registry.getLanguageIdByLanguageName(languageName);
-  }
+	public createByMimeType(mimeType: string | null | undefined): ILanguageSelection {
+		return new LanguageSelection(this._languagesChanged, () => {
+			const languageId = this.getLanguageIdByMimeType(mimeType);
+			return this._createAndGetLanguageIdentifier(languageId);
+		});
+	}
 
-  public getLanguageIdByMimeType(mimeType: string | null | undefined): string | null {
-    return this._registry.getLanguageIdByMimeType(mimeType);
-  }
+	public createByFilepathOrFirstLine(resource: URI | null, firstLine?: string): ILanguageSelection {
+		return new LanguageSelection(this._languagesChanged, () => {
+			const languageId = this.guessLanguageIdByFilepathOrFirstLine(resource, firstLine);
+			return this._createAndGetLanguageIdentifier(languageId);
+		});
+	}
 
-  public guessLanguageIdByFilepathOrFirstLine(
-    resource: URI | null,
-    firstLine?: string,
-  ): string | null {
-    const languageIds = this._registry.guessLanguageIdByFilepathOrFirstLine(resource, firstLine);
-    return languageIds.at(0) ?? null;
-  }
+	private _createAndGetLanguageIdentifier(languageId: string | null | undefined): string {
+		if (!languageId || !this.isRegisteredLanguageId(languageId)) {
+			// Fall back to plain text if language is unknown
+			languageId = PLAINTEXT_LANGUAGE_ID;
+		}
 
-  public createById(languageId: string | null | undefined): ILanguageSelection {
-    return new LanguageSelection(this.onDidChange, () =>
-      this._createAndGetLanguageIdentifier(languageId),
-    );
-  }
+		return languageId;
+	}
 
-  public createByMimeType(mimeType: string | null | undefined): ILanguageSelection {
-    return new LanguageSelection(this.onDidChange, () => {
-      const languageId = this.getLanguageIdByMimeType(mimeType);
-      return this._createAndGetLanguageIdentifier(languageId);
-    });
-  }
+	public requestBasicLanguageFeatures(languageId: string): void {
+		if (!this._requestedBasicLanguages.has(languageId)) {
+			this._requestedBasicLanguages.add(languageId);
+			this._onDidRequestBasicLanguageFeatures.fire(languageId);
+		}
+	}
 
-  public createByFilepathOrFirstLine(resource: URI | null, firstLine?: string): ILanguageSelection {
-    return new LanguageSelection(this.onDidChange, () => {
-      const languageId = this.guessLanguageIdByFilepathOrFirstLine(resource, firstLine);
-      return this._createAndGetLanguageIdentifier(languageId);
-    });
-  }
+	public requestRichLanguageFeatures(languageId: string): void {
+		if (!this._requestedRichLanguages.has(languageId)) {
+			this._requestedRichLanguages.add(languageId);
 
-  private _createAndGetLanguageIdentifier(languageId: string | null | undefined): string {
-    if (!languageId || !this.isRegisteredLanguageId(languageId)) {
-      // Fall back to plain text if language is unknown
-      languageId = PLAINTEXT_LANGUAGE_ID;
-    }
+			// Ensure basic features are requested
+			this.requestBasicLanguageFeatures(languageId);
 
-    return languageId;
-  }
+			// Ensure tokenizers are created
+			TokenizationRegistry.getOrCreate(languageId);
 
-  public requestBasicLanguageFeatures(languageId: string): void {
-    if (!this._requestedBasicLanguages.has(languageId)) {
-      this._requestedBasicLanguages.add(languageId);
-      this._onDidRequestBasicLanguageFeatures.fire(languageId);
-    }
-  }
-
-  public requestRichLanguageFeatures(languageId: string): void {
-    if (!this._requestedRichLanguages.has(languageId)) {
-      this._requestedRichLanguages.add(languageId);
-
-      // Ensure basic features are requested
-      this.requestBasicLanguageFeatures(languageId);
-
-      // Ensure tokenizers are created
-      TokenizationRegistry.getOrCreate(languageId);
-
-      this._onDidRequestRichLanguageFeatures.fire(languageId);
-    }
-  }
+			this._onDidRequestRichLanguageFeatures.fire(languageId);
+		}
+	}
 }
 
 class LanguageSelection implements ILanguageSelection {
-  private readonly _value: IObservable<string>;
+	private readonly _value: IObservable<string>;
+	public readonly onDidChange: Event<string>;
 
-  public readonly onDidChange: Event<string>;
+	constructor(onDidChangeLanguages: IObservable<void>, selector: () => string) {
+		this._value = onDidChangeLanguages.map(this, selector);
+		this.onDidChange = Event.fromObservable(this._value);
+	}
 
-  constructor(onDidChangeLanguages: Event<void>, selector: () => string) {
-    this._value = observableFromEvent(this, onDidChangeLanguages, () => selector());
-    this.onDidChange = Event.fromObservable(this._value);
-  }
-
-  public get languageId(): string {
-    return this._value.get();
-  }
+	public get languageId(): string {
+		return this._value.get();
+	}
 }

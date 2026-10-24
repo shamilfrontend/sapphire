@@ -4,7 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { Event, PauseableEmitter } from '../../../../../base/common/event.js';
-import { Disposable, IDisposable } from '../../../../../base/common/lifecycle.js';
+import { Disposable, MutableDisposable } from '../../../../../base/common/lifecycle.js';
 import { URI } from '../../../../../base/common/uri.js';
 import { ITextModel } from '../../../../../editor/common/model.js';
 import { IModelService } from '../../../../../editor/common/services/model.js';
@@ -12,332 +12,287 @@ import { IInstantiationService } from '../../../../../platform/instantiation/com
 import { IProgress, IProgressStep } from '../../../../../platform/progress/common/progress.js';
 import { NotebookEditorWidget } from '../../../notebook/browser/notebookEditorWidget.js';
 import { INotebookEditorService } from '../../../notebook/browser/services/notebookEditorService.js';
-import {
-  IAITextQuery,
-  IFileMatch,
-  ISearchComplete,
-  ITextQuery,
-  QueryType,
-} from '../../../../services/search/common/search.js';
-import {
-  arrayContainsElementOrParent,
-  IChangeEvent,
-  ISearchTreeFileMatch,
-  ISearchTreeFolderMatch,
-  IPlainTextSearchHeading,
-  ISearchModel,
-  ISearchResult,
-  isSearchTreeFileMatch,
-  isSearchTreeFolderMatch,
-  isSearchTreeFolderMatchWithResource,
-  isSearchTreeMatch,
-  isTextSearchHeading,
-  ITextSearchHeading,
-  mergeSearchResultEvents,
-  RenderableMatch,
-  SEARCH_RESULT_PREFIX,
-} from './searchTreeCommon.js';
+import { IAITextQuery, IFileMatch, ISearchComplete, ITextQuery, QueryType } from '../../../../services/search/common/search.js';
+import { arrayContainsElementOrParent, IChangeEvent, ISearchTreeFileMatch, ISearchTreeFolderMatch, IPlainTextSearchHeading, ISearchModel, ISearchResult, isSearchTreeFileMatch, isSearchTreeFolderMatch, isSearchTreeFolderMatchNoRoot, isSearchTreeFolderMatchWithResource, isSearchTreeMatch, isTextSearchHeading, ITextSearchHeading, mergeSearchResultEvents, RenderableMatch, SEARCH_RESULT_PREFIX } from './searchTreeCommon.js';
 
 import { RangeHighlightDecorations } from './rangeDecorations.js';
 import { PlainTextSearchHeadingImpl } from './textSearchHeading.js';
 import { AITextSearchHeadingImpl } from '../AISearch/aiSearchModel.js';
 
 export class SearchResultImpl extends Disposable implements ISearchResult {
-  private _onChange = this._register(
-    new PauseableEmitter<IChangeEvent>({
-      merge: mergeSearchResultEvents,
-    }),
-  );
 
-  readonly onChange: Event<IChangeEvent> = this._onChange.event;
+	private _onChange = this._register(new PauseableEmitter<IChangeEvent>({
+		merge: mergeSearchResultEvents
+	}));
+	readonly onChange: Event<IChangeEvent> = this._onChange.event;
+	private readonly _onWillChangeModelListener = this._register(new MutableDisposable());
+	private readonly _onDidChangeModelListener = this._register(new MutableDisposable());
+	private _plainTextSearchResult: PlainTextSearchHeadingImpl;
+	private _aiTextSearchResult: AITextSearchHeadingImpl;
 
-  private _onWillChangeModelListener: IDisposable | undefined;
+	private readonly _id: string;
+	constructor(
+		public readonly searchModel: ISearchModel,
+		@IInstantiationService private readonly instantiationService: IInstantiationService,
+		@IModelService private readonly modelService: IModelService,
+		@INotebookEditorService private readonly notebookEditorService: INotebookEditorService,
+	) {
+		super();
+		this._plainTextSearchResult = this._register(this.instantiationService.createInstance(PlainTextSearchHeadingImpl, this));
+		this._aiTextSearchResult = this._register(this.instantiationService.createInstance(AITextSearchHeadingImpl, this));
 
-  private _onDidChangeModelListener: IDisposable | undefined;
+		this._register(this._plainTextSearchResult.onChange((e) => this._onChange.fire(e)));
+		this._register(this._aiTextSearchResult.onChange((e) => this._onChange.fire(e)));
 
-  private _plainTextSearchResult: PlainTextSearchHeadingImpl;
+		this.modelService.getModels().forEach(model => this.onModelAdded(model));
+		this._register(this.modelService.onModelAdded(model => this.onModelAdded(model)));
 
-  private _aiTextSearchResult: AITextSearchHeadingImpl;
+		this._register(this.notebookEditorService.onDidAddNotebookEditor(widget => {
+			if (widget instanceof NotebookEditorWidget) {
+				this.onDidAddNotebookEditorWidget(<NotebookEditorWidget>widget);
+			}
+		}));
 
-  private readonly _id: string;
+		this._id = SEARCH_RESULT_PREFIX + Date.now().toString();
+	}
 
-  constructor(
-    public readonly searchModel: ISearchModel,
-    @IInstantiationService private readonly instantiationService: IInstantiationService,
-    @IModelService private readonly modelService: IModelService,
-    @INotebookEditorService private readonly notebookEditorService: INotebookEditorService,
-  ) {
-    super();
-    this._plainTextSearchResult = this._register(
-      this.instantiationService.createInstance(PlainTextSearchHeadingImpl, this),
-    );
-    this._aiTextSearchResult = this._register(
-      this.instantiationService.createInstance(AITextSearchHeadingImpl, this),
-    );
+	id(): string {
+		return this._id;
+	}
 
-    this._register(this._plainTextSearchResult.onChange((e) => this._onChange.fire(e)));
-    this._register(this._aiTextSearchResult.onChange((e) => this._onChange.fire(e)));
+	get plainTextSearchResult(): IPlainTextSearchHeading {
+		return this._plainTextSearchResult;
+	}
 
-    this.modelService.getModels().forEach((model) => this.onModelAdded(model));
-    this._register(this.modelService.onModelAdded((model) => this.onModelAdded(model)));
+	get aiTextSearchResult(): ITextSearchHeading {
+		return this._aiTextSearchResult;
+	}
 
-    this._register(
-      this.notebookEditorService.onDidAddNotebookEditor((widget) => {
-        if (widget instanceof NotebookEditorWidget) {
-          this.onDidAddNotebookEditorWidget(<NotebookEditorWidget>widget);
-        }
-      }),
-    );
+	get children() {
+		return this.textSearchResults;
+	}
 
-    this._id = SEARCH_RESULT_PREFIX + Date.now().toString();
-  }
+	get hasChildren(): boolean {
+		return true; // should always have a Text Search Result for plain results.
+	}
+	get textSearchResults(): ITextSearchHeading[] {
+		return [this._plainTextSearchResult, this._aiTextSearchResult];
+	}
 
-  id(): string {
-    return this._id;
-  }
+	async batchReplace(elementsToReplace: RenderableMatch[]) {
+		try {
+			this._onChange.pause();
+			await Promise.all(elementsToReplace.map(async (elem) => {
+				const parent = elem.parent();
 
-  get plainTextSearchResult(): IPlainTextSearchHeading {
-    return this._plainTextSearchResult;
-  }
+				if ((isSearchTreeFolderMatch(parent) || isSearchTreeFileMatch(parent)) && arrayContainsElementOrParent(parent, elementsToReplace)) {
+					// skip any children who have parents in the array
+					return;
+				}
 
-  get aiTextSearchResult(): ITextSearchHeading {
-    return this._aiTextSearchResult;
-  }
+				if (isSearchTreeFileMatch(elem)) {
+					await elem.parent().replace(elem);
+				} else if (isSearchTreeMatch(elem)) {
+					await elem.parent().replace(elem);
+				} else if (isSearchTreeFolderMatch(elem)) {
+					await elem.replaceAll();
+				}
+			}));
+		} finally {
+			this._onChange.resume();
+		}
+	}
 
-  get children() {
-    return this.textSearchResults;
-  }
+	batchRemove(elementsToRemove: RenderableMatch[]) {
+		// need to check that we aren't trying to remove elements twice
+		const removedElems: RenderableMatch[] = [];
 
-  get hasChildren(): boolean {
-    return true; // should always have a Text Search Result for plain results.
-  }
+		try {
+			this._onChange.pause();
+			elementsToRemove.forEach((currentElement) => {
+				if (!arrayContainsElementOrParent(currentElement, removedElems)) {
+					if (isTextSearchHeading(currentElement)) {
+						currentElement.hide();
+					} else if (!isSearchTreeFolderMatch(currentElement) || isSearchTreeFolderMatchWithResource(currentElement) || isSearchTreeFolderMatchNoRoot(currentElement)) {
+						if (isSearchTreeFileMatch(currentElement)) {
+							currentElement.parent().remove(currentElement);
+						} else if (isSearchTreeMatch(currentElement)) {
+							currentElement.parent().remove(currentElement);
+						} else if (isSearchTreeFolderMatchWithResource(currentElement)) {
+							currentElement.parent().remove(currentElement);
+						} else if (isSearchTreeFolderMatchNoRoot(currentElement)) {
+							const parent = currentElement.parent();
+							if (isTextSearchHeading(parent)) {
+								parent.remove(currentElement);
+							}
+						}
+						removedElems.push(currentElement);
+					}
+				}
+			}
+			);
+		} finally {
+			this._onChange.resume();
+		}
+	}
 
-  get textSearchResults(): ITextSearchHeading[] {
-    return [this._plainTextSearchResult, this._aiTextSearchResult];
-  }
+	get isDirty(): boolean {
+		return this._aiTextSearchResult.isDirty || this._plainTextSearchResult.isDirty;
+	}
 
-  async batchReplace(elementsToReplace: RenderableMatch[]) {
-    try {
-      this._onChange.pause();
-      await Promise.all(
-        elementsToReplace.map(async (elem) => {
-          const parent = elem.parent();
+	get query(): ITextQuery | null {
+		return this._plainTextSearchResult.query;
+	}
 
-          if (
-            (isSearchTreeFolderMatch(parent) || isSearchTreeFileMatch(parent)) &&
-            arrayContainsElementOrParent(parent, elementsToReplace)
-          ) {
-            // skip any children who have parents in the array
-            return;
-          }
+	set query(query: ITextQuery | null) {
+		this._plainTextSearchResult.query = query;
+	}
 
-          if (isSearchTreeFileMatch(elem)) {
-            await elem.parent().replace(elem);
-          } else if (isSearchTreeMatch(elem)) {
-            await elem.parent().replace(elem);
-          } else if (isSearchTreeFolderMatch(elem)) {
-            await elem.replaceAll();
-          }
-        }),
-      );
-    } finally {
-      this._onChange.resume();
-    }
-  }
+	setAIQueryUsingTextQuery(query?: ITextQuery | null) {
+		if (!query) {
+			query = this.query;
+		}
+		this.aiTextSearchResult.query = aiTextQueryFromTextQuery(query);
+	}
 
-  batchRemove(elementsToRemove: RenderableMatch[]) {
-    // need to check that we aren't trying to remove elements twice
-    const removedElems: RenderableMatch[] = [];
+	private onDidAddNotebookEditorWidget(widget: NotebookEditorWidget): void {
 
-    try {
-      this._onChange.pause();
-      elementsToRemove.forEach((currentElement) => {
-        if (!arrayContainsElementOrParent(currentElement, removedElems)) {
-          if (isTextSearchHeading(currentElement)) {
-            currentElement.hide();
-          } else if (
-            !isSearchTreeFolderMatch(currentElement) ||
-            isSearchTreeFolderMatchWithResource(currentElement)
-          ) {
-            if (isSearchTreeFileMatch(currentElement)) {
-              currentElement.parent().remove(currentElement);
-            } else if (isSearchTreeMatch(currentElement)) {
-              currentElement.parent().remove(currentElement);
-            } else if (isSearchTreeFolderMatchWithResource(currentElement)) {
-              currentElement.parent().remove(currentElement);
-            }
-            removedElems.push(currentElement);
-          }
-        }
-      });
-    } finally {
-      this._onChange.resume();
-    }
-  }
+		this._onWillChangeModelListener.value = widget.onWillChangeModel(
+			(model) => {
+				if (model) {
+					this.onNotebookEditorWidgetRemoved(widget, model?.uri);
+				}
+			}
+		);
 
-  get isDirty(): boolean {
-    return this._aiTextSearchResult.isDirty || this._plainTextSearchResult.isDirty;
-  }
+		// listen to view model change as we are searching on both inputs and outputs
+		this._onDidChangeModelListener.value = widget.onDidAttachViewModel(
+			() => {
+				if (widget.hasModel()) {
+					this.onNotebookEditorWidgetAdded(widget, widget.textModel.uri);
+				}
+			}
+		);
+	}
 
-  get query(): ITextQuery | null {
-    return this._plainTextSearchResult.query;
-  }
+	folderMatches(ai: boolean = false): ISearchTreeFolderMatch[] {
+		if (ai) {
+			return this._aiTextSearchResult.folderMatches();
+		}
+		return this._plainTextSearchResult.folderMatches();
+	}
 
-  set query(query: ITextQuery | null) {
-    this._plainTextSearchResult.query = query;
-  }
+	private onModelAdded(model: ITextModel): void {
+		const folderMatch = this._plainTextSearchResult.findFolderSubstr(model.uri);
+		folderMatch?.bindModel(model);
+	}
 
-  setAIQueryUsingTextQuery(query?: ITextQuery | null) {
-    if (!query) {
-      query = this.query;
-    }
-    this.aiTextSearchResult.query = aiTextQueryFromTextQuery(query);
-  }
+	private async onNotebookEditorWidgetAdded(editor: NotebookEditorWidget, resource: URI): Promise<void> {
+		const folderMatch = this._plainTextSearchResult.findFolderSubstr(resource);
+		await folderMatch?.bindNotebookEditorWidget(editor, resource);
+	}
 
-  private onDidAddNotebookEditorWidget(widget: NotebookEditorWidget): void {
-    this._onWillChangeModelListener?.dispose();
-    this._onWillChangeModelListener = widget.onWillChangeModel((model) => {
-      if (model) {
-        this.onNotebookEditorWidgetRemoved(widget, model?.uri);
-      }
-    });
+	private onNotebookEditorWidgetRemoved(editor: NotebookEditorWidget, resource: URI): void {
+		const folderMatch = this._plainTextSearchResult.findFolderSubstr(resource);
+		folderMatch?.unbindNotebookEditorWidget(editor, resource);
+	}
 
-    this._onDidChangeModelListener?.dispose();
-    // listen to view model change as we are searching on both inputs and outputs
-    this._onDidChangeModelListener = widget.onDidAttachViewModel(() => {
-      if (widget.hasModel()) {
-        this.onNotebookEditorWidgetAdded(widget, widget.textModel.uri);
-      }
-    });
-  }
 
-  folderMatches(ai: boolean = false): ISearchTreeFolderMatch[] {
-    if (ai) {
-      return this._aiTextSearchResult.folderMatches();
-    }
-    return this._plainTextSearchResult.folderMatches();
-  }
+	add(allRaw: IFileMatch[], searchInstanceID: string, ai: boolean, silent: boolean = false): void {
+		this._plainTextSearchResult.hidden = false;
 
-  private onModelAdded(model: ITextModel): void {
-    const folderMatch = this._plainTextSearchResult.findFolderSubstr(model.uri);
-    folderMatch?.bindModel(model);
-  }
+		if (ai) {
+			this._aiTextSearchResult.add(allRaw, searchInstanceID, silent);
+		} else {
+			this._plainTextSearchResult.add(allRaw, searchInstanceID, silent);
+		}
+	}
 
-  private async onNotebookEditorWidgetAdded(
-    editor: NotebookEditorWidget,
-    resource: URI,
-  ): Promise<void> {
-    const folderMatch = this._plainTextSearchResult.findFolderSubstr(resource);
-    await folderMatch?.bindNotebookEditorWidget(editor, resource);
-  }
+	clear(): void {
+		this._plainTextSearchResult.clear();
+		this._aiTextSearchResult.clear();
+	}
 
-  private onNotebookEditorWidgetRemoved(editor: NotebookEditorWidget, resource: URI): void {
-    const folderMatch = this._plainTextSearchResult.findFolderSubstr(resource);
-    folderMatch?.unbindNotebookEditorWidget(editor, resource);
-  }
+	remove(matches: ISearchTreeFileMatch | ISearchTreeFolderMatch | (ISearchTreeFileMatch | ISearchTreeFolderMatch)[], ai = false): void {
+		if (ai) {
+			this._aiTextSearchResult.remove(matches, ai);
+		}
+		this._plainTextSearchResult.remove(matches, ai);
 
-  add(allRaw: IFileMatch[], searchInstanceID: string, ai: boolean, silent: boolean = false): void {
-    this._plainTextSearchResult.hidden = false;
-    if (ai) {
-      this._aiTextSearchResult.hidden = false;
-    }
+	}
 
-    if (ai) {
-      this._aiTextSearchResult.add(allRaw, searchInstanceID, silent);
-    } else {
-      this._plainTextSearchResult.add(allRaw, searchInstanceID, silent);
-    }
-  }
+	replace(match: ISearchTreeFileMatch): Promise<any> {
+		return this._plainTextSearchResult.replace(match);
+	}
 
-  clear(): void {
-    this._plainTextSearchResult.clear();
-    this._aiTextSearchResult.clear();
-  }
+	matches(ai?: boolean): ISearchTreeFileMatch[] {
+		if (ai === undefined) {
+			return this._plainTextSearchResult.matches().concat(this._aiTextSearchResult.matches());
+		} else if (ai === true) {
+			return this._aiTextSearchResult.matches();
+		}
+		return this._plainTextSearchResult.matches();
+	}
 
-  remove(
-    matches:
-      | ISearchTreeFileMatch
-      | ISearchTreeFolderMatch
-      | (ISearchTreeFileMatch | ISearchTreeFolderMatch)[],
-    ai = false,
-  ): void {
-    if (ai) {
-      this._aiTextSearchResult.remove(matches, ai);
-    }
-    this._plainTextSearchResult.remove(matches, ai);
-  }
+	isEmpty(): boolean {
+		return this._plainTextSearchResult.isEmpty() && this._aiTextSearchResult.isEmpty();
+	}
 
-  replace(match: ISearchTreeFileMatch): Promise<any> {
-    return this._plainTextSearchResult.replace(match);
-  }
+	fileCount(ignoreSemanticSearchResults: boolean = false): number {
+		if (ignoreSemanticSearchResults) {
+			return this._plainTextSearchResult.fileCount();
+		}
+		return this._plainTextSearchResult.fileCount() + this._aiTextSearchResult.fileCount();
+	}
 
-  matches(ai?: boolean): ISearchTreeFileMatch[] {
-    if (ai === undefined) {
-      return this._plainTextSearchResult.matches().concat(this._aiTextSearchResult.matches());
-    }
-    if (ai === true) {
-      return this._aiTextSearchResult.matches();
-    }
-    return this._plainTextSearchResult.matches();
-  }
+	count(ignoreSemanticSearchResults: boolean = false): number {
+		if (ignoreSemanticSearchResults) {
+			return this._plainTextSearchResult.count();
+		}
+		return this._plainTextSearchResult.count() + this._aiTextSearchResult.count();
+	}
 
-  isEmpty(): boolean {
-    return this._plainTextSearchResult.isEmpty() && this._aiTextSearchResult.isEmpty();
-  }
+	setCachedSearchComplete(cachedSearchComplete: ISearchComplete | undefined, ai: boolean) {
+		if (ai) {
+			this._aiTextSearchResult.cachedSearchComplete = cachedSearchComplete;
+		} else {
+			this._plainTextSearchResult.cachedSearchComplete = cachedSearchComplete;
+		}
+	}
 
-  fileCount(): number {
-    return this._plainTextSearchResult.fileCount() + this._aiTextSearchResult.fileCount();
-  }
+	getCachedSearchComplete(ai: boolean): ISearchComplete | undefined {
+		if (ai) {
+			return this._aiTextSearchResult.cachedSearchComplete;
+		}
+		return this._plainTextSearchResult.cachedSearchComplete;
+	}
 
-  count(): number {
-    return this._plainTextSearchResult.count() + this._aiTextSearchResult.count();
-  }
+	toggleHighlights(value: boolean, ai: boolean = false): void {
+		if (ai) {
+			this._aiTextSearchResult.toggleHighlights(value);
+		} else {
+			this._plainTextSearchResult.toggleHighlights(value);
+		}
+	}
 
-  setCachedSearchComplete(cachedSearchComplete: ISearchComplete | undefined, ai: boolean) {
-    if (ai) {
-      this._aiTextSearchResult.cachedSearchComplete = cachedSearchComplete;
-    } else {
-      this._plainTextSearchResult.cachedSearchComplete = cachedSearchComplete;
-    }
-  }
+	getRangeHighlightDecorations(ai: boolean = false): RangeHighlightDecorations {
+		if (ai) {
+			return this._aiTextSearchResult.rangeHighlightDecorations;
+		}
+		return this._plainTextSearchResult.rangeHighlightDecorations;
+	}
 
-  getCachedSearchComplete(ai: boolean): ISearchComplete | undefined {
-    if (ai) {
-      return this._aiTextSearchResult.cachedSearchComplete;
-    }
-    return this._plainTextSearchResult.cachedSearchComplete;
-  }
+	replaceAll(progress: IProgress<IProgressStep>): Promise<any> {
+		return this._plainTextSearchResult.replaceAll(progress);
+	}
 
-  toggleHighlights(value: boolean, ai: boolean = false): void {
-    if (ai) {
-      this._aiTextSearchResult.toggleHighlights(value);
-    } else {
-      this._plainTextSearchResult.toggleHighlights(value);
-    }
-  }
-
-  getRangeHighlightDecorations(ai: boolean = false): RangeHighlightDecorations {
-    if (ai) {
-      return this._aiTextSearchResult.rangeHighlightDecorations;
-    }
-    return this._plainTextSearchResult.rangeHighlightDecorations;
-  }
-
-  replaceAll(progress: IProgress<IProgressStep>): Promise<any> {
-    return this._plainTextSearchResult.replaceAll(progress);
-  }
-
-  override async dispose(): Promise<void> {
-    this._aiTextSearchResult?.dispose();
-    this._plainTextSearchResult?.dispose();
-    this._onWillChangeModelListener?.dispose();
-    this._onDidChangeModelListener?.dispose();
-    super.dispose();
-  }
+	override async dispose(): Promise<void> {
+		this._aiTextSearchResult?.dispose();
+		this._plainTextSearchResult?.dispose();
+		super.dispose();
+	}
 }
 
 function aiTextQueryFromTextQuery(query: ITextQuery | null): IAITextQuery | null {
-  return query === null
-    ? null
-    : { ...query, contentPattern: query.contentPattern.pattern, type: QueryType.aiText };
+	return query === null ? null : { ...query, contentPattern: query.contentPattern.pattern, type: QueryType.aiText };
 }

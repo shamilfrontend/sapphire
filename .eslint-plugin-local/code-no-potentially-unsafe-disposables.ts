@@ -4,36 +4,35 @@
  *--------------------------------------------------------------------------------------------*/
 
 import * as eslint from 'eslint';
+import type * as ESTree from 'estree';
 
 /**
  * Checks for potentially unsafe usage of `DisposableStore` / `MutableDisposable`.
  *
  * These have been the source of leaks in the past.
  */
-export = new (class implements eslint.Rule.RuleModule {
-  create(context: eslint.Rule.RuleContext): eslint.Rule.RuleListener {
-    function checkVariableDeclaration(inNode: any) {
-      context.report({
-        node: inNode,
-        message: `Use const for 'DisposableStore' to avoid leaks by accidental reassignment.`,
-      });
-    }
+export default new class implements eslint.Rule.RuleModule {
 
-    function checkProperty(inNode: any) {
-      context.report({
-        node: inNode,
-        message: `Use readonly for DisposableStore/MutableDisposable to avoid leaks through accidental reassignment.`,
-      });
-    }
+	create(context: eslint.Rule.RuleContext): eslint.Rule.RuleListener {
+		function checkVariableDeclaration(inNode: ESTree.Node) {
+			context.report({
+				node: inNode,
+				message: `Use const for 'DisposableStore' to avoid leaks by accidental reassignment.`
+			});
+		}
 
-    return {
-      'VariableDeclaration[kind!="const"] NewExpression[callee.name="DisposableStore"]':
-        checkVariableDeclaration,
+		function checkProperty(inNode: ESTree.Node) {
+			context.report({
+				node: inNode,
+				message: `Use readonly for DisposableStore/MutableDisposable to avoid leaks through accidental reassignment.`
+			});
+		}
 
-      'PropertyDefinition[readonly!=true][typeAnnotation.typeAnnotation.typeName.name=/DisposableStore|MutableDisposable/]':
-        checkProperty,
-      'PropertyDefinition[readonly!=true] NewExpression[callee.name=/DisposableStore|MutableDisposable/]':
-        checkProperty,
-    };
-  }
-})();
+		return {
+			'VariableDeclaration[kind!="const"] > VariableDeclarator > NewExpression[callee.name="DisposableStore"]': checkVariableDeclaration,
+
+			'PropertyDefinition[readonly!=true][typeAnnotation.typeAnnotation.typeName.name=/DisposableStore|MutableDisposable/]': checkProperty,
+			'PropertyDefinition[readonly!=true] > NewExpression[callee.name=/DisposableStore|MutableDisposable/]': checkProperty,
+		};
+	}
+};

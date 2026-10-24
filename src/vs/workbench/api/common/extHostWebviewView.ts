@@ -3,247 +3,222 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import type * as vscode from 'vscode';
 import { CancellationToken } from '../../../base/common/cancellation.js';
 import { Emitter } from '../../../base/common/event.js';
 import { Disposable } from '../../../base/common/lifecycle.js';
 import { IExtensionDescription } from '../../../platform/extensions/common/extensions.js';
-import {
-  ExtHostWebview,
-  ExtHostWebviews,
-  toExtensionData,
-  shouldSerializeBuffersForPostMessage,
-} from './extHostWebview.js';
+import { ExtHostWebview, ExtHostWebviews, toExtensionData, shouldSerializeBuffersForPostMessage } from './extHostWebview.js';
 import { ViewBadge } from './extHostTypeConverters.js';
+import type * as vscode from 'vscode';
 import * as extHostProtocol from './extHost.protocol.js';
 import * as extHostTypes from './extHostTypes.js';
 
-/* eslint-disable local/code-no-native-private */
-
 class ExtHostWebviewView extends Disposable implements vscode.WebviewView {
-  readonly #handle: extHostProtocol.WebviewHandle;
 
-  readonly #proxy: extHostProtocol.MainThreadWebviewViewsShape;
+	readonly #handle: extHostProtocol.WebviewHandle;
+	readonly #proxy: extHostProtocol.MainThreadWebviewViewsShape;
 
-  readonly #viewType: string;
+	readonly #viewType: string;
+	readonly #webview: ExtHostWebview;
 
-  readonly #webview: ExtHostWebview;
+	#isDisposed = false;
+	#isVisible: boolean;
+	#title: string | undefined;
+	#description: string | undefined;
+	#badge: vscode.ViewBadge | undefined;
 
-  #isDisposed = false;
+	constructor(
+		handle: extHostProtocol.WebviewHandle,
+		proxy: extHostProtocol.MainThreadWebviewViewsShape,
+		viewType: string,
+		title: string | undefined,
+		webview: ExtHostWebview,
+		isVisible: boolean,
+	) {
+		super();
 
-  #isVisible: boolean;
+		this.#viewType = viewType;
+		this.#title = title;
+		this.#handle = handle;
+		this.#proxy = proxy;
+		this.#webview = webview;
+		this.#isVisible = isVisible;
+	}
 
-  #title: string | undefined;
+	public override dispose() {
+		if (this.#isDisposed) {
+			return;
+		}
 
-  #description: string | undefined;
+		this.#isDisposed = true;
+		this.#onDidDispose.fire();
 
-  #badge: vscode.ViewBadge | undefined;
+		this.#webview.dispose();
 
-  constructor(
-    handle: extHostProtocol.WebviewHandle,
-    proxy: extHostProtocol.MainThreadWebviewViewsShape,
-    viewType: string,
-    title: string | undefined,
-    webview: ExtHostWebview,
-    isVisible: boolean,
-  ) {
-    super();
+		super.dispose();
+	}
 
-    this.#viewType = viewType;
-    this.#title = title;
-    this.#handle = handle;
-    this.#proxy = proxy;
-    this.#webview = webview;
-    this.#isVisible = isVisible;
-  }
+	readonly #onDidChangeVisibility = this._register(new Emitter<void>());
+	public readonly onDidChangeVisibility = this.#onDidChangeVisibility.event;
 
-  public override dispose() {
-    if (this.#isDisposed) {
-      return;
-    }
+	readonly #onDidDispose = this._register(new Emitter<void>());
+	public readonly onDidDispose = this.#onDidDispose.event;
 
-    this.#isDisposed = true;
-    this.#onDidDispose.fire();
+	public get title(): string | undefined {
+		this.assertNotDisposed();
+		return this.#title;
+	}
 
-    this.#webview.dispose();
+	public set title(value: string | undefined) {
+		this.assertNotDisposed();
+		if (this.#title !== value) {
+			this.#title = value;
+			this.#proxy.$setWebviewViewTitle(this.#handle, value);
+		}
+	}
 
-    super.dispose();
-  }
+	public get description(): string | undefined {
+		this.assertNotDisposed();
+		return this.#description;
+	}
 
-  readonly #onDidChangeVisibility = this._register(new Emitter<void>());
+	public set description(value: string | undefined) {
+		this.assertNotDisposed();
+		if (this.#description !== value) {
+			this.#description = value;
+			this.#proxy.$setWebviewViewDescription(this.#handle, value);
+		}
+	}
 
-  public readonly onDidChangeVisibility = this.#onDidChangeVisibility.event;
+	public get visible(): boolean { return this.#isVisible; }
 
-  readonly #onDidDispose = this._register(new Emitter<void>());
+	public get webview(): vscode.Webview { return this.#webview; }
 
-  public readonly onDidDispose = this.#onDidDispose.event;
+	public get viewType(): string { return this.#viewType; }
 
-  public get title(): string | undefined {
-    this.assertNotDisposed();
-    return this.#title;
-  }
+	/* internal */ _setVisible(visible: boolean) {
+		if (visible === this.#isVisible || this.#isDisposed) {
+			return;
+		}
 
-  public set title(value: string | undefined) {
-    this.assertNotDisposed();
-    if (this.#title !== value) {
-      this.#title = value;
-      this.#proxy.$setWebviewViewTitle(this.#handle, value);
-    }
-  }
+		this.#isVisible = visible;
+		this.#onDidChangeVisibility.fire();
+	}
 
-  public get description(): string | undefined {
-    this.assertNotDisposed();
-    return this.#description;
-  }
+	public get badge(): vscode.ViewBadge | undefined {
+		this.assertNotDisposed();
+		return this.#badge;
+	}
 
-  public set description(value: string | undefined) {
-    this.assertNotDisposed();
-    if (this.#description !== value) {
-      this.#description = value;
-      this.#proxy.$setWebviewViewDescription(this.#handle, value);
-    }
-  }
+	public set badge(badge: vscode.ViewBadge | undefined) {
+		this.assertNotDisposed();
 
-  public get visible(): boolean {
-    return this.#isVisible;
-  }
+		if (badge?.value === this.#badge?.value &&
+			badge?.tooltip === this.#badge?.tooltip) {
+			return;
+		}
 
-  public get webview(): vscode.Webview {
-    return this.#webview;
-  }
+		this.#badge = ViewBadge.from(badge);
+		this.#proxy.$setWebviewViewBadge(this.#handle, badge);
+	}
 
-  public get viewType(): string {
-    return this.#viewType;
-  }
+	public show(preserveFocus?: boolean): void {
+		this.assertNotDisposed();
+		this.#proxy.$show(this.#handle, !!preserveFocus);
+	}
 
-  /* internal */ _setVisible(visible: boolean) {
-    if (visible === this.#isVisible || this.#isDisposed) {
-      return;
-    }
-
-    this.#isVisible = visible;
-    this.#onDidChangeVisibility.fire();
-  }
-
-  public get badge(): vscode.ViewBadge | undefined {
-    this.assertNotDisposed();
-    return this.#badge;
-  }
-
-  public set badge(badge: vscode.ViewBadge | undefined) {
-    this.assertNotDisposed();
-
-    if (badge?.value === this.#badge?.value && badge?.tooltip === this.#badge?.tooltip) {
-      return;
-    }
-
-    this.#badge = ViewBadge.from(badge);
-    this.#proxy.$setWebviewViewBadge(this.#handle, badge);
-  }
-
-  public show(preserveFocus?: boolean): void {
-    this.assertNotDisposed();
-    this.#proxy.$show(this.#handle, !!preserveFocus);
-  }
-
-  private assertNotDisposed() {
-    if (this.#isDisposed) {
-      throw new Error('Webview is disposed');
-    }
-  }
+	private assertNotDisposed() {
+		if (this.#isDisposed) {
+			throw new Error('Webview is disposed');
+		}
+	}
 }
 
 export class ExtHostWebviewViews implements extHostProtocol.ExtHostWebviewViewsShape {
-  private readonly _proxy: extHostProtocol.MainThreadWebviewViewsShape;
 
-  private readonly _viewProviders = new Map<
-    string,
-    {
-      readonly provider: vscode.WebviewViewProvider;
-      readonly extension: IExtensionDescription;
-    }
-  >();
+	private readonly _proxy: extHostProtocol.MainThreadWebviewViewsShape;
 
-  private readonly _webviewViews = new Map<extHostProtocol.WebviewHandle, ExtHostWebviewView>();
+	private readonly _viewProviders = new Map<string, {
+		readonly provider: vscode.WebviewViewProvider;
+		readonly extension: IExtensionDescription;
+	}>();
 
-  constructor(
-    mainContext: extHostProtocol.IMainContext,
-    private readonly _extHostWebview: ExtHostWebviews,
-  ) {
-    this._proxy = mainContext.getProxy(extHostProtocol.MainContext.MainThreadWebviewViews);
-  }
+	private readonly _webviewViews = new Map<extHostProtocol.WebviewHandle, ExtHostWebviewView>();
 
-  public registerWebviewViewProvider(
-    extension: IExtensionDescription,
-    viewType: string,
-    provider: vscode.WebviewViewProvider,
-    webviewOptions?: {
-      retainContextWhenHidden?: boolean;
-    },
-  ): vscode.Disposable {
-    if (this._viewProviders.has(viewType)) {
-      throw new Error(`View provider for '${viewType}' already registered`);
-    }
+	constructor(
+		mainContext: extHostProtocol.IMainContext,
+		private readonly _extHostWebview: ExtHostWebviews,
+	) {
+		this._proxy = mainContext.getProxy(extHostProtocol.MainContext.MainThreadWebviewViews);
+	}
 
-    this._viewProviders.set(viewType, { provider, extension });
-    this._proxy.$registerWebviewViewProvider(toExtensionData(extension), viewType, {
-      retainContextWhenHidden: webviewOptions?.retainContextWhenHidden,
-      serializeBuffersForPostMessage: shouldSerializeBuffersForPostMessage(extension),
-    });
+	public registerWebviewViewProvider(
+		extension: IExtensionDescription,
+		viewType: string,
+		provider: vscode.WebviewViewProvider,
+		webviewOptions?: {
+			retainContextWhenHidden?: boolean;
+		},
+	): vscode.Disposable {
+		if (this._viewProviders.has(viewType)) {
+			throw new Error(`View provider for '${viewType}' already registered`);
+		}
 
-    return new extHostTypes.Disposable(() => {
-      this._viewProviders.delete(viewType);
-      this._proxy.$unregisterWebviewViewProvider(viewType);
-    });
-  }
+		this._viewProviders.set(viewType, { provider, extension });
+		this._proxy.$registerWebviewViewProvider(toExtensionData(extension), viewType, {
+			retainContextWhenHidden: webviewOptions?.retainContextWhenHidden,
+			serializeBuffersForPostMessage: shouldSerializeBuffersForPostMessage(extension),
+		});
 
-  async $resolveWebviewView(
-    webviewHandle: string,
-    viewType: string,
-    title: string | undefined,
-    state: any,
-    cancellation: CancellationToken,
-  ): Promise<void> {
-    const entry = this._viewProviders.get(viewType);
-    if (!entry) {
-      throw new Error(`No view provider found for '${viewType}'`);
-    }
+		return new extHostTypes.Disposable(() => {
+			this._viewProviders.delete(viewType);
+			this._proxy.$unregisterWebviewViewProvider(viewType);
+		});
+	}
 
-    const { provider, extension } = entry;
+	async $resolveWebviewView(
+		webviewHandle: string,
+		viewType: string,
+		title: string | undefined,
+		state: any,
+		cancellation: CancellationToken,
+	): Promise<void> {
+		const entry = this._viewProviders.get(viewType);
+		if (!entry) {
+			throw new Error(`No view provider found for '${viewType}'`);
+		}
 
-    const webview = this._extHostWebview.createNewWebview(webviewHandle, {/* todo */}, extension);
-    const revivedView = new ExtHostWebviewView(
-      webviewHandle,
-      this._proxy,
-      viewType,
-      title,
-      webview,
-      true,
-    );
+		const { provider, extension } = entry;
 
-    this._webviewViews.set(webviewHandle, revivedView);
+		const webview = this._extHostWebview.createNewWebview(webviewHandle, { /* todo */ }, extension);
+		const revivedView = new ExtHostWebviewView(webviewHandle, this._proxy, viewType, title, webview, true);
 
-    await provider.resolveWebviewView(revivedView, { state }, cancellation);
-  }
+		this._webviewViews.set(webviewHandle, revivedView);
 
-  async $onDidChangeWebviewViewVisibility(webviewHandle: string, visible: boolean) {
-    const webviewView = this.getWebviewView(webviewHandle);
-    webviewView._setVisible(visible);
-  }
+		await provider.resolveWebviewView(revivedView, { state }, cancellation);
+	}
 
-  async $disposeWebviewView(webviewHandle: string) {
-    const webviewView = this.getWebviewView(webviewHandle);
-    this._webviewViews.delete(webviewHandle);
-    webviewView.dispose();
+	async $onDidChangeWebviewViewVisibility(
+		webviewHandle: string,
+		visible: boolean
+	) {
+		const webviewView = this.getWebviewView(webviewHandle);
+		webviewView._setVisible(visible);
+	}
 
-    this._extHostWebview.deleteWebview(webviewHandle);
-  }
+	async $disposeWebviewView(webviewHandle: string) {
+		const webviewView = this.getWebviewView(webviewHandle);
+		this._webviewViews.delete(webviewHandle);
+		webviewView.dispose();
 
-  private getWebviewView(handle: string): ExtHostWebviewView {
-    const entry = this._webviewViews.get(handle);
-    if (!entry) {
-      throw new Error('No webview found');
-    }
-    return entry;
-  }
+		this._extHostWebview.deleteWebview(webviewHandle);
+	}
+
+	private getWebviewView(handle: string): ExtHostWebviewView {
+		const entry = this._webviewViews.get(handle);
+		if (!entry) {
+			throw new Error('No webview found');
+		}
+		return entry;
+	}
 }

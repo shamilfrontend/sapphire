@@ -7,413 +7,363 @@ import * as interfaces from './interfaces';
 import ContentProvider from './contentProvider';
 
 interface IDocumentMergeConflictNavigationResults {
-  canNavigate: boolean;
-  conflict?: interfaces.IDocumentMergeConflict;
+	canNavigate: boolean;
+	conflict?: interfaces.IDocumentMergeConflict;
 }
 
 enum NavigationDirection {
-  Forwards,
-  Backwards,
+	Forwards,
+	Backwards
 }
 
 export default class CommandHandler implements vscode.Disposable {
-  private disposables: vscode.Disposable[] = [];
 
-  private tracker: interfaces.IDocumentMergeConflictTracker;
+	private disposables: vscode.Disposable[] = [];
+	private tracker: interfaces.IDocumentMergeConflictTracker;
 
-  constructor(trackerService: interfaces.IDocumentMergeConflictTrackerService) {
-    this.tracker = trackerService.createTracker('commands');
-  }
+	constructor(trackerService: interfaces.IDocumentMergeConflictTrackerService) {
+		this.tracker = trackerService.createTracker('commands');
+	}
 
-  begin() {
-    this.disposables.push(
-      this.registerTextEditorCommand('merge-conflict.accept.current', this.acceptCurrent),
-      this.registerTextEditorCommand('merge-conflict.accept.incoming', this.acceptIncoming),
-      this.registerTextEditorCommand('merge-conflict.accept.selection', this.acceptSelection),
-      this.registerTextEditorCommand('merge-conflict.accept.both', this.acceptBoth),
-      this.registerTextEditorCommand(
-        'merge-conflict.accept.all-current',
-        this.acceptAllCurrent,
-        this.acceptAllCurrentResources,
-      ),
-      this.registerTextEditorCommand(
-        'merge-conflict.accept.all-incoming',
-        this.acceptAllIncoming,
-        this.acceptAllIncomingResources,
-      ),
-      this.registerTextEditorCommand('merge-conflict.accept.all-both', this.acceptAllBoth),
-      this.registerTextEditorCommand('merge-conflict.next', this.navigateNext),
-      this.registerTextEditorCommand('merge-conflict.previous', this.navigatePrevious),
-      this.registerTextEditorCommand('merge-conflict.compare', this.compare),
-    );
-  }
+	begin() {
+		this.disposables.push(
+			this.registerTextEditorCommand('merge-conflict.accept.current', this.acceptCurrent),
+			this.registerTextEditorCommand('merge-conflict.accept.incoming', this.acceptIncoming),
+			this.registerTextEditorCommand('merge-conflict.accept.selection', this.acceptSelection),
+			this.registerTextEditorCommand('merge-conflict.accept.both', this.acceptBoth),
+			this.registerTextEditorCommand('merge-conflict.accept.all-current', this.acceptAllCurrent, this.acceptAllCurrentResources),
+			this.registerTextEditorCommand('merge-conflict.accept.all-incoming', this.acceptAllIncoming, this.acceptAllIncomingResources),
+			this.registerTextEditorCommand('merge-conflict.accept.all-both', this.acceptAllBoth),
+			this.registerTextEditorCommand('merge-conflict.next', this.navigateNext),
+			this.registerTextEditorCommand('merge-conflict.previous', this.navigatePrevious),
+			this.registerTextEditorCommand('merge-conflict.compare', this.compare)
+		);
+	}
 
-  private registerTextEditorCommand(
-    command: string,
-    cb: (editor: vscode.TextEditor, ...args: any[]) => Promise<void>,
-    resourceCB?: (uris: vscode.Uri[]) => Promise<void>,
-  ) {
-    return vscode.commands.registerCommand(command, (...args) => {
-      if (resourceCB && args.length && args.every((arg) => arg && arg.resourceUri)) {
-        return resourceCB.call(
-          this,
-          args.map((arg) => arg.resourceUri),
-        );
-      }
-      const editor = vscode.window.activeTextEditor;
-      return editor && cb.call(this, editor, ...args);
-    });
-  }
+	private registerTextEditorCommand(command: string, cb: (editor: vscode.TextEditor, ...args: any[]) => Promise<void>, resourceCB?: (uris: vscode.Uri[]) => Promise<void>) {
+		return vscode.commands.registerCommand(command, (...args) => {
+			if (resourceCB && args.length && args.every(arg => arg && arg.resourceUri)) {
+				return resourceCB.call(this, args.map(arg => arg.resourceUri));
+			}
+			const editor = vscode.window.activeTextEditor;
+			return editor && cb.call(this, editor, ...args);
+		});
+	}
 
-  acceptCurrent(editor: vscode.TextEditor, ...args: any[]): Promise<void> {
-    return this.accept(interfaces.CommitType.Current, editor, ...args);
-  }
+	acceptCurrent(editor: vscode.TextEditor, ...args: any[]): Promise<void> {
+		return this.accept(interfaces.CommitType.Current, editor, ...args);
+	}
 
-  acceptIncoming(editor: vscode.TextEditor, ...args: any[]): Promise<void> {
-    return this.accept(interfaces.CommitType.Incoming, editor, ...args);
-  }
+	acceptIncoming(editor: vscode.TextEditor, ...args: any[]): Promise<void> {
+		return this.accept(interfaces.CommitType.Incoming, editor, ...args);
+	}
 
-  acceptBoth(editor: vscode.TextEditor, ...args: any[]): Promise<void> {
-    return this.accept(interfaces.CommitType.Both, editor, ...args);
-  }
+	acceptBoth(editor: vscode.TextEditor, ...args: any[]): Promise<void> {
+		return this.accept(interfaces.CommitType.Both, editor, ...args);
+	}
 
-  acceptAllCurrent(editor: vscode.TextEditor): Promise<void> {
-    return this.acceptAll(interfaces.CommitType.Current, editor);
-  }
+	acceptAllCurrent(editor: vscode.TextEditor): Promise<void> {
+		return this.acceptAll(interfaces.CommitType.Current, editor);
+	}
 
-  acceptAllIncoming(editor: vscode.TextEditor): Promise<void> {
-    return this.acceptAll(interfaces.CommitType.Incoming, editor);
-  }
+	acceptAllIncoming(editor: vscode.TextEditor): Promise<void> {
+		return this.acceptAll(interfaces.CommitType.Incoming, editor);
+	}
 
-  acceptAllCurrentResources(resources: vscode.Uri[]): Promise<void> {
-    return this.acceptAllResources(interfaces.CommitType.Current, resources);
-  }
+	acceptAllCurrentResources(resources: vscode.Uri[]): Promise<void> {
+		return this.acceptAllResources(interfaces.CommitType.Current, resources);
+	}
 
-  acceptAllIncomingResources(resources: vscode.Uri[]): Promise<void> {
-    return this.acceptAllResources(interfaces.CommitType.Incoming, resources);
-  }
+	acceptAllIncomingResources(resources: vscode.Uri[]): Promise<void> {
+		return this.acceptAllResources(interfaces.CommitType.Incoming, resources);
+	}
 
-  acceptAllBoth(editor: vscode.TextEditor): Promise<void> {
-    return this.acceptAll(interfaces.CommitType.Both, editor);
-  }
+	acceptAllBoth(editor: vscode.TextEditor): Promise<void> {
+		return this.acceptAll(interfaces.CommitType.Both, editor);
+	}
 
-  async compare(editor: vscode.TextEditor, conflict: interfaces.IDocumentMergeConflict | null) {
-    // No conflict, command executed from command palette
-    if (!conflict) {
-      conflict = await this.findConflictContainingSelection(editor);
+	async compare(editor: vscode.TextEditor, conflict: interfaces.IDocumentMergeConflict | null) {
 
-      // Still failed to find conflict, warn the user and exit
-      if (!conflict) {
-        vscode.window.showWarningMessage(
-          vscode.l10n.t('Editor cursor is not within a merge conflict'),
-        );
-        return;
-      }
-    }
+		// No conflict, command executed from command palette
+		if (!conflict) {
+			conflict = await this.findConflictContainingSelection(editor);
 
-    const conflicts = await this.tracker.getConflicts(editor.document);
+			// Still failed to find conflict, warn the user and exit
+			if (!conflict) {
+				vscode.window.showWarningMessage(vscode.l10n.t("Editor cursor is not within a merge conflict"));
+				return;
+			}
+		}
 
-    // Still failed to find conflict, warn the user and exit
-    if (!conflicts) {
-      vscode.window.showWarningMessage(
-        vscode.l10n.t('Editor cursor is not within a merge conflict'),
-      );
-      return;
-    }
+		const conflicts = await this.tracker.getConflicts(editor.document);
 
-    const scheme = editor.document.uri.scheme;
-    let range = conflict.current.content;
-    const leftRanges = conflicts.map((conflict) => [conflict.current.content, conflict.range]);
-    const rightRanges = conflicts.map((conflict) => [conflict.incoming.content, conflict.range]);
+		// Still failed to find conflict, warn the user and exit
+		if (!conflicts) {
+			vscode.window.showWarningMessage(vscode.l10n.t("Editor cursor is not within a merge conflict"));
+			return;
+		}
 
-    const leftUri = editor.document.uri.with({
-      scheme: ContentProvider.scheme,
-      query: JSON.stringify({ scheme, range, ranges: leftRanges }),
-    });
+		const scheme = editor.document.uri.scheme;
+		let range = conflict.current.content;
+		const leftRanges = conflicts.map(conflict => [conflict.current.content, conflict.range]);
+		const rightRanges = conflicts.map(conflict => [conflict.incoming.content, conflict.range]);
 
-    range = conflict.incoming.content;
-    const rightUri = leftUri.with({ query: JSON.stringify({ scheme, ranges: rightRanges }) });
+		const leftUri = editor.document.uri.with({
+			scheme: ContentProvider.scheme,
+			query: JSON.stringify({ scheme, range: range, ranges: leftRanges })
+		});
 
-    let mergeConflictLineOffsets = 0;
-    for (const nextconflict of conflicts) {
-      if (nextconflict.range.isEqual(conflict.range)) {
-        break;
-      } else {
-        mergeConflictLineOffsets +=
-          nextconflict.range.end.line -
-          nextconflict.range.start.line -
-          (nextconflict.incoming.content.end.line - nextconflict.incoming.content.start.line);
-      }
-    }
-    const selection = new vscode.Range(
-      conflict.range.start.line - mergeConflictLineOffsets,
-      conflict.range.start.character,
-      conflict.range.start.line - mergeConflictLineOffsets,
-      conflict.range.start.character,
-    );
 
-    const docPath = editor.document.uri.path;
-    const fileName = docPath.substring(docPath.lastIndexOf('/') + 1); // avoid NodeJS path to keep browser webpack small
-    const title = vscode.l10n.t('{0}: Current Changes ↔ Incoming Changes', fileName);
-    const mergeConflictConfig = vscode.workspace.getConfiguration('merge-conflict');
-    const openToTheSide = mergeConflictConfig.get<string>('diffViewPosition');
-    const opts: vscode.TextDocumentShowOptions = {
-      viewColumn: openToTheSide === 'Beside' ? vscode.ViewColumn.Beside : vscode.ViewColumn.Active,
-      selection,
-    };
+		range = conflict.incoming.content;
+		const rightUri = leftUri.with({ query: JSON.stringify({ scheme, ranges: rightRanges }) });
 
-    if (openToTheSide === 'Below') {
-      await vscode.commands.executeCommand('workbench.action.newGroupBelow');
-    }
+		let mergeConflictLineOffsets = 0;
+		for (const nextconflict of conflicts) {
+			if (nextconflict.range.isEqual(conflict.range)) {
+				break;
+			} else {
+				mergeConflictLineOffsets += (nextconflict.range.end.line - nextconflict.range.start.line) - (nextconflict.incoming.content.end.line - nextconflict.incoming.content.start.line);
+			}
+		}
+		const selection = new vscode.Range(
+			conflict.range.start.line - mergeConflictLineOffsets, conflict.range.start.character,
+			conflict.range.start.line - mergeConflictLineOffsets, conflict.range.start.character
+		);
 
-    await vscode.commands.executeCommand('vscode.diff', leftUri, rightUri, title, opts);
-  }
+		const docPath = editor.document.uri.path;
+		const fileName = docPath.substring(docPath.lastIndexOf('/') + 1); // avoid NodeJS path to keep browser webpack small
+		const title = vscode.l10n.t("{0}: Current Changes ↔ Incoming Changes", fileName);
+		const mergeConflictConfig = vscode.workspace.getConfiguration('merge-conflict');
+		const openToTheSide = mergeConflictConfig.get<string>('diffViewPosition');
+		const opts: vscode.TextDocumentShowOptions = {
+			viewColumn: openToTheSide === 'Beside' ? vscode.ViewColumn.Beside : vscode.ViewColumn.Active,
+			selection
+		};
 
-  navigateNext(editor: vscode.TextEditor): Promise<void> {
-    return this.navigate(editor, NavigationDirection.Forwards);
-  }
+		if (openToTheSide === 'Below') {
+			await vscode.commands.executeCommand('workbench.action.newGroupBelow');
+		}
 
-  navigatePrevious(editor: vscode.TextEditor): Promise<void> {
-    return this.navigate(editor, NavigationDirection.Backwards);
-  }
+		await vscode.commands.executeCommand('vscode.diff', leftUri, rightUri, title, opts);
+	}
 
-  async acceptSelection(editor: vscode.TextEditor): Promise<void> {
-    const conflict = await this.findConflictContainingSelection(editor);
+	navigateNext(editor: vscode.TextEditor): Promise<void> {
+		return this.navigate(editor, NavigationDirection.Forwards);
+	}
 
-    if (!conflict) {
-      vscode.window.showWarningMessage(
-        vscode.l10n.t('Editor cursor is not within a merge conflict'),
-      );
-      return;
-    }
+	navigatePrevious(editor: vscode.TextEditor): Promise<void> {
+		return this.navigate(editor, NavigationDirection.Backwards);
+	}
 
-    let typeToAccept: interfaces.CommitType;
-    let tokenAfterCurrentBlock: vscode.Range = conflict.splitter;
+	async acceptSelection(editor: vscode.TextEditor): Promise<void> {
+		const conflict = await this.findConflictContainingSelection(editor);
 
-    if (conflict.commonAncestors.length > 0) {
-      tokenAfterCurrentBlock = conflict.commonAncestors[0].header;
-    }
+		if (!conflict) {
+			vscode.window.showWarningMessage(vscode.l10n.t("Editor cursor is not within a merge conflict"));
+			return;
+		}
 
-    // Figure out if the cursor is in current or incoming, we do this by seeing if
-    // the active position is before or after the range of the splitter or common
-    // ancestors marker. We can use this trick as the previous check in
-    // findConflictByActiveSelection will ensure it's within the conflict range, so
-    // we don't falsely identify "current" or "incoming" if outside of a conflict range.
-    if (editor.selection.active.isBefore(tokenAfterCurrentBlock.start)) {
-      typeToAccept = interfaces.CommitType.Current;
-    } else if (editor.selection.active.isAfter(conflict.splitter.end)) {
-      typeToAccept = interfaces.CommitType.Incoming;
-    } else if (editor.selection.active.isBefore(conflict.splitter.start)) {
-      vscode.window.showWarningMessage(
-        vscode.l10n.t(
-          'Editor cursor is within the common ancestors block, please move it to either the "current" or "incoming" block',
-        ),
-      );
-      return;
-    } else {
-      vscode.window.showWarningMessage(
-        vscode.l10n.t(
-          'Editor cursor is within the merge conflict splitter, please move it to either the "current" or "incoming" block',
-        ),
-      );
-      return;
-    }
+		let typeToAccept: interfaces.CommitType;
+		let tokenAfterCurrentBlock: vscode.Range = conflict.splitter;
 
-    this.tracker.forget(editor.document);
-    conflict.commitEdit(typeToAccept, editor);
-  }
+		if (conflict.commonAncestors.length > 0) {
+			tokenAfterCurrentBlock = conflict.commonAncestors[0].header;
+		}
 
-  dispose() {
-    this.disposables.forEach((disposable) => disposable.dispose());
-    this.disposables = [];
-  }
+		// Figure out if the cursor is in current or incoming, we do this by seeing if
+		// the active position is before or after the range of the splitter or common
+		// ancestors marker. We can use this trick as the previous check in
+		// findConflictByActiveSelection will ensure it's within the conflict range, so
+		// we don't falsely identify "current" or "incoming" if outside of a conflict range.
+		if (editor.selection.active.isBefore(tokenAfterCurrentBlock.start)) {
+			typeToAccept = interfaces.CommitType.Current;
+		}
+		else if (editor.selection.active.isAfter(conflict.splitter.end)) {
+			typeToAccept = interfaces.CommitType.Incoming;
+		}
+		else if (editor.selection.active.isBefore(conflict.splitter.start)) {
+			vscode.window.showWarningMessage(vscode.l10n.t('Editor cursor is within the common ancestors block, please move it to either the "current" or "incoming" block'));
+			return;
+		}
+		else {
+			vscode.window.showWarningMessage(vscode.l10n.t('Editor cursor is within the merge conflict splitter, please move it to either the "current" or "incoming" block'));
+			return;
+		}
 
-  private async navigate(editor: vscode.TextEditor, direction: NavigationDirection): Promise<void> {
-    const navigationResult = await this.findConflictForNavigation(editor, direction);
+		this.tracker.forget(editor.document);
+		conflict.commitEdit(typeToAccept, editor);
+	}
 
-    if (!navigationResult) {
-      // Check for autoNavigateNextConflict, if it's enabled(which indicating no conflict remain), then do not show warning
-      const mergeConflictConfig = vscode.workspace.getConfiguration('merge-conflict');
-      if (mergeConflictConfig.get<boolean>('autoNavigateNextConflict.enabled')) {
-        return;
-      }
-      vscode.window.showWarningMessage(vscode.l10n.t('No merge conflicts found in this file'));
-      return;
-    }
-    if (!navigationResult.canNavigate) {
-      vscode.window.showWarningMessage(vscode.l10n.t('No other merge conflicts within this file'));
-      return;
-    }
-    if (!navigationResult.conflict) {
-      // TODO: Show error message?
-      return;
-    }
+	dispose() {
+		this.disposables.forEach(disposable => disposable.dispose());
+		this.disposables = [];
+	}
 
-    // Move the selection to the first line of the conflict
-    editor.selection = new vscode.Selection(
-      navigationResult.conflict.range.start,
-      navigationResult.conflict.range.start,
-    );
-    editor.revealRange(navigationResult.conflict.range, vscode.TextEditorRevealType.Default);
-  }
+	private async navigate(editor: vscode.TextEditor, direction: NavigationDirection): Promise<void> {
+		const navigationResult = await this.findConflictForNavigation(editor, direction);
 
-  private async accept(
-    type: interfaces.CommitType,
-    editor: vscode.TextEditor,
-    ...args: any[]
-  ): Promise<void> {
-    let conflict: interfaces.IDocumentMergeConflict | null;
+		if (!navigationResult) {
+			// Check for autoNavigateNextConflict, if it's enabled(which indicating no conflict remain), then do not show warning
+			const mergeConflictConfig = vscode.workspace.getConfiguration('merge-conflict');
+			if (mergeConflictConfig.get<boolean>('autoNavigateNextConflict.enabled')) {
+				return;
+			}
+			vscode.window.showWarningMessage(vscode.l10n.t("No merge conflicts found in this file"));
+			return;
+		}
+		else if (!navigationResult.canNavigate) {
+			vscode.window.showWarningMessage(vscode.l10n.t("No other merge conflicts within this file"));
+			return;
+		}
+		else if (!navigationResult.conflict) {
+			// TODO: Show error message?
+			return;
+		}
 
-    // If launched with known context, take the conflict from that
-    if (args[0] === 'known-conflict') {
-      conflict = args[1];
-    } else {
-      // Attempt to find a conflict that matches the current cursor position
-      conflict = await this.findConflictContainingSelection(editor);
-    }
+		// Move the selection to the first line of the conflict
+		editor.selection = new vscode.Selection(navigationResult.conflict.range.start, navigationResult.conflict.range.start);
+		editor.revealRange(navigationResult.conflict.range, vscode.TextEditorRevealType.Default);
+	}
 
-    if (!conflict) {
-      vscode.window.showWarningMessage(
-        vscode.l10n.t('Editor cursor is not within a merge conflict'),
-      );
-      return;
-    }
+	private async accept(type: interfaces.CommitType, editor: vscode.TextEditor, ...args: any[]): Promise<void> {
 
-    // Tracker can forget as we know we are going to do an edit
-    this.tracker.forget(editor.document);
-    conflict.commitEdit(type, editor);
+		let conflict: interfaces.IDocumentMergeConflict | null;
 
-    // navigate to the next merge conflict
-    const mergeConflictConfig = vscode.workspace.getConfiguration('merge-conflict');
-    if (mergeConflictConfig.get<boolean>('autoNavigateNextConflict.enabled')) {
-      this.navigateNext(editor);
-    }
-  }
+		// If launched with known context, take the conflict from that
+		if (args[0] === 'known-conflict') {
+			conflict = args[1];
+		}
+		else {
+			// Attempt to find a conflict that matches the current cursor position
+			conflict = await this.findConflictContainingSelection(editor);
+		}
 
-  private async acceptAll(type: interfaces.CommitType, editor: vscode.TextEditor): Promise<void> {
-    const conflicts = await this.tracker.getConflicts(editor.document);
+		if (!conflict) {
+			vscode.window.showWarningMessage(vscode.l10n.t("Editor cursor is not within a merge conflict"));
+			return;
+		}
 
-    if (!conflicts || conflicts.length === 0) {
-      vscode.window.showWarningMessage(vscode.l10n.t('No merge conflicts found in this file'));
-      return;
-    }
+		// Tracker can forget as we know we are going to do an edit
+		this.tracker.forget(editor.document);
+		conflict.commitEdit(type, editor);
 
-    // For get the current state of the document, as we know we are doing to do a large edit
-    this.tracker.forget(editor.document);
+		// navigate to the next merge conflict
+		const mergeConflictConfig = vscode.workspace.getConfiguration('merge-conflict');
+		if (mergeConflictConfig.get<boolean>('autoNavigateNextConflict.enabled')) {
+			this.navigateNext(editor);
+		}
 
-    // Apply all changes as one edit
-    await editor.edit((edit) =>
-      conflicts.forEach((conflict) => {
-        conflict.applyEdit(type, editor.document, edit);
-      }),
-    );
-  }
+	}
 
-  private async acceptAllResources(
-    type: interfaces.CommitType,
-    resources: vscode.Uri[],
-  ): Promise<void> {
-    const documents = await Promise.all(
-      resources.map((resource) => vscode.workspace.openTextDocument(resource)),
-    );
-    const edit = new vscode.WorkspaceEdit();
-    for (const document of documents) {
-      const conflicts = await this.tracker.getConflicts(document);
+	private async acceptAll(type: interfaces.CommitType, editor: vscode.TextEditor): Promise<void> {
+		const conflicts = await this.tracker.getConflicts(editor.document);
 
-      if (!conflicts || conflicts.length === 0) {
-        continue;
-      }
+		if (!conflicts || conflicts.length === 0) {
+			vscode.window.showWarningMessage(vscode.l10n.t("No merge conflicts found in this file"));
+			return;
+		}
 
-      // For get the current state of the document, as we know we are doing to do a large edit
-      this.tracker.forget(document);
+		// For get the current state of the document, as we know we are doing to do a large edit
+		this.tracker.forget(editor.document);
 
-      // Apply all changes as one edit
-      conflicts.forEach((conflict) => {
-        conflict.applyEdit(type, document, {
-          replace: (range, newText) => edit.replace(document.uri, range, newText),
-        });
-      });
-    }
-    vscode.workspace.applyEdit(edit);
-  }
+		// Apply all changes as one edit
+		await editor.edit((edit) => conflicts.forEach(conflict => {
+			conflict.applyEdit(type, editor.document, edit);
+		}));
+	}
 
-  private async findConflictContainingSelection(
-    editor: vscode.TextEditor,
-    conflicts?: interfaces.IDocumentMergeConflict[],
-  ): Promise<interfaces.IDocumentMergeConflict | null> {
-    if (!conflicts) {
-      conflicts = await this.tracker.getConflicts(editor.document);
-    }
+	private async acceptAllResources(type: interfaces.CommitType, resources: vscode.Uri[]): Promise<void> {
+		const documents = await Promise.all(resources.map(resource => vscode.workspace.openTextDocument(resource)));
+		const edit = new vscode.WorkspaceEdit();
+		for (const document of documents) {
+			const conflicts = await this.tracker.getConflicts(document);
 
-    if (!conflicts || conflicts.length === 0) {
-      return null;
-    }
+			if (!conflicts || conflicts.length === 0) {
+				continue;
+			}
 
-    for (const conflict of conflicts) {
-      if (conflict.range.contains(editor.selection.active)) {
-        return conflict;
-      }
-    }
+			// For get the current state of the document, as we know we are doing to do a large edit
+			this.tracker.forget(document);
 
-    return null;
-  }
+			// Apply all changes as one edit
+			conflicts.forEach(conflict => {
+				conflict.applyEdit(type, document, { replace: (range, newText) => edit.replace(document.uri, range, newText) });
+			});
+		}
+		vscode.workspace.applyEdit(edit);
+	}
 
-  private async findConflictForNavigation(
-    editor: vscode.TextEditor,
-    direction: NavigationDirection,
-    conflicts?: interfaces.IDocumentMergeConflict[],
-  ): Promise<IDocumentMergeConflictNavigationResults | null> {
-    if (!conflicts) {
-      conflicts = await this.tracker.getConflicts(editor.document);
-    }
+	private async findConflictContainingSelection(editor: vscode.TextEditor, conflicts?: interfaces.IDocumentMergeConflict[]): Promise<interfaces.IDocumentMergeConflict | null> {
 
-    if (!conflicts || conflicts.length === 0) {
-      return null;
-    }
+		if (!conflicts) {
+			conflicts = await this.tracker.getConflicts(editor.document);
+		}
 
-    const selection = editor.selection.active;
-    if (conflicts.length === 1) {
-      if (conflicts[0].range.contains(selection)) {
-        return {
-          canNavigate: false,
-        };
-      }
+		if (!conflicts || conflicts.length === 0) {
+			return null;
+		}
 
-      return {
-        canNavigate: true,
-        conflict: conflicts[0],
-      };
-    }
+		for (const conflict of conflicts) {
+			if (conflict.range.contains(editor.selection.active)) {
+				return conflict;
+			}
+		}
 
-    let predicate: (_conflict: any) => boolean;
-    let fallback: () => interfaces.IDocumentMergeConflict;
-    let scanOrder: interfaces.IDocumentMergeConflict[];
+		return null;
+	}
 
-    if (direction === NavigationDirection.Forwards) {
-      predicate = (conflict) => selection.isBefore(conflict.range.start);
-      fallback = () => conflicts![0];
-      scanOrder = conflicts;
-    } else if (direction === NavigationDirection.Backwards) {
-      predicate = (conflict) => selection.isAfter(conflict.range.start);
-      fallback = () => conflicts![conflicts!.length - 1];
-      scanOrder = conflicts.slice().reverse();
-    } else {
-      throw new Error(`Unsupported direction ${direction}`);
-    }
+	private async findConflictForNavigation(editor: vscode.TextEditor, direction: NavigationDirection, conflicts?: interfaces.IDocumentMergeConflict[]): Promise<IDocumentMergeConflictNavigationResults | null> {
+		if (!conflicts) {
+			conflicts = await this.tracker.getConflicts(editor.document);
+		}
 
-    for (const conflict of scanOrder) {
-      if (predicate(conflict) && !conflict.range.contains(selection)) {
-        return {
-          canNavigate: true,
-          conflict,
-        };
-      }
-    }
+		if (!conflicts || conflicts.length === 0) {
+			return null;
+		}
 
-    // Went all the way to the end, return the head
-    return {
-      canNavigate: true,
-      conflict: fallback(),
-    };
-  }
+		const selection = editor.selection.active;
+		if (conflicts.length === 1) {
+			if (conflicts[0].range.contains(selection)) {
+				return {
+					canNavigate: false
+				};
+			}
+
+			return {
+				canNavigate: true,
+				conflict: conflicts[0]
+			};
+		}
+
+		let predicate: (_conflict: any) => boolean;
+		let fallback: () => interfaces.IDocumentMergeConflict;
+		let scanOrder: interfaces.IDocumentMergeConflict[];
+
+		if (direction === NavigationDirection.Forwards) {
+			predicate = (conflict) => selection.isBefore(conflict.range.start);
+			fallback = () => conflicts![0];
+			scanOrder = conflicts;
+		} else if (direction === NavigationDirection.Backwards) {
+			predicate = (conflict) => selection.isAfter(conflict.range.start);
+			fallback = () => conflicts![conflicts!.length - 1];
+			scanOrder = conflicts.slice().reverse();
+		} else {
+			throw new Error(`Unsupported direction ${direction}`);
+		}
+
+		for (const conflict of scanOrder) {
+			if (predicate(conflict) && !conflict.range.contains(selection)) {
+				return {
+					canNavigate: true,
+					conflict: conflict
+				};
+			}
+		}
+
+		// Went all the way to the end, return the head
+		return {
+			canNavigate: true,
+			conflict: fallback()
+		};
+	}
 }

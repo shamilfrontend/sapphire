@@ -18,138 +18,115 @@ import { IPathService } from '../../path/common/pathService.js';
 import { UntitledTextEditorInput } from './untitledTextEditorInput.js';
 import { IWorkbenchContribution } from '../../../common/contributions.js';
 import { IWorkingCopyIdentifier, NO_TYPE_ID } from '../../workingCopy/common/workingCopy.js';
-import {
-  IWorkingCopyEditorHandler,
-  IWorkingCopyEditorService,
-} from '../../workingCopy/common/workingCopyEditorService.js';
+import { IWorkingCopyEditorHandler, IWorkingCopyEditorService } from '../../workingCopy/common/workingCopyEditorService.js';
 import { IUntitledTextEditorService } from './untitledTextEditorService.js';
 
 interface ISerializedUntitledTextEditorInput {
-  readonly resourceJSON: UriComponents;
-  readonly modeId: string | undefined; // should be `languageId` but is kept for backwards compatibility
-  readonly encoding: string | undefined;
+	readonly resourceJSON: UriComponents;
+	readonly modeId: string | undefined; // should be `languageId` but is kept for backwards compatibility
+	readonly encoding: string | undefined;
 }
 
 export class UntitledTextEditorInputSerializer implements IEditorSerializer {
-  constructor(
-    @IFilesConfigurationService
-    private readonly filesConfigurationService: IFilesConfigurationService,
-    @IWorkbenchEnvironmentService private readonly environmentService: IWorkbenchEnvironmentService,
-    @IPathService private readonly pathService: IPathService,
-  ) {}
 
-  canSerialize(editorInput: EditorInput): boolean {
-    return this.filesConfigurationService.isHotExitEnabled && !editorInput.isDisposed();
-  }
+	constructor(
+		@IFilesConfigurationService private readonly filesConfigurationService: IFilesConfigurationService,
+		@IWorkbenchEnvironmentService private readonly environmentService: IWorkbenchEnvironmentService,
+		@IPathService private readonly pathService: IPathService
+	) { }
 
-  serialize(editorInput: EditorInput): string | undefined {
-    if (!this.canSerialize(editorInput)) {
-      return undefined;
-    }
+	canSerialize(editorInput: EditorInput): boolean {
+		return this.filesConfigurationService.isHotExitEnabled && !editorInput.isDisposed();
+	}
 
-    const untitledTextEditorInput = editorInput as UntitledTextEditorInput;
+	serialize(editorInput: EditorInput): string | undefined {
+		if (!this.canSerialize(editorInput)) {
+			return undefined;
+		}
 
-    let resource = untitledTextEditorInput.resource;
-    if (untitledTextEditorInput.hasAssociatedFilePath) {
-      resource = toLocalResource(
-        resource,
-        this.environmentService.remoteAuthority,
-        this.pathService.defaultUriScheme,
-      ); // untitled with associated file path use the local schema
-    }
+		const untitledTextEditorInput = editorInput as UntitledTextEditorInput;
 
-    // Language: only remember language if it is either specific (not text)
-    // or if the language was explicitly set by the user. We want to preserve
-    // this information across restarts and not set the language unless
-    // this is the case.
-    let languageId: string | undefined;
-    const languageIdCandidate = untitledTextEditorInput.getLanguageId();
-    if (languageIdCandidate !== PLAINTEXT_LANGUAGE_ID) {
-      languageId = languageIdCandidate;
-    } else if (untitledTextEditorInput.hasLanguageSetExplicitly) {
-      languageId = languageIdCandidate;
-    }
+		let resource = untitledTextEditorInput.resource;
+		if (untitledTextEditorInput.hasAssociatedFilePath) {
+			resource = toLocalResource(resource, this.environmentService.remoteAuthority, this.pathService.defaultUriScheme); // untitled with associated file path use the local schema
+		}
 
-    const serialized: ISerializedUntitledTextEditorInput = {
-      resourceJSON: resource.toJSON(),
-      modeId: languageId,
-      encoding: untitledTextEditorInput.getEncoding(),
-    };
+		// Language: only remember language if it is either specific (not text)
+		// or if the language was explicitly set by the user. We want to preserve
+		// this information across restarts and not set the language unless
+		// this is the case.
+		let languageId: string | undefined;
+		const languageIdCandidate = untitledTextEditorInput.getLanguageId();
+		if (languageIdCandidate !== PLAINTEXT_LANGUAGE_ID) {
+			languageId = languageIdCandidate;
+		} else if (untitledTextEditorInput.hasLanguageSetExplicitly) {
+			languageId = languageIdCandidate;
+		}
 
-    return JSON.stringify(serialized);
-  }
+		const serialized: ISerializedUntitledTextEditorInput = {
+			resourceJSON: resource.toJSON(),
+			modeId: languageId,
+			encoding: untitledTextEditorInput.getEncoding()
+		};
 
-  deserialize(
-    instantiationService: IInstantiationService,
-    serializedEditorInput: string,
-  ): UntitledTextEditorInput {
-    return instantiationService.invokeFunction((accessor) => {
-      const deserialized: ISerializedUntitledTextEditorInput = JSON.parse(serializedEditorInput);
-      const resource = URI.revive(deserialized.resourceJSON);
-      const languageId = deserialized.modeId;
-      const encoding = deserialized.encoding;
+		return JSON.stringify(serialized);
+	}
 
-      return accessor.get(ITextEditorService).createTextEditor({
-        resource,
-        languageId,
-        encoding,
-        forceUntitled: true,
-      }) as UntitledTextEditorInput;
-    });
-  }
+	deserialize(instantiationService: IInstantiationService, serializedEditorInput: string): UntitledTextEditorInput {
+		return instantiationService.invokeFunction(accessor => {
+			const deserialized: ISerializedUntitledTextEditorInput = JSON.parse(serializedEditorInput);
+			const resource = URI.revive(deserialized.resourceJSON);
+			const languageId = deserialized.modeId;
+			const encoding = deserialized.encoding;
+
+			return accessor.get(ITextEditorService).createTextEditor({ resource, languageId, encoding, forceUntitled: true }) as UntitledTextEditorInput;
+		});
+	}
 }
 
-export class UntitledTextEditorWorkingCopyEditorHandler
-  extends Disposable
-  implements IWorkbenchContribution, IWorkingCopyEditorHandler
-{
-  static readonly ID = 'workbench.contrib.untitledTextEditorWorkingCopyEditorHandler';
+export class UntitledTextEditorWorkingCopyEditorHandler extends Disposable implements IWorkbenchContribution, IWorkingCopyEditorHandler {
 
-  constructor(
-    @IWorkingCopyEditorService workingCopyEditorService: IWorkingCopyEditorService,
-    @IWorkbenchEnvironmentService private readonly environmentService: IWorkbenchEnvironmentService,
-    @IPathService private readonly pathService: IPathService,
-    @ITextEditorService private readonly textEditorService: ITextEditorService,
-    @IUntitledTextEditorService
-    private readonly untitledTextEditorService: IUntitledTextEditorService,
-  ) {
-    super();
+	static readonly ID = 'workbench.contrib.untitledTextEditorWorkingCopyEditorHandler';
 
-    this._register(workingCopyEditorService.registerHandler(this));
-  }
+	constructor(
+		@IWorkingCopyEditorService workingCopyEditorService: IWorkingCopyEditorService,
+		@IWorkbenchEnvironmentService private readonly environmentService: IWorkbenchEnvironmentService,
+		@IPathService private readonly pathService: IPathService,
+		@ITextEditorService private readonly textEditorService: ITextEditorService,
+		@IUntitledTextEditorService private readonly untitledTextEditorService: IUntitledTextEditorService
+	) {
+		super();
 
-  handles(workingCopy: IWorkingCopyIdentifier): boolean {
-    return workingCopy.resource.scheme === Schemas.untitled && workingCopy.typeId === NO_TYPE_ID;
-  }
+		this._register(workingCopyEditorService.registerHandler(this));
+	}
 
-  isOpen(workingCopy: IWorkingCopyIdentifier, editor: EditorInput): boolean {
-    if (!this.handles(workingCopy)) {
-      return false;
-    }
+	handles(workingCopy: IWorkingCopyIdentifier): boolean {
+		return workingCopy.resource.scheme === Schemas.untitled && workingCopy.typeId === NO_TYPE_ID;
+	}
 
-    return (
-      editor instanceof UntitledTextEditorInput && isEqual(workingCopy.resource, editor.resource)
-    );
-  }
+	isOpen(workingCopy: IWorkingCopyIdentifier, editor: EditorInput): boolean {
+		if (!this.handles(workingCopy)) {
+			return false;
+		}
 
-  createEditor(workingCopy: IWorkingCopyIdentifier): EditorInput {
-    let editorInputResource: URI;
+		// Also match editors that are not UntitledTextEditorInput but share the
+		// same untitled resource (e.g. a text-based custom editor that wraps the
+		// same underlying text model). Without this, the backup restorer would
+		// create a duplicate UntitledTextEditorInput alongside the custom editor.
+		return isEqual(workingCopy.resource, editor.resource);
+	}
 
-    // If the untitled has an associated resource,
-    // ensure to restore the local resource it had
-    if (this.untitledTextEditorService.isUntitledWithAssociatedResource(workingCopy.resource)) {
-      editorInputResource = toLocalResource(
-        workingCopy.resource,
-        this.environmentService.remoteAuthority,
-        this.pathService.defaultUriScheme,
-      );
-    } else {
-      editorInputResource = workingCopy.resource;
-    }
+	createEditor(workingCopy: IWorkingCopyIdentifier): EditorInput {
+		let editorInputResource: URI;
 
-    return this.textEditorService.createTextEditor({
-      resource: editorInputResource,
-      forceUntitled: true,
-    });
-  }
+		// If the untitled has an associated resource,
+		// ensure to restore the local resource it had
+		if (this.untitledTextEditorService.isUntitledWithAssociatedResource(workingCopy.resource)) {
+			editorInputResource = toLocalResource(workingCopy.resource, this.environmentService.remoteAuthority, this.pathService.defaultUriScheme);
+		} else {
+			editorInputResource = workingCopy.resource;
+		}
+
+		return this.textEditorService.createTextEditor({ resource: editorInputResource, forceUntitled: true });
+	}
 }

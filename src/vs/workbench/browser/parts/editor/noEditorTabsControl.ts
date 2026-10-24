@@ -11,76 +11,84 @@ import { IEditorTitleControlDimensions } from './editorTitleControl.js';
 import { IToolbarActions } from '../../../common/editor.js';
 
 export class NoEditorTabsControl extends EditorTabsControl {
-  private activeEditor: EditorInput | null = null;
+	private activeEditor: EditorInput | null = null;
 
-  protected prepareEditorActions(editorActions: IToolbarActions): IToolbarActions {
-    return {
-      primary: [],
-      secondary: [],
-    };
-  }
+	protected prepareEditorActions(editorActions: IToolbarActions): IToolbarActions {
+		return {
+			primary: [],
+			secondary: []
+		};
+	}
 
-  openEditor(editor: EditorInput): boolean {
-    return this.handleOpenedEditors();
-  }
+	protected override prepareEditorLayoutActions(): IToolbarActions {
+		return {
+			primary: [],
+			secondary: []
+		};
+	}
 
-  openEditors(editors: EditorInput[]): boolean {
-    return this.handleOpenedEditors();
-  }
+	openEditor(editor: EditorInput): boolean {
+		return this.handleOpenedEditors();
+	}
 
-  private handleOpenedEditors(): boolean {
-    const didChange = this.activeEditorChanged();
-    this.activeEditor = this.tabsModel.activeEditor;
-    return didChange;
-  }
+	openEditors(editors: EditorInput[]): boolean {
+		return this.handleOpenedEditors();
+	}
 
-  private activeEditorChanged(): boolean {
-    if (
-      (!this.activeEditor && this.tabsModel.activeEditor) || // active editor changed from null => editor
-      (this.activeEditor && !this.tabsModel.activeEditor) || // active editor changed from editor => null
-      !this.activeEditor ||
-      !this.tabsModel.isActive(this.activeEditor) // active editor changed from editorA => editorB
-    ) {
-      return true;
-    }
-    return false;
-  }
+	private handleOpenedEditors(): boolean {
+		const didChange = this.activeEditorChanged();
+		this.activeEditor = this.tabsModel.activeEditor;
+		return didChange;
+	}
 
-  beforeCloseEditor(editor: EditorInput): void {}
+	private activeEditorChanged(): boolean {
+		if (
+			!this.activeEditor && this.tabsModel.activeEditor || 				// active editor changed from null => editor
+			this.activeEditor && !this.tabsModel.activeEditor || 				// active editor changed from editor => null
+			(!this.activeEditor || !this.tabsModel.isActive(this.activeEditor))	// active editor changed from editorA => editorB
+		) {
+			return true;
+		}
+		return false;
+	}
 
-  closeEditor(editor: EditorInput): void {
-    this.handleClosedEditors();
-  }
+	beforeCloseEditor(editor: EditorInput): void { }
 
-  closeEditors(editors: EditorInput[]): void {
-    this.handleClosedEditors();
-  }
+	closeEditor(editor: EditorInput): void {
+		this.handleClosedEditors();
+	}
 
-  private handleClosedEditors(): void {
-    this.activeEditor = this.tabsModel.activeEditor;
-  }
+	closeEditors(editors: EditorInput[]): void {
+		this.handleClosedEditors();
+	}
 
-  moveEditor(editor: EditorInput, fromIndex: number, targetIndex: number): void {}
+	private handleClosedEditors(): void {
+		this.activeEditor = this.tabsModel.activeEditor;
+	}
 
-  pinEditor(editor: EditorInput): void {}
+	moveEditor(editor: EditorInput, fromIndex: number, targetIndex: number): void { }
 
-  stickEditor(editor: EditorInput): void {}
+	pinEditor(editor: EditorInput): void { }
 
-  unstickEditor(editor: EditorInput): void {}
+	stickEditor(editor: EditorInput): void { }
 
-  setActive(isActive: boolean): void {}
+	unstickEditor(editor: EditorInput): void { }
 
-  updateEditorSelections(): void {}
+	setActive(isActive: boolean): void { }
 
-  updateEditorLabel(editor: EditorInput): void {}
+	updateEditorSelections(): void { }
 
-  updateEditorDirty(editor: EditorInput): void {}
+	updateEditorLabel(editor: EditorInput): void { }
 
-  getHeight(): number {
-    return 0;
-  }
+	updateEditorCapabilities(editor: EditorInput): void { }
 
-  layout(dimensions: IEditorTitleControlDimensions): Dimension {
-    return new Dimension(dimensions.container.width, this.getHeight());
-  }
+	updateEditorDirty(editor: EditorInput): void { }
+
+	getHeight(): number {
+		return 0;
+	}
+
+	layout(dimensions: IEditorTitleControlDimensions): Dimension {
+		return new Dimension(dimensions.container.width, this.getHeight());
+	}
 }

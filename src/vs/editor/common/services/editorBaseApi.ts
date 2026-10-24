@@ -14,34 +14,31 @@ import { Token } from '../languages.js';
 import * as standaloneEnums from '../standalone/standaloneEnums.js';
 
 export class KeyMod {
-  public static readonly CtrlCmd: number = ConstKeyMod.CtrlCmd;
+	public static readonly CtrlCmd: number = ConstKeyMod.CtrlCmd;
+	public static readonly Shift: number = ConstKeyMod.Shift;
+	public static readonly Alt: number = ConstKeyMod.Alt;
+	public static readonly WinCtrl: number = ConstKeyMod.WinCtrl;
 
-  public static readonly Shift: number = ConstKeyMod.Shift;
-
-  public static readonly Alt: number = ConstKeyMod.Alt;
-
-  public static readonly WinCtrl: number = ConstKeyMod.WinCtrl;
-
-  public static chord(firstPart: number, secondPart: number): number {
-    return KeyChord(firstPart, secondPart);
-  }
+	public static chord(firstPart: number, secondPart: number): number {
+		return KeyChord(firstPart, secondPart);
+	}
 }
 
 export function createMonacoBaseAPI(): typeof monaco {
-  return {
-    editor: undefined!, // undefined override expected here
-    languages: undefined!, // undefined override expected here
-    CancellationTokenSource,
-    Emitter,
-    KeyCode: standaloneEnums.KeyCode,
-    KeyMod,
-    Position,
-    Range,
-    Selection: <any>Selection,
-    SelectionDirection: standaloneEnums.SelectionDirection,
-    MarkerSeverity: standaloneEnums.MarkerSeverity,
-    MarkerTag: standaloneEnums.MarkerTag,
-    Uri: <any>URI,
-    Token,
-  };
+	return {
+		editor: undefined!, // undefined override expected here
+		languages: undefined!, // undefined override expected here
+		CancellationTokenSource: CancellationTokenSource,
+		Emitter: Emitter,
+		KeyCode: standaloneEnums.KeyCode,
+		KeyMod: KeyMod,
+		Position: Position,
+		Range: Range,
+		Selection: Selection as unknown as typeof monaco.Selection,
+		SelectionDirection: standaloneEnums.SelectionDirection,
+		MarkerSeverity: standaloneEnums.MarkerSeverity,
+		MarkerTag: standaloneEnums.MarkerTag,
+		Uri: URI as unknown as typeof monaco.Uri,
+		Token: Token
+	};
 }

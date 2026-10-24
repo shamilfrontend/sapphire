@@ -16,95 +16,84 @@ import { EditorOption, IRulerOption } from '../../../common/config/editorOptions
  * at a time.
  */
 export class Rulers extends ViewPart {
-  public domNode: FastDomNode<HTMLElement>;
 
-  private readonly _renderedRulers: FastDomNode<HTMLElement>[];
+	public domNode: FastDomNode<HTMLElement>;
+	private readonly _renderedRulers: FastDomNode<HTMLElement>[];
+	private _rulers: IRulerOption[];
+	private _typicalHalfwidthCharacterWidth: number;
 
-  private _rulers: IRulerOption[];
+	constructor(context: ViewContext) {
+		super(context);
+		this.domNode = createFastDomNode<HTMLElement>(document.createElement('div'));
+		this.domNode.setAttribute('role', 'presentation');
+		this.domNode.setAttribute('aria-hidden', 'true');
+		this.domNode.setClassName('view-rulers');
+		this._renderedRulers = [];
+		const options = this._context.configuration.options;
+		this._rulers = options.get(EditorOption.rulers);
+		this._typicalHalfwidthCharacterWidth = options.get(EditorOption.fontInfo).typicalHalfwidthCharacterWidth;
+	}
 
-  private _typicalHalfwidthCharacterWidth: number;
 
-  constructor(context: ViewContext) {
-    super(context);
-    this.domNode = createFastDomNode<HTMLElement>(document.createElement('div'));
-    this.domNode.setAttribute('role', 'presentation');
-    this.domNode.setAttribute('aria-hidden', 'true');
-    this.domNode.setClassName('view-rulers');
-    this._renderedRulers = [];
-    const options = this._context.configuration.options;
-    this._rulers = options.get(EditorOption.rulers);
-    this._typicalHalfwidthCharacterWidth = options.get(
-      EditorOption.fontInfo,
-    ).typicalHalfwidthCharacterWidth;
-  }
+	// --- begin event handlers
 
-  public override dispose(): void {
-    super.dispose();
-  }
+	public override onConfigurationChanged(e: viewEvents.ViewConfigurationChangedEvent): boolean {
+		const options = this._context.configuration.options;
+		this._rulers = options.get(EditorOption.rulers);
+		this._typicalHalfwidthCharacterWidth = options.get(EditorOption.fontInfo).typicalHalfwidthCharacterWidth;
+		return true;
+	}
+	public override onScrollChanged(e: viewEvents.ViewScrollChangedEvent): boolean {
+		return e.scrollHeightChanged;
+	}
 
-  // --- begin event handlers
+	// --- end event handlers
 
-  public override onConfigurationChanged(e: viewEvents.ViewConfigurationChangedEvent): boolean {
-    const options = this._context.configuration.options;
-    this._rulers = options.get(EditorOption.rulers);
-    this._typicalHalfwidthCharacterWidth = options.get(
-      EditorOption.fontInfo,
-    ).typicalHalfwidthCharacterWidth;
-    return true;
-  }
+	public prepareRender(ctx: RenderingContext): void {
+		// Nothing to read
+	}
 
-  public override onScrollChanged(e: viewEvents.ViewScrollChangedEvent): boolean {
-    return e.scrollHeightChanged;
-  }
+	private _ensureRulersCount(): void {
+		const currentCount = this._renderedRulers.length;
+		const desiredCount = this._rulers.length;
 
-  // --- end event handlers
+		if (currentCount === desiredCount) {
+			// Nothing to do
+			return;
+		}
 
-  public prepareRender(ctx: RenderingContext): void {
-    // Nothing to read
-  }
+		if (currentCount < desiredCount) {
+			let addCount = desiredCount - currentCount;
+			while (addCount > 0) {
+				const node = createFastDomNode(document.createElement('div'));
+				node.setClassName('view-ruler');
+				node.setWidth('1ch');
+				this.domNode.appendChild(node);
+				this._renderedRulers.push(node);
+				addCount--;
+			}
+			return;
+		}
 
-  private _ensureRulersCount(): void {
-    const currentCount = this._renderedRulers.length;
-    const desiredCount = this._rulers.length;
+		let removeCount = currentCount - desiredCount;
+		while (removeCount > 0) {
+			const node = this._renderedRulers.pop()!;
+			this.domNode.removeChild(node);
+			removeCount--;
+		}
+	}
 
-    if (currentCount === desiredCount) {
-      // Nothing to do
-      return;
-    }
+	public render(ctx: RestrictedRenderingContext): void {
 
-    if (currentCount < desiredCount) {
-      const { tabSize } = this._context.viewModel.model.getOptions();
-      const rulerWidth = tabSize;
-      let addCount = desiredCount - currentCount;
-      while (addCount > 0) {
-        const node = createFastDomNode(document.createElement('div'));
-        node.setClassName('view-ruler');
-        node.setWidth(rulerWidth);
-        this.domNode.appendChild(node);
-        this._renderedRulers.push(node);
-        addCount--;
-      }
-      return;
-    }
+		this._ensureRulersCount();
 
-    let removeCount = currentCount - desiredCount;
-    while (removeCount > 0) {
-      const node = this._renderedRulers.pop()!;
-      this.domNode.removeChild(node);
-      removeCount--;
-    }
-  }
+		for (let i = 0, len = this._rulers.length; i < len; i++) {
+			const node = this._renderedRulers[i];
+			const ruler = this._rulers[i];
 
-  public render(ctx: RestrictedRenderingContext): void {
-    this._ensureRulersCount();
-
-    for (let i = 0, len = this._rulers.length; i < len; i++) {
-      const node = this._renderedRulers[i];
-      const ruler = this._rulers[i];
-
-      node.setBoxShadow(ruler.color ? `1px 0 0 0 ${ruler.color} inset` : ``);
-      node.setHeight(Math.min(ctx.scrollHeight, 1000000));
-      node.setLeft(ruler.column * this._typicalHalfwidthCharacterWidth);
-    }
-  }
+			node.setBoxShadow(ruler.color ? `1px 0 0 0 ${ruler.color} inset` : ``);
+			node.setHeight(Math.min(ctx.scrollHeight, 1000000));
+			node.setLeft(ruler.column * this._typicalHalfwidthCharacterWidth);
+		}
+	}
 }

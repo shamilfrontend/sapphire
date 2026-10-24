@@ -4,23 +4,11 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { URI } from '../../../../base/common/uri.js';
-import {
-  DEFAULT_EDITOR_ASSOCIATION,
-  findViewStateForEditor,
-  isUntitledResourceEditorInput,
-  IUntitledTextResourceEditorInput,
-  IUntypedEditorInput,
-  Verbosity,
-} from '../../../common/editor.js';
+import { DEFAULT_EDITOR_ASSOCIATION, findViewStateForEditor, isUntitledResourceEditorInput, IUntitledTextResourceEditorInput, IUntypedEditorInput, Verbosity } from '../../../common/editor.js';
 import { EditorInput, IUntypedEditorOptions } from '../../../common/editor/editorInput.js';
 import { AbstractTextResourceEditorInput } from '../../../common/editor/textResourceEditorInput.js';
 import { IUntitledTextEditorModel } from './untitledTextEditorModel.js';
-import {
-  EncodingMode,
-  IEncodingSupport,
-  ILanguageSupport,
-  ITextFileService,
-} from '../../textfile/common/textfiles.js';
+import { EncodingMode, IEncodingSupport, ILanguageSupport, ITextFileService } from '../../textfile/common/textfiles.js';
 import { ILabelService } from '../../../../platform/label/common/label.js';
 import { IEditorService } from '../../editor/common/editorService.js';
 import { IFileService } from '../../../../platform/files/common/files.js';
@@ -37,250 +25,208 @@ import { ICustomEditorLabelService } from '../../editor/common/customEditorLabel
 /**
  * An editor input to be used for untitled text buffers.
  */
-export class UntitledTextEditorInput
-  extends AbstractTextResourceEditorInput
-  implements IEncodingSupport, ILanguageSupport
-{
-  static readonly ID: string = 'workbench.editors.untitledEditorInput';
+export class UntitledTextEditorInput extends AbstractTextResourceEditorInput implements IEncodingSupport, ILanguageSupport {
 
-  override get typeId(): string {
-    return UntitledTextEditorInput.ID;
-  }
+	static readonly ID: string = 'workbench.editors.untitledEditorInput';
 
-  override get editorId(): string | undefined {
-    return DEFAULT_EDITOR_ASSOCIATION.id;
-  }
+	override get typeId(): string {
+		return UntitledTextEditorInput.ID;
+	}
 
-  private modelResolve: Promise<void> | undefined = undefined;
+	override get editorId(): string | undefined {
+		return DEFAULT_EDITOR_ASSOCIATION.id;
+	}
 
-  private readonly modelDisposables = this._register(new DisposableStore());
+	private modelResolve: Promise<void> | undefined = undefined;
+	private readonly modelDisposables = this._register(new DisposableStore());
+	private cachedUntitledTextEditorModelReference: IReference<IUntitledTextEditorModel> | undefined = undefined;
 
-  private cachedUntitledTextEditorModelReference: IReference<IUntitledTextEditorModel> | undefined =
-    undefined;
+	constructor(
+		protected model: IUntitledTextEditorModel,
+		@ITextFileService textFileService: ITextFileService,
+		@ILabelService labelService: ILabelService,
+		@IEditorService editorService: IEditorService,
+		@IFileService fileService: IFileService,
+		@IWorkbenchEnvironmentService private readonly environmentService: IWorkbenchEnvironmentService,
+		@IPathService private readonly pathService: IPathService,
+		@IFilesConfigurationService filesConfigurationService: IFilesConfigurationService,
+		@ITextModelService private readonly textModelService: ITextModelService,
+		@ITextResourceConfigurationService textResourceConfigurationService: ITextResourceConfigurationService,
+		@ICustomEditorLabelService customEditorLabelService: ICustomEditorLabelService
+	) {
+		super(model.resource, undefined, editorService, textFileService, labelService, fileService, filesConfigurationService, textResourceConfigurationService, customEditorLabelService);
 
-  constructor(
-    protected model: IUntitledTextEditorModel,
-    @ITextFileService textFileService: ITextFileService,
-    @ILabelService labelService: ILabelService,
-    @IEditorService editorService: IEditorService,
-    @IFileService fileService: IFileService,
-    @IWorkbenchEnvironmentService private readonly environmentService: IWorkbenchEnvironmentService,
-    @IPathService private readonly pathService: IPathService,
-    @IFilesConfigurationService filesConfigurationService: IFilesConfigurationService,
-    @ITextModelService private readonly textModelService: ITextModelService,
-    @ITextResourceConfigurationService
-    textResourceConfigurationService: ITextResourceConfigurationService,
-    @ICustomEditorLabelService customEditorLabelService: ICustomEditorLabelService,
-  ) {
-    super(
-      model.resource,
-      undefined,
-      editorService,
-      textFileService,
-      labelService,
-      fileService,
-      filesConfigurationService,
-      textResourceConfigurationService,
-      customEditorLabelService,
-    );
+		this.registerModelListeners(model);
 
-    this.registerModelListeners(model);
+		this._register(this.textFileService.untitled.onDidCreate(model => this.onDidCreateUntitledModel(model)));
+	}
 
-    this._register(
-      this.textFileService.untitled.onDidCreate((model) => this.onDidCreateUntitledModel(model)),
-    );
-  }
+	private registerModelListeners(model: IUntitledTextEditorModel): void {
+		this.modelDisposables.clear();
 
-  private registerModelListeners(model: IUntitledTextEditorModel): void {
-    this.modelDisposables.clear();
+		// re-emit some events from the model
+		this.modelDisposables.add(model.onDidChangeDirty(() => this._onDidChangeDirty.fire()));
+		this.modelDisposables.add(model.onDidChangeName(() => this._onDidChangeLabel.fire()));
 
-    // re-emit some events from the model
-    this.modelDisposables.add(model.onDidChangeDirty(() => this._onDidChangeDirty.fire()));
-    this.modelDisposables.add(model.onDidChangeName(() => this._onDidChangeLabel.fire()));
+		// a reverted untitled text editor model renders this input disposed
+		this.modelDisposables.add(model.onDidRevert(() => this.dispose()));
+	}
 
-    // a reverted untitled text editor model renders this input disposed
-    this.modelDisposables.add(model.onDidRevert(() => this.dispose()));
-  }
+	private onDidCreateUntitledModel(model: IUntitledTextEditorModel): void {
+		if (isEqual(model.resource, this.model.resource) && model !== this.model) {
 
-  private onDidCreateUntitledModel(model: IUntitledTextEditorModel): void {
-    if (isEqual(model.resource, this.model.resource) && model !== this.model) {
-      // Ensure that we keep our model up to date with
-      // the actual model from the service so that we
-      // never get out of sync with the truth.
+			// Ensure that we keep our model up to date with
+			// the actual model from the service so that we
+			// never get out of sync with the truth.
 
-      this.model = model;
-      this.registerModelListeners(model);
-    }
-  }
+			this.model = model;
+			this.registerModelListeners(model);
+		}
+	}
 
-  override getName(): string {
-    return this.model.name;
-  }
+	override getName(): string {
+		return this.model.name;
+	}
 
-  override getDescription(verbosity = Verbosity.MEDIUM): string | undefined {
-    // Without associated path: only use if name and description differ
-    if (!this.model.hasAssociatedFilePath) {
-      const descriptionCandidate = this.resource.path;
-      if (descriptionCandidate !== this.getName()) {
-        return descriptionCandidate;
-      }
+	override getDescription(verbosity = Verbosity.MEDIUM): string | undefined {
 
-      return undefined;
-    }
+		// Without associated path: only use if name and description differ
+		if (!this.model.hasAssociatedFilePath) {
+			const descriptionCandidate = this.resource.path;
+			if (descriptionCandidate !== this.getName()) {
+				return descriptionCandidate;
+			}
 
-    // With associated path: delegate to parent
-    return super.getDescription(verbosity);
-  }
+			return undefined;
+		}
 
-  override getTitle(verbosity: Verbosity): string {
-    // Without associated path: check if name and description differ to decide
-    // if description should appear besides the name to distinguish better
-    if (!this.model.hasAssociatedFilePath) {
-      const name = this.getName();
-      const description = this.getDescription();
-      if (description && description !== name) {
-        return `${name} • ${description}`;
-      }
+		// With associated path: delegate to parent
+		return super.getDescription(verbosity);
+	}
 
-      return name;
-    }
+	override getTitle(verbosity: Verbosity): string {
 
-    // With associated path: delegate to parent
-    return super.getTitle(verbosity);
-  }
+		// Without associated path: check if name and description differ to decide
+		// if description should appear besides the name to distinguish better
+		if (!this.model.hasAssociatedFilePath) {
+			const name = this.getName();
+			const description = this.getDescription();
+			if (description && description !== name) {
+				return `${name} • ${description}`;
+			}
 
-  override isDirty(): boolean {
-    return this.model.isDirty();
-  }
+			return name;
+		}
 
-  getEncoding(): string | undefined {
-    return this.model.getEncoding();
-  }
+		// With associated path: delegate to parent
+		return super.getTitle(verbosity);
+	}
 
-  setEncoding(
-    encoding: string,
-    mode: EncodingMode /* ignored, we only have Encode */,
-  ): Promise<void> {
-    return this.model.setEncoding(encoding);
-  }
+	override isDirty(): boolean {
+		return this.model.isDirty();
+	}
 
-  get hasLanguageSetExplicitly() {
-    return this.model.hasLanguageSetExplicitly;
-  }
+	getEncoding(): string | undefined {
+		return this.model.getEncoding();
+	}
 
-  get hasAssociatedFilePath() {
-    return this.model.hasAssociatedFilePath;
-  }
+	setEncoding(encoding: string, mode: EncodingMode /* ignored, we only have Encode */): Promise<void> {
+		return this.model.setEncoding(encoding);
+	}
 
-  setLanguageId(languageId: string, source?: string): void {
-    this.model.setLanguageId(languageId, source);
-  }
+	get hasLanguageSetExplicitly() { return this.model.hasLanguageSetExplicitly; }
 
-  getLanguageId(): string | undefined {
-    return this.model.getLanguageId();
-  }
+	get hasAssociatedFilePath() { return this.model.hasAssociatedFilePath; }
 
-  override async resolve(): Promise<IUntitledTextEditorModel> {
-    if (!this.modelResolve) {
-      this.modelResolve = (async () => {
-        // Acquire a model reference
-        this.cachedUntitledTextEditorModelReference =
-          (await this.textModelService.createModelReference(
-            this.resource,
-          )) as IReference<IUntitledTextEditorModel>;
-      })();
-    }
+	setLanguageId(languageId: string, source?: string): void {
+		this.model.setLanguageId(languageId, source);
+	}
 
-    await this.modelResolve;
+	getLanguageId(): string | undefined {
+		return this.model.getLanguageId();
+	}
 
-    // It is possible that this input was disposed before the model
-    // finished resolving. As such, we need to make sure to dispose
-    // the model reference to not leak it.
-    if (this.isDisposed()) {
-      this.disposeModelReference();
-    }
+	override async resolve(): Promise<IUntitledTextEditorModel> {
+		if (!this.modelResolve) {
+			this.modelResolve = (async () => {
 
-    return this.model;
-  }
+				// Acquire a model reference
+				this.cachedUntitledTextEditorModelReference = await this.textModelService.createModelReference(this.resource) as IReference<IUntitledTextEditorModel>;
+			})();
+		}
 
-  override toUntyped(options?: IUntypedEditorOptions): IUntitledTextResourceEditorInput {
-    const untypedInput: IUntitledTextResourceEditorInput & {
-      resource: URI | undefined;
-      options: ITextEditorOptions;
-    } = {
-      resource: this.model.hasAssociatedFilePath
-        ? toLocalResource(
-            this.model.resource,
-            this.environmentService.remoteAuthority,
-            this.pathService.defaultUriScheme,
-          )
-        : this.resource,
-      forceUntitled: true,
-      options: {
-        override: this.editorId,
-      },
-    };
+		await this.modelResolve;
 
-    if (typeof options?.preserveViewState === 'number') {
-      untypedInput.encoding = this.getEncoding();
-      untypedInput.languageId = this.getLanguageId();
-      untypedInput.contents = this.model.isModified()
-        ? this.model.textEditorModel?.getValue()
-        : undefined;
-      untypedInput.options.viewState = findViewStateForEditor(
-        this,
-        options.preserveViewState,
-        this.editorService,
-      );
+		// It is possible that this input was disposed before the model
+		// finished resolving. As such, we need to make sure to dispose
+		// the model reference to not leak it.
+		if (this.isDisposed()) {
+			this.disposeModelReference();
+		}
 
-      if (
-        typeof untypedInput.contents === 'string' &&
-        !this.model.hasAssociatedFilePath &&
-        !options.preserveResource
-      ) {
-        // Given how generic untitled resources in the system are, we
-        // need to be careful not to set our resource into the untyped
-        // editor if we want to transport contents too, because of
-        // issue https://github.com/microsoft/vscode/issues/140898
-        // The workaround is to simply remove the resource association
-        // if we have contents and no associated resource.
-        // In that case we can ensure that a new untitled resource is
-        // being created and the contents can be restored properly.
-        untypedInput.resource = undefined;
-      }
-    }
+		return this.model;
+	}
 
-    return untypedInput;
-  }
+	override toUntyped(options?: IUntypedEditorOptions): IUntitledTextResourceEditorInput {
+		const untypedInput: IUntitledTextResourceEditorInput & { resource: URI | undefined; options: ITextEditorOptions } = {
+			resource: this.model.hasAssociatedFilePath ? toLocalResource(this.model.resource, this.environmentService.remoteAuthority, this.pathService.defaultUriScheme) : this.resource,
+			forceUntitled: true,
+			options: {
+				override: this.editorId
+			}
+		};
 
-  override matches(otherInput: EditorInput | IUntypedEditorInput): boolean {
-    if (this === otherInput) {
-      return true;
-    }
+		if (typeof options?.preserveViewState === 'number') {
+			untypedInput.encoding = this.getEncoding();
+			untypedInput.languageId = this.getLanguageId();
+			untypedInput.contents = this.model.isModified() ? this.model.textEditorModel?.getValue() : undefined;
+			untypedInput.options.viewState = findViewStateForEditor(this, options.preserveViewState, this.editorService);
 
-    if (otherInput instanceof UntitledTextEditorInput) {
-      return isEqual(otherInput.resource, this.resource);
-    }
+			if (typeof untypedInput.contents === 'string' && !this.model.hasAssociatedFilePath && !options.preserveResource) {
+				// Given how generic untitled resources in the system are, we
+				// need to be careful not to set our resource into the untyped
+				// editor if we want to transport contents too, because of
+				// issue https://github.com/microsoft/vscode/issues/140898
+				// The workaround is to simply remove the resource association
+				// if we have contents and no associated resource.
+				// In that case we can ensure that a new untitled resource is
+				// being created and the contents can be restored properly.
+				untypedInput.resource = undefined;
+			}
+		}
 
-    if (isUntitledResourceEditorInput(otherInput)) {
-      return super.matches(otherInput);
-    }
+		return untypedInput;
+	}
 
-    return false;
-  }
+	override matches(otherInput: EditorInput | IUntypedEditorInput): boolean {
+		if (this === otherInput) {
+			return true;
+		}
 
-  override dispose(): void {
-    // Model
-    this.modelResolve = undefined;
+		if (otherInput instanceof UntitledTextEditorInput) {
+			return isEqual(otherInput.resource, this.resource);
+		}
 
-    // Model reference
-    this.disposeModelReference();
+		if (isUntitledResourceEditorInput(otherInput)) {
+			return super.matches(otherInput);
+		}
 
-    super.dispose();
-  }
+		return false;
+	}
 
-  private disposeModelReference(): void {
-    dispose(this.cachedUntitledTextEditorModelReference);
-    this.cachedUntitledTextEditorModelReference = undefined;
-  }
+	override dispose(): void {
+
+		// Model
+		this.modelResolve = undefined;
+
+		// Model reference
+		this.disposeModelReference();
+
+		super.dispose();
+	}
+
+	private disposeModelReference(): void {
+		dispose(this.cachedUntitledTextEditorModelReference);
+		this.cachedUntitledTextEditorModelReference = undefined;
+	}
 }

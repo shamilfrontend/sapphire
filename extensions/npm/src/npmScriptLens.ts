@@ -5,21 +5,22 @@
 
 import * as path from 'path';
 import {
-  CodeLens,
-  CodeLensProvider,
-  Disposable,
-  EventEmitter,
-  languages,
-  TextDocument,
-  Uri,
-  workspace,
-  l10n,
+	CodeLens,
+	CodeLensProvider,
+	Disposable,
+	EventEmitter,
+	languages,
+	TextDocument,
+	Uri,
+	workspace,
+	l10n
 } from 'vscode';
 import { readScripts } from './readScripts';
 import { getRunScriptCommand } from './tasks';
 
+
 const enum Constants {
-  ConfigKey = 'debug.javascript.codelens.npmScripts',
+	ConfigKey = 'debug.javascript.codelens.npmScripts',
 }
 
 const getFreshLensLocation = () => workspace.getConfiguration().get(Constants.ConfigKey);
@@ -29,86 +30,86 @@ const getFreshLensLocation = () => workspace.getConfiguration().get(Constants.Co
  * npm script, or the npm scripts section.
  */
 export class NpmScriptLensProvider implements CodeLensProvider, Disposable {
-  private lensLocation = getFreshLensLocation();
+	private lensLocation = getFreshLensLocation();
+	private readonly changeEmitter = new EventEmitter<void>();
+	private subscriptions: Disposable[] = [];
 
-  private readonly changeEmitter = new EventEmitter<void>();
+	/**
+	 * @inheritdoc
+	 */
+	public readonly onDidChangeCodeLenses = this.changeEmitter.event;
 
-  private subscriptions: Disposable[] = [];
+	constructor() {
+		this.subscriptions.push(
+			this.changeEmitter,
+			workspace.onDidChangeConfiguration(evt => {
+				if (evt.affectsConfiguration(Constants.ConfigKey)) {
+					this.lensLocation = getFreshLensLocation();
+					this.changeEmitter.fire();
+				}
+			}),
+			languages.registerCodeLensProvider(
+				{
+					language: 'json',
+					pattern: '**/package.json',
+				},
+				this,
+			)
+		);
+	}
 
-  /**
-   * @inheritdoc
-   */
-  public readonly onDidChangeCodeLenses = this.changeEmitter.event;
+	/**
+	 * @inheritdoc
+	 */
+	public async provideCodeLenses(document: TextDocument): Promise<CodeLens[]> {
+		if (this.lensLocation === 'never') {
+			return [];
+		}
 
-  constructor() {
-    this.subscriptions.push(
-      this.changeEmitter,
-      workspace.onDidChangeConfiguration((evt) => {
-        if (evt.affectsConfiguration(Constants.ConfigKey)) {
-          this.lensLocation = getFreshLensLocation();
-          this.changeEmitter.fire();
-        }
-      }),
-      languages.registerCodeLensProvider(
-        {
-          language: 'json',
-          pattern: '**/package.json',
-        },
-        this,
-      ),
-    );
-  }
+		const tokens = readScripts(document);
+		if (!tokens) {
+			return [];
+		}
 
-  /**
-   * @inheritdoc
-   */
-  public async provideCodeLenses(document: TextDocument): Promise<CodeLens[]> {
-    if (this.lensLocation === 'never') {
-      return [];
-    }
+		const title = '$(debug-start) ' + l10n.t("Debug");
+		const cwd = path.dirname(document.uri.fsPath);
+		if (this.lensLocation === 'top') {
+			return [
+				new CodeLens(
+					tokens.location.range,
+					{
+						title,
+						command: 'extension.js-debug.npmScript',
+						arguments: [cwd],
+					},
+				),
+			];
+		}
 
-    const tokens = readScripts(document);
-    if (!tokens) {
-      return [];
-    }
+		if (this.lensLocation === 'all') {
+			const folder = Uri.joinPath(document.uri, '..');
+			return Promise.all(tokens.scripts.map(
+				async ({ name, nameRange }) => {
+					const runScriptCommand = await getRunScriptCommand(name, folder);
+					return new CodeLens(
+						nameRange,
+						{
+							title,
+							command: 'extension.js-debug.createDebuggerTerminal',
+							arguments: [runScriptCommand.join(' '), workspace.getWorkspaceFolder(document.uri), { cwd }],
+						},
+					);
+				},
+			));
+		}
 
-    const title = `$(debug-start) ${l10n.t('Debug')}`;
-    const cwd = path.dirname(document.uri.fsPath);
-    if (this.lensLocation === 'top') {
-      return [
-        new CodeLens(tokens.location.range, {
-          title,
-          command: 'extension.js-debug.npmScript',
-          arguments: [cwd],
-        }),
-      ];
-    }
+		return [];
+	}
 
-    if (this.lensLocation === 'all') {
-      const folder = Uri.joinPath(document.uri, '..');
-      return Promise.all(
-        tokens.scripts.map(async ({ name, nameRange }) => {
-          const runScriptCommand = await getRunScriptCommand(name, folder);
-          return new CodeLens(nameRange, {
-            title,
-            command: 'extension.js-debug.createDebuggerTerminal',
-            arguments: [
-              runScriptCommand.join(' '),
-              workspace.getWorkspaceFolder(document.uri),
-              { cwd },
-            ],
-          });
-        }),
-      );
-    }
-
-    return [];
-  }
-
-  /**
-   * @inheritdoc
-   */
-  public dispose() {
-    this.subscriptions.forEach((s) => s.dispose());
-  }
+	/**
+	 * @inheritdoc
+	 */
+	public dispose() {
+		this.subscriptions.forEach(s => s.dispose());
+	}
 }

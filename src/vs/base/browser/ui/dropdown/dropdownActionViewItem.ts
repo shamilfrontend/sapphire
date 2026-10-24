@@ -15,276 +15,259 @@ import { IContextMenuProvider } from '../../contextmenu.js';
 import { $, addDisposableListener, append, EventType, h } from '../../dom.js';
 import { StandardKeyboardEvent } from '../../keyboardEvent.js';
 import { IActionViewItemProvider } from '../actionbar/actionbar.js';
-import {
-  ActionViewItem,
-  BaseActionViewItem,
-  IActionViewItemOptions,
-  IBaseActionViewItemOptions,
-} from '../actionbar/actionViewItems.js';
-import { AnchorAlignment } from '../contextview/contextview.js';
+import { ActionViewItem, BaseActionViewItem, IActionViewItemOptions, IBaseActionViewItemOptions } from '../actionbar/actionViewItems.js';
+import { AnchorAlignment, IContextViewCloseAnimation } from '../contextview/contextview.js';
 import { getBaseLayerHoverDelegate } from '../hover/hoverDelegate2.js';
 import { getDefaultHoverDelegate } from '../hover/hoverDelegateFactory.js';
 import './dropdown.css';
 import { DropdownMenu, IActionProvider, IDropdownMenuOptions, ILabelRenderer } from './dropdown.js';
 
 export interface IKeybindingProvider {
-  (action: IAction): ResolvedKeybinding | undefined;
+	(action: IAction): ResolvedKeybinding | undefined;
 }
 
 export interface IAnchorAlignmentProvider {
-  (): AnchorAlignment;
+	(): AnchorAlignment;
 }
 
 export interface IDropdownMenuActionViewItemOptions extends IBaseActionViewItemOptions {
-  readonly actionViewItemProvider?: IActionViewItemProvider;
-  readonly keybindingProvider?: IKeybindingProvider;
-  readonly actionRunner?: IActionRunner;
-  readonly classNames?: string[] | string;
-  readonly anchorAlignmentProvider?: IAnchorAlignmentProvider;
-  readonly menuAsChild?: boolean;
-  readonly skipTelemetry?: boolean;
+	readonly actionViewItemProvider?: IActionViewItemProvider;
+	readonly keybindingProvider?: IKeybindingProvider;
+	readonly actionRunner?: IActionRunner;
+	readonly classNames?: string[] | string;
+	readonly menuClassName?: string;
+	readonly closeAnimation?: IContextViewCloseAnimation;
+	readonly getAnchor?: () => HTMLElement;
+	readonly anchorAlignmentProvider?: IAnchorAlignmentProvider;
+	readonly menuAsChild?: boolean;
+	readonly skipTelemetry?: boolean;
 }
 
 export class DropdownMenuActionViewItem extends BaseActionViewItem {
-  private menuActionsOrProvider: readonly IAction[] | IActionProvider;
+	private menuActionsOrProvider: readonly IAction[] | IActionProvider;
+	private dropdownMenu: DropdownMenu | undefined;
+	private contextMenuProvider: IContextMenuProvider;
+	private actionItem: HTMLElement | null = null;
 
-  private dropdownMenu: DropdownMenu | undefined;
+	private _onDidChangeVisibility = this._register(new Emitter<boolean>());
+	get onDidChangeVisibility() { return this._onDidChangeVisibility.event; }
 
-  private contextMenuProvider: IContextMenuProvider;
+	protected override readonly options: IDropdownMenuActionViewItemOptions;
 
-  private actionItem: HTMLElement | null = null;
+	constructor(
+		action: IAction,
+		menuActionsOrProvider: readonly IAction[] | IActionProvider,
+		contextMenuProvider: IContextMenuProvider,
+		options: IDropdownMenuActionViewItemOptions = Object.create(null)
+	) {
+		super(null, action, options);
 
-  private _onDidChangeVisibility = this._register(new Emitter<boolean>());
+		this.menuActionsOrProvider = menuActionsOrProvider;
+		this.contextMenuProvider = contextMenuProvider;
+		this.options = options;
 
-  readonly onDidChangeVisibility = this._onDidChangeVisibility.event;
+		if (this.options.actionRunner) {
+			this.actionRunner = this.options.actionRunner;
+		}
+	}
 
-  protected override readonly options: IDropdownMenuActionViewItemOptions;
+	override render(container: HTMLElement): void {
+		this.actionItem = container;
 
-  constructor(
-    action: IAction,
-    menuActionsOrProvider: readonly IAction[] | IActionProvider,
-    contextMenuProvider: IContextMenuProvider,
-    options: IDropdownMenuActionViewItemOptions = Object.create(null),
-  ) {
-    super(null, action, options);
+		const labelRenderer: ILabelRenderer = (el: HTMLElement): IDisposable | null => {
+			this.element = append(el, $('a.action-label'));
+			this.setAriaLabelAttributes(this.element);
+			return this.renderLabel(this.element);
+		};
 
-    this.menuActionsOrProvider = menuActionsOrProvider;
-    this.contextMenuProvider = contextMenuProvider;
-    this.options = options;
+		const isActionsArray = Array.isArray(this.menuActionsOrProvider);
+		const options: IDropdownMenuOptions = {
+			contextMenuProvider: this.contextMenuProvider,
+			labelRenderer: labelRenderer,
+			isEnabled: () => this.action.enabled,
+			menuAsChild: this.options.menuAsChild,
+			actions: isActionsArray ? this.menuActionsOrProvider as IAction[] : undefined,
+			actionProvider: isActionsArray ? undefined : this.menuActionsOrProvider as IActionProvider,
+			menuClassName: this.options.menuClassName,
+			closeAnimation: this.options.closeAnimation,
+			getAnchor: this.options.getAnchor,
+			skipTelemetry: this.options.skipTelemetry
+		};
 
-    if (this.options.actionRunner) {
-      this.actionRunner = this.options.actionRunner;
-    }
-  }
+		this.dropdownMenu = this._register(new DropdownMenu(container, options));
+		this._register(this.dropdownMenu.onDidChangeVisibility(visible => {
+			this.element?.setAttribute('aria-expanded', `${visible}`);
+			this._onDidChangeVisibility.fire(visible);
+		}));
 
-  override render(container: HTMLElement): void {
-    this.actionItem = container;
+		this.dropdownMenu.menuOptions = {
+			actionViewItemProvider: this.options.actionViewItemProvider,
+			actionRunner: this.actionRunner,
+			getKeyBinding: this.options.keybindingProvider,
+			context: this._context
+		};
 
-    const labelRenderer: ILabelRenderer = (el: HTMLElement): IDisposable | null => {
-      this.element = append(el, $('a.action-label'));
-      return this.renderLabel(this.element);
-    };
+		if (this.options.anchorAlignmentProvider) {
+			const that = this;
 
-    const isActionsArray = Array.isArray(this.menuActionsOrProvider);
-    const options: IDropdownMenuOptions = {
-      contextMenuProvider: this.contextMenuProvider,
-      labelRenderer,
-      menuAsChild: this.options.menuAsChild,
-      actions: isActionsArray ? (this.menuActionsOrProvider as IAction[]) : undefined,
-      actionProvider: isActionsArray ? undefined : (this.menuActionsOrProvider as IActionProvider),
-      skipTelemetry: this.options.skipTelemetry,
-    };
+			this.dropdownMenu.menuOptions = {
+				...this.dropdownMenu.menuOptions,
+				get anchorAlignment(): AnchorAlignment {
+					return that.options.anchorAlignmentProvider!();
+				}
+			};
+		}
 
-    this.dropdownMenu = this._register(new DropdownMenu(container, options));
-    this._register(
-      this.dropdownMenu.onDidChangeVisibility((visible) => {
-        this.element?.setAttribute('aria-expanded', `${visible}`);
-        this._onDidChangeVisibility.fire(visible);
-      }),
-    );
+		this.updateTooltip();
+		this.updateEnabled();
+	}
 
-    this.dropdownMenu.menuOptions = {
-      actionViewItemProvider: this.options.actionViewItemProvider,
-      actionRunner: this.actionRunner,
-      getKeyBinding: this.options.keybindingProvider,
-      context: this._context,
-    };
+	protected renderLabel(element: HTMLElement): IDisposable | null {
+		let classNames: string[] = [];
 
-    if (this.options.anchorAlignmentProvider) {
-      const that = this;
+		if (typeof this.options.classNames === 'string') {
+			classNames = this.options.classNames.split(/\s+/g).filter(s => !!s);
+		} else if (this.options.classNames) {
+			classNames = this.options.classNames;
+		}
 
-      this.dropdownMenu.menuOptions = {
-        ...this.dropdownMenu.menuOptions,
-        get anchorAlignment(): AnchorAlignment {
-          return that.options.anchorAlignmentProvider!();
-        },
-      };
-    }
+		// todo@aeschli: remove codicon, should come through `this.options.classNames`
+		if (!classNames.find(c => c === 'icon')) {
+			classNames.push('codicon');
+		}
 
-    this.updateTooltip();
-    this.updateEnabled();
-  }
+		element.classList.add(...classNames);
 
-  protected renderLabel(element: HTMLElement): IDisposable | null {
-    let classNames: string[] = [];
+		if (this._action.label) {
+			this._register(getBaseLayerHoverDelegate().setupManagedHover(this.options.hoverDelegate ?? getDefaultHoverDelegate('mouse'), element, this._action.label));
+		}
 
-    if (typeof this.options.classNames === 'string') {
-      classNames = this.options.classNames.split(/\s+/g).filter((s) => !!s);
-    } else if (this.options.classNames) {
-      classNames = this.options.classNames;
-    }
+		return null;
+	}
 
-    // todo@aeschli: remove codicon, should come through `this.options.classNames`
-    if (!classNames.find((c) => c === 'icon')) {
-      classNames.push('codicon');
-    }
+	protected setAriaLabelAttributes(element: HTMLElement): void {
+		element.setAttribute('role', 'button');
+		element.setAttribute('aria-haspopup', 'true');
+		element.setAttribute('aria-expanded', 'false');
+		element.ariaLabel = this._action.label || '';
+	}
 
-    element.classList.add(...classNames);
+	protected override getTooltip(): string | undefined {
+		let title: string | null = null;
 
-    if (this._action.label) {
-      this._register(
-        getBaseLayerHoverDelegate().setupManagedHover(
-          this.options.hoverDelegate ?? getDefaultHoverDelegate('mouse'),
-          element,
-          this._action.label,
-        ),
-      );
-    }
+		if (this.action.tooltip) {
+			title = this.action.tooltip;
+		} else if (this.action.label) {
+			title = this.action.label;
+		}
 
-    return null;
-  }
+		return title ?? undefined;
+	}
 
-  protected setAriaLabelAttributes(element: HTMLElement): void {
-    element.setAttribute('role', 'button');
-    element.setAttribute('aria-haspopup', 'true');
-    element.setAttribute('aria-expanded', 'false');
-    element.ariaLabel = this._action.label || '';
-  }
+	override setActionContext(newContext: unknown): void {
+		super.setActionContext(newContext);
 
-  protected override getTooltip(): string | undefined {
-    let title: string | null = null;
+		if (this.dropdownMenu) {
+			if (this.dropdownMenu.menuOptions) {
+				this.dropdownMenu.menuOptions.context = newContext;
+			} else {
+				this.dropdownMenu.menuOptions = { context: newContext };
+			}
+		}
+	}
 
-    if (this.action.tooltip) {
-      title = this.action.tooltip;
-    } else if (this.action.label) {
-      title = this.action.label;
-    }
+	show(): void {
+		this.dropdownMenu?.show();
+	}
 
-    return title ?? undefined;
-  }
-
-  override setActionContext(newContext: unknown): void {
-    super.setActionContext(newContext);
-
-    if (this.dropdownMenu) {
-      if (this.dropdownMenu.menuOptions) {
-        this.dropdownMenu.menuOptions.context = newContext;
-      } else {
-        this.dropdownMenu.menuOptions = { context: newContext };
-      }
-    }
-  }
-
-  show(): void {
-    this.dropdownMenu?.show();
-  }
-
-  protected override updateEnabled(): void {
-    const disabled = !this.action.enabled;
-    this.actionItem?.classList.toggle('disabled', disabled);
-    this.element?.classList.toggle('disabled', disabled);
-  }
+	protected override updateEnabled(): void {
+		const disabled = !this.action.enabled;
+		this.actionItem?.classList.toggle('disabled', disabled);
+		this.element?.classList.toggle('disabled', disabled);
+		this.element?.setAttribute('aria-disabled', String(disabled));
+	}
 }
 
 export interface IActionWithDropdownActionViewItemOptions extends IActionViewItemOptions {
-  readonly menuActionsOrProvider: readonly IAction[] | IActionProvider;
-  readonly menuActionClassNames?: string[];
+	readonly menuActionsOrProvider: readonly IAction[] | IActionProvider;
+	readonly menuActionClassNames?: string[];
+	readonly keybindingProvider?: IKeybindingProvider;
 }
 
 export class ActionWithDropdownActionViewItem extends ActionViewItem {
-  protected dropdownMenuActionViewItem: DropdownMenuActionViewItem | undefined;
 
-  constructor(
-    context: unknown,
-    action: IAction,
-    options: IActionWithDropdownActionViewItemOptions,
-    private readonly contextMenuProvider: IContextMenuProvider,
-  ) {
-    super(context, action, options);
-  }
+	protected dropdownMenuActionViewItem: DropdownMenuActionViewItem | undefined;
 
-  override render(container: HTMLElement): void {
-    super.render(container);
-    if (this.element) {
-      this.element.classList.add('action-dropdown-item');
-      const menuActionsProvider = {
-        getActions: () => {
-          const actionsProvider = (<IActionWithDropdownActionViewItemOptions>this.options)
-            .menuActionsOrProvider;
-          return Array.isArray(actionsProvider)
-            ? actionsProvider
-            : (actionsProvider as IActionProvider).getActions(); // TODO: microsoft/TypeScript#42768
-        },
-      };
+	constructor(
+		context: unknown,
+		action: IAction,
+		options: IActionWithDropdownActionViewItemOptions,
+		private readonly contextMenuProvider: IContextMenuProvider
+	) {
+		super(context, action, options);
+	}
 
-      const menuActionClassNames =
-        (<IActionWithDropdownActionViewItemOptions>this.options).menuActionClassNames || [];
-      const separator = h('div.action-dropdown-item-separator', [h('div', {})]).root;
-      separator.classList.toggle('prominent', menuActionClassNames.includes('prominent'));
-      append(this.element, separator);
+	override render(container: HTMLElement): void {
+		super.render(container);
+		if (this.element) {
+			this.element.classList.add('action-dropdown-item');
+			const menuActionsProvider = {
+				getActions: () => {
+					const actionsProvider = (<IActionWithDropdownActionViewItemOptions>this.options).menuActionsOrProvider;
+					return Array.isArray(actionsProvider) ? actionsProvider : (actionsProvider as IActionProvider).getActions(); // TODO: microsoft/TypeScript#42768
+				}
+			};
 
-      this.dropdownMenuActionViewItem = this._register(
-        new DropdownMenuActionViewItem(
-          this._register(
-            new Action('dropdownAction', nls.localize('moreActions', 'More Actions...')),
-          ),
-          menuActionsProvider,
-          this.contextMenuProvider,
-          {
-            classNames: [
-              'dropdown',
-              ...ThemeIcon.asClassNameArray(Codicon.dropDownButton),
-              ...menuActionClassNames,
-            ],
-            hoverDelegate: this.options.hoverDelegate,
-          },
-        ),
-      );
-      this.dropdownMenuActionViewItem.render(this.element);
+			const menuActionClassNames = (<IActionWithDropdownActionViewItemOptions>this.options).menuActionClassNames || [];
+			const separator = h('div.action-dropdown-item-separator', [h('div', {})]).root;
+			separator.classList.toggle('prominent', menuActionClassNames.includes('prominent'));
+			append(this.element, separator);
 
-      this._register(
-        addDisposableListener(this.element, EventType.KEY_DOWN, (e) => {
-          // If we don't have any actions then the dropdown is hidden so don't try to focus it #164050
-          if (menuActionsProvider.getActions().length === 0) {
-            return;
-          }
-          const event = new StandardKeyboardEvent(e);
-          let handled: boolean = false;
-          if (this.dropdownMenuActionViewItem?.isFocused() && event.equals(KeyCode.LeftArrow)) {
-            handled = true;
-            this.dropdownMenuActionViewItem?.blur();
-            this.focus();
-          } else if (this.isFocused() && event.equals(KeyCode.RightArrow)) {
-            handled = true;
-            this.blur();
-            this.dropdownMenuActionViewItem?.focus();
-          }
-          if (handled) {
-            event.preventDefault();
-            event.stopPropagation();
-          }
-        }),
-      );
-    }
-  }
+			this.dropdownMenuActionViewItem = this._register(new DropdownMenuActionViewItem(this._register(new Action('dropdownAction', nls.localize('moreActions', "More Actions..."), undefined, this.action.enabled)), menuActionsProvider, this.contextMenuProvider, {
+				classNames: ['dropdown', ...ThemeIcon.asClassNameArray(Codicon.dropDownButton), ...menuActionClassNames],
+				hoverDelegate: this.options.hoverDelegate,
+				keybindingProvider: (<IActionWithDropdownActionViewItemOptions>this.options).keybindingProvider,
+			}));
+			this.dropdownMenuActionViewItem.render(this.element);
 
-  override blur(): void {
-    super.blur();
-    this.dropdownMenuActionViewItem?.blur();
-  }
+			this._register(addDisposableListener(this.element, EventType.KEY_DOWN, e => {
+				// If we don't have any actions then the dropdown is hidden so don't try to focus it #164050
+				if (menuActionsProvider.getActions().length === 0) {
+					return;
+				}
+				const event = new StandardKeyboardEvent(e);
+				let handled: boolean = false;
+				if (this.dropdownMenuActionViewItem?.isFocused() && event.equals(KeyCode.LeftArrow)) {
+					handled = true;
+					this.dropdownMenuActionViewItem?.blur();
+					this.focus();
+				} else if (this.isFocused() && event.equals(KeyCode.RightArrow)) {
+					handled = true;
+					this.blur();
+					this.dropdownMenuActionViewItem?.focus();
+				}
+				if (handled) {
+					event.preventDefault();
+					event.stopPropagation();
+				}
+			}));
+		}
+	}
 
-  override setFocusable(focusable: boolean): void {
-    super.setFocusable(focusable);
-    this.dropdownMenuActionViewItem?.setFocusable(focusable);
-  }
+	override blur(): void {
+		super.blur();
+		this.dropdownMenuActionViewItem?.blur();
+	}
+
+	override setFocusable(focusable: boolean): void {
+		super.setFocusable(focusable);
+		this.dropdownMenuActionViewItem?.setFocusable(focusable);
+	}
+
+	protected override updateEnabled(): void {
+		super.updateEnabled();
+		if (this.dropdownMenuActionViewItem) {
+			this.dropdownMenuActionViewItem.action.enabled = this.action.enabled;
+		}
+	}
 }

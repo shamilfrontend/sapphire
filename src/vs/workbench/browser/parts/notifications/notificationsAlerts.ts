@@ -5,92 +5,73 @@
 
 import { alert } from '../../../../base/browser/ui/aria/aria.js';
 import { localize } from '../../../../nls.js';
-import {
-  INotificationViewItem,
-  INotificationsModel,
-  NotificationChangeType,
-  INotificationChangeEvent,
-  NotificationViewItemContentChangeKind,
-} from '../../../common/notifications.js';
+import { INotificationViewItem, INotificationsModel, NotificationChangeType, INotificationChangeEvent, NotificationViewItemContentChangeKind } from '../../../common/notifications.js';
 import { Disposable } from '../../../../base/common/lifecycle.js';
 import { toErrorMessage } from '../../../../base/common/errorMessage.js';
-import {
-  NotificationPriority,
-  Severity,
-} from '../../../../platform/notification/common/notification.js';
+import { NotificationPriority, Severity } from '../../../../platform/notification/common/notification.js';
 import { Event } from '../../../../base/common/event.js';
 
 export class NotificationsAlerts extends Disposable {
-  constructor(private readonly model: INotificationsModel) {
-    super();
 
-    // Alert initial notifications if any
-    for (const notification of model.notifications) {
-      this.triggerAriaAlert(notification);
-    }
+	constructor(private readonly model: INotificationsModel) {
+		super();
 
-    this.registerListeners();
-  }
+		// Alert initial notifications if any
+		for (const notification of model.notifications) {
+			this.triggerAriaAlert(notification);
+		}
 
-  private registerListeners(): void {
-    this._register(this.model.onDidChangeNotification((e) => this.onDidChangeNotification(e)));
-  }
+		this.registerListeners();
+	}
 
-  private onDidChangeNotification(e: INotificationChangeEvent): void {
-    if (e.kind === NotificationChangeType.ADD) {
-      // ARIA alert for screen readers
-      this.triggerAriaAlert(e.item);
+	private registerListeners(): void {
+		this._register(this.model.onDidChangeNotification(e => this.onDidChangeNotification(e)));
+	}
 
-      // Always log errors to console with full details
-      if (e.item.severity === Severity.Error) {
-        if (e.item.message.original instanceof Error) {
-          console.error(e.item.message.original);
-        } else {
-          console.error(toErrorMessage(e.item.message.linkedText.toString(), true));
-        }
-      }
-    }
-  }
+	private onDidChangeNotification(e: INotificationChangeEvent): void {
+		if (e.kind === NotificationChangeType.ADD) {
 
-  private triggerAriaAlert(notification: INotificationViewItem): void {
-    if (notification.priority === NotificationPriority.SILENT) {
-      return;
-    }
+			// ARIA alert for screen readers
+			this.triggerAriaAlert(e.item);
 
-    // Trigger the alert again whenever the message changes
-    const listener = notification.onDidChangeContent((e) => {
-      if (e.kind === NotificationViewItemContentChangeKind.MESSAGE) {
-        this.doTriggerAriaAlert(notification);
-      }
-    });
+			// Always log errors to console with full details
+			if (e.item.severity === Severity.Error) {
+				if (e.item.message.original instanceof Error) {
+					console.error(e.item.message.original);
+				} else {
+					console.error(toErrorMessage(e.item.message.linkedText.toString(), true));
+				}
+			}
+		}
+	}
 
-    Event.once(notification.onDidClose)(() => listener.dispose());
+	private triggerAriaAlert(notification: INotificationViewItem): void {
+		if (notification.priority === NotificationPriority.SILENT) {
+			return;
+		}
 
-    this.doTriggerAriaAlert(notification);
-  }
+		// Trigger the alert again whenever the message changes
+		const listener = notification.onDidChangeContent(e => {
+			if (e.kind === NotificationViewItemContentChangeKind.MESSAGE) {
+				this.doTriggerAriaAlert(notification);
+			}
+		});
 
-  private doTriggerAriaAlert(notification: INotificationViewItem): void {
-    let alertText: string;
-    if (notification.severity === Severity.Error) {
-      alertText = localize(
-        'alertErrorMessage',
-        'Error: {0}',
-        notification.message.linkedText.toString(),
-      );
-    } else if (notification.severity === Severity.Warning) {
-      alertText = localize(
-        'alertWarningMessage',
-        'Warning: {0}',
-        notification.message.linkedText.toString(),
-      );
-    } else {
-      alertText = localize(
-        'alertInfoMessage',
-        'Info: {0}',
-        notification.message.linkedText.toString(),
-      );
-    }
+		Event.once(notification.onDidClose)(() => listener.dispose());
 
-    alert(alertText);
-  }
+		this.doTriggerAriaAlert(notification);
+	}
+
+	private doTriggerAriaAlert(notification: INotificationViewItem): void {
+		let alertText: string;
+		if (notification.severity === Severity.Error) {
+			alertText = localize('alertErrorMessage', "Error: {0}", notification.message.linkedText.toString());
+		} else if (notification.severity === Severity.Warning) {
+			alertText = localize('alertWarningMessage', "Warning: {0}", notification.message.linkedText.toString());
+		} else {
+			alertText = localize('alertInfoMessage', "Info: {0}", notification.message.linkedText.toString());
+		}
+
+		alert(alertText);
+	}
 }

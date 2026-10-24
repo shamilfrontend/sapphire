@@ -1,7 +1,10 @@
 {
-  "extends": "./tsconfig.json",
-  "compilerOptions": {
-    "types": []
-  },
-  "exclude": ["./src/test/**"]
+	"extends": "./tsconfig.json",
+	"compilerOptions": {},
+	"exclude": [
+		"./src/test/**"
+	],
+	"files": [
+		"./src/extension.browser.ts"
+	]
 }

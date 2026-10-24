@@ -8,69 +8,50 @@ import { IConfigurationService } from '../../../../platform/configuration/common
 import { ITextResourcePropertiesService } from '../../../../editor/common/services/textResourceConfiguration.js';
 import { OperatingSystem, OS } from '../../../../base/common/platform.js';
 import { Schemas } from '../../../../base/common/network.js';
-import {
-  IStorageService,
-  StorageScope,
-  StorageTarget,
-} from '../../../../platform/storage/common/storage.js';
+import { IStorageService, StorageScope, StorageTarget } from '../../../../platform/storage/common/storage.js';
 import { IWorkbenchEnvironmentService } from '../../environment/common/environmentService.js';
-import {
-  InstantiationType,
-  registerSingleton,
-} from '../../../../platform/instantiation/common/extensions.js';
+import { InstantiationType, registerSingleton } from '../../../../platform/instantiation/common/extensions.js';
 import { IRemoteAgentEnvironment } from '../../../../platform/remote/common/remoteAgentEnvironment.js';
 import { IRemoteAgentService } from '../../remote/common/remoteAgentService.js';
 
 export class TextResourcePropertiesService implements ITextResourcePropertiesService {
-  declare readonly _serviceBrand: undefined;
 
-  private remoteEnvironment: IRemoteAgentEnvironment | null = null;
+	declare readonly _serviceBrand: undefined;
 
-  constructor(
-    @IConfigurationService private readonly configurationService: IConfigurationService,
-    @IRemoteAgentService remoteAgentService: IRemoteAgentService,
-    @IWorkbenchEnvironmentService private readonly environmentService: IWorkbenchEnvironmentService,
-    @IStorageService private readonly storageService: IStorageService,
-  ) {
-    remoteAgentService.getEnvironment().then((remoteEnv) => (this.remoteEnvironment = remoteEnv));
-  }
+	private remoteEnvironment: IRemoteAgentEnvironment | null = null;
 
-  getEOL(resource?: URI, language?: string): string {
-    const eol = this.configurationService.getValue('files.eol', {
-      overrideIdentifier: language,
-      resource,
-    });
-    if (eol && typeof eol === 'string' && eol !== 'auto') {
-      return eol;
-    }
-    const os = this.getOS(resource);
-    return os === OperatingSystem.Linux || os === OperatingSystem.Macintosh ? '\n' : '\r\n';
-  }
+	constructor(
+		@IConfigurationService private readonly configurationService: IConfigurationService,
+		@IRemoteAgentService remoteAgentService: IRemoteAgentService,
+		@IWorkbenchEnvironmentService private readonly environmentService: IWorkbenchEnvironmentService,
+		@IStorageService private readonly storageService: IStorageService
+	) {
+		remoteAgentService.getEnvironment().then(remoteEnv => this.remoteEnvironment = remoteEnv);
+	}
 
-  private getOS(resource?: URI): OperatingSystem {
-    let os = OS;
+	getEOL(resource?: URI, language?: string): string {
+		const eol = this.configurationService.getValue('files.eol', { overrideIdentifier: language, resource });
+		if (eol && typeof eol === 'string' && eol !== 'auto') {
+			return eol;
+		}
+		const os = this.getOS(resource);
+		return os === OperatingSystem.Linux || os === OperatingSystem.Macintosh ? '\n' : '\r\n';
+	}
 
-    const remoteAuthority = this.environmentService.remoteAuthority;
-    if (remoteAuthority) {
-      if (resource && resource.scheme !== Schemas.file) {
-        const osCacheKey = `resource.authority.os.${remoteAuthority}`;
-        os = this.remoteEnvironment
-          ? this.remoteEnvironment.os
-          : /* Get it from cache */ this.storageService.getNumber(
-              osCacheKey,
-              StorageScope.WORKSPACE,
-              OS,
-            );
-        this.storageService.store(osCacheKey, os, StorageScope.WORKSPACE, StorageTarget.MACHINE);
-      }
-    }
+	private getOS(resource?: URI): OperatingSystem {
+		let os = OS;
 
-    return os;
-  }
+		const remoteAuthority = this.environmentService.remoteAuthority;
+		if (remoteAuthority) {
+			if (resource && resource.scheme !== Schemas.file) {
+				const osCacheKey = `resource.authority.os.${remoteAuthority}`;
+				os = this.remoteEnvironment ? this.remoteEnvironment.os : /* Get it from cache */ this.storageService.getNumber(osCacheKey, StorageScope.WORKSPACE, OS);
+				this.storageService.store(osCacheKey, os, StorageScope.WORKSPACE, StorageTarget.MACHINE);
+			}
+		}
+
+		return os;
+	}
 }
 
-registerSingleton(
-  ITextResourcePropertiesService,
-  TextResourcePropertiesService,
-  InstantiationType.Delayed,
-);
+registerSingleton(ITextResourcePropertiesService, TextResourcePropertiesService, InstantiationType.Delayed);

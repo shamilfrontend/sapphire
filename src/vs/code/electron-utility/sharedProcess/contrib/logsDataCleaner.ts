@@ -14,45 +14,38 @@ import { IEnvironmentService } from '../../../../platform/environment/common/env
 import { ILogService } from '../../../../platform/log/common/log.js';
 
 export class LogsDataCleaner extends Disposable {
-  constructor(
-    @IEnvironmentService private readonly environmentService: IEnvironmentService,
-    @ILogService private readonly logService: ILogService,
-  ) {
-    super();
 
-    const scheduler = this._register(
-      new RunOnceScheduler(() => {
-        this.cleanUpOldLogs();
-      }, 10 * 1000 /* after 10s */),
-    );
-    scheduler.schedule();
-  }
+	constructor(
+		@IEnvironmentService private readonly environmentService: IEnvironmentService,
+		@ILogService private readonly logService: ILogService
+	) {
+		super();
 
-  private async cleanUpOldLogs(): Promise<void> {
-    this.logService.trace('[logs cleanup]: Starting to clean up old logs.');
+		const scheduler = this._register(new RunOnceScheduler(() => {
+			this.cleanUpOldLogs();
+		}, 10 * 1000 /* after 10s */));
+		scheduler.schedule();
+	}
 
-    try {
-      const currentLog = basename(this.environmentService.logsHome);
-      const logsRoot = dirname(
-        this.environmentService.logsHome.with({ scheme: Schemas.file }),
-      ).fsPath;
-      const logFiles = await Promises.readdir(logsRoot);
+	private async cleanUpOldLogs(): Promise<void> {
+		this.logService.trace('[logs cleanup]: Starting to clean up old logs.');
 
-      const allSessions = logFiles.filter((logFile) => /^\d{8}T\d{6}$/.test(logFile));
-      const oldSessions = allSessions.sort().filter((session) => session !== currentLog);
-      const sessionsToDelete = oldSessions.slice(0, Math.max(0, oldSessions.length - 9));
+		try {
+			const currentLog = basename(this.environmentService.logsHome);
+			const logsRoot = dirname(this.environmentService.logsHome.with({ scheme: Schemas.file })).fsPath;
+			const logFiles = await Promises.readdir(logsRoot);
 
-      if (sessionsToDelete.length > 0) {
-        this.logService.trace(
-          `[logs cleanup]: Removing log folders '${sessionsToDelete.join(', ')}'`,
-        );
+			const allSessions = logFiles.filter(logFile => /^\d{8}T\d{6}$/.test(logFile));
+			const oldSessions = allSessions.sort().filter(session => session !== currentLog);
+			const sessionsToDelete = oldSessions.slice(0, Math.max(0, oldSessions.length - 9));
 
-        await Promise.all(
-          sessionsToDelete.map((sessionToDelete) => Promises.rm(join(logsRoot, sessionToDelete))),
-        );
-      }
-    } catch (error) {
-      onUnexpectedError(error);
-    }
-  }
+			if (sessionsToDelete.length > 0) {
+				this.logService.trace(`[logs cleanup]: Removing log folders '${sessionsToDelete.join(', ')}'`);
+
+				await Promise.all(sessionsToDelete.map(sessionToDelete => Promises.rm(join(logsRoot, sessionToDelete))));
+			}
+		} catch (error) {
+			onUnexpectedError(error);
+		}
+	}
 }

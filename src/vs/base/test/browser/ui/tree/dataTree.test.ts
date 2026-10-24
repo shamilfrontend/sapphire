@@ -10,148 +10,138 @@ import { IDataSource, ITreeNode, ITreeRenderer } from '../../../../browser/ui/tr
 import { ensureNoDisposablesAreLeakedInTestSuite } from '../../../common/utils.js';
 
 interface E {
-  value: number;
-  children?: E[];
+	value: number;
+	children?: E[];
 }
 
-suite('DataTree', () => {
-  let tree: DataTree<E, E>;
+suite('DataTree', function () {
+	let tree: DataTree<E, E>;
 
-  const root: E = {
-    value: -1,
-    children: [
-      { value: 0, children: [{ value: 10 }, { value: 11 }, { value: 12 }] },
-      { value: 1 },
-      { value: 2 },
-    ],
-  };
+	const root: E = {
+		value: -1,
+		children: [
+			{ value: 0, children: [{ value: 10 }, { value: 11 }, { value: 12 }] },
+			{ value: 1 },
+			{ value: 2 },
+		]
+	};
 
-  const empty: E = {
-    value: -1,
-    children: [],
-  };
+	const empty: E = {
+		value: -1,
+		children: []
+	};
 
-  teardown(() => tree.dispose());
+	teardown(() => tree.dispose());
 
-  ensureNoDisposablesAreLeakedInTestSuite();
+	ensureNoDisposablesAreLeakedInTestSuite();
 
-  setup(() => {
-    const container = document.createElement('div');
-    container.style.width = '200px';
-    container.style.height = '200px';
+	setup(() => {
+		const container = document.createElement('div');
+		container.style.width = '200px';
+		container.style.height = '200px';
 
-    const delegate = new (class implements IListVirtualDelegate<E> {
-      getHeight() {
-        return 20;
-      }
+		const delegate = new class implements IListVirtualDelegate<E> {
+			getHeight() { return 20; }
+			getTemplateId(): string { return 'default'; }
+		};
 
-      getTemplateId(): string {
-        return 'default';
-      }
-    })();
+		const renderer = new class implements ITreeRenderer<E, void, HTMLElement> {
+			readonly templateId = 'default';
+			renderTemplate(container: HTMLElement): HTMLElement {
+				return container;
+			}
+			renderElement(element: ITreeNode<E, void>, index: number, templateData: HTMLElement): void {
+				templateData.textContent = `${element.element.value}`;
+			}
+			disposeTemplate(): void { }
+		};
 
-    const renderer = new (class implements ITreeRenderer<E, void, HTMLElement> {
-      readonly templateId = 'default';
+		const dataSource = new class implements IDataSource<E, E> {
+			getChildren(element: E): E[] {
+				return element.children || [];
+			}
+		};
 
-      renderTemplate(container: HTMLElement): HTMLElement {
-        return container;
-      }
+		const identityProvider = new class implements IIdentityProvider<E> {
+			getId(element: E): { toString(): string } {
+				return `${element.value}`;
+			}
+		};
 
-      renderElement(element: ITreeNode<E, void>, index: number, templateData: HTMLElement): void {
-        templateData.textContent = `${element.element.value}`;
-      }
+		tree = new DataTree<E, E>('test', container, delegate, [renderer], dataSource, { identityProvider });
+		tree.layout(200);
+	});
 
-      disposeTemplate(): void {}
-    })();
+	test('view state is lost implicitly', () => {
+		tree.setInput(root);
 
-    const dataSource = new (class implements IDataSource<E, E> {
-      getChildren(element: E): E[] {
-        return element.children || [];
-      }
-    })();
+		let navigator = tree.navigate();
+		assert.strictEqual(navigator.next()!.value, 0);
+		assert.strictEqual(navigator.next()!.value, 10);
+		assert.strictEqual(navigator.next()!.value, 11);
+		assert.strictEqual(navigator.next()!.value, 12);
+		assert.strictEqual(navigator.next()!.value, 1);
+		assert.strictEqual(navigator.next()!.value, 2);
+		assert.strictEqual(navigator.next()!, null);
 
-    const identityProvider = new (class implements IIdentityProvider<E> {
-      getId(element: E): { toString(): string } {
-        return `${element.value}`;
-      }
-    })();
+		tree.collapse(root.children![0]);
+		navigator = tree.navigate();
+		assert.strictEqual(navigator.next()!.value, 0);
+		assert.strictEqual(navigator.next()!.value, 1);
+		assert.strictEqual(navigator.next()!.value, 2);
+		assert.strictEqual(navigator.next()!, null);
 
-    tree = new DataTree<E, E>('test', container, delegate, [renderer], dataSource, {
-      identityProvider,
-    });
-    tree.layout(200);
-  });
+		tree.setSelection([root.children![1]]);
+		tree.setFocus([root.children![2]]);
 
-  test('view state is lost implicitly', () => {
-    tree.setInput(root);
+		tree.setInput(empty);
+		tree.setInput(root);
+		navigator = tree.navigate();
+		assert.strictEqual(navigator.next()!.value, 0);
+		assert.strictEqual(navigator.next()!.value, 10);
+		assert.strictEqual(navigator.next()!.value, 11);
+		assert.strictEqual(navigator.next()!.value, 12);
+		assert.strictEqual(navigator.next()!.value, 1);
+		assert.strictEqual(navigator.next()!.value, 2);
+		assert.strictEqual(navigator.next()!, null);
 
-    let navigator = tree.navigate();
-    assert.strictEqual(navigator.next()!.value, 0);
-    assert.strictEqual(navigator.next()!.value, 10);
-    assert.strictEqual(navigator.next()!.value, 11);
-    assert.strictEqual(navigator.next()!.value, 12);
-    assert.strictEqual(navigator.next()!.value, 1);
-    assert.strictEqual(navigator.next()!.value, 2);
-    assert.strictEqual(navigator.next()!, null);
+		assert.deepStrictEqual(tree.getSelection(), []);
+		assert.deepStrictEqual(tree.getFocus(), []);
+	});
 
-    tree.collapse(root.children![0]);
-    navigator = tree.navigate();
-    assert.strictEqual(navigator.next()!.value, 0);
-    assert.strictEqual(navigator.next()!.value, 1);
-    assert.strictEqual(navigator.next()!.value, 2);
-    assert.strictEqual(navigator.next()!, null);
+	test('view state can be preserved', () => {
+		tree.setInput(root);
 
-    tree.setSelection([root.children![1]]);
-    tree.setFocus([root.children![2]]);
+		let navigator = tree.navigate();
+		assert.strictEqual(navigator.next()!.value, 0);
+		assert.strictEqual(navigator.next()!.value, 10);
+		assert.strictEqual(navigator.next()!.value, 11);
+		assert.strictEqual(navigator.next()!.value, 12);
+		assert.strictEqual(navigator.next()!.value, 1);
+		assert.strictEqual(navigator.next()!.value, 2);
+		assert.strictEqual(navigator.next()!, null);
 
-    tree.setInput(empty);
-    tree.setInput(root);
-    navigator = tree.navigate();
-    assert.strictEqual(navigator.next()!.value, 0);
-    assert.strictEqual(navigator.next()!.value, 10);
-    assert.strictEqual(navigator.next()!.value, 11);
-    assert.strictEqual(navigator.next()!.value, 12);
-    assert.strictEqual(navigator.next()!.value, 1);
-    assert.strictEqual(navigator.next()!.value, 2);
-    assert.strictEqual(navigator.next()!, null);
+		tree.collapse(root.children![0]);
+		navigator = tree.navigate();
+		assert.strictEqual(navigator.next()!.value, 0);
+		assert.strictEqual(navigator.next()!.value, 1);
+		assert.strictEqual(navigator.next()!.value, 2);
+		assert.strictEqual(navigator.next()!, null);
 
-    assert.deepStrictEqual(tree.getSelection(), []);
-    assert.deepStrictEqual(tree.getFocus(), []);
-  });
+		tree.setSelection([root.children![1]]);
+		tree.setFocus([root.children![2]]);
 
-  test('view state can be preserved', () => {
-    tree.setInput(root);
+		const viewState = tree.getViewState();
 
-    let navigator = tree.navigate();
-    assert.strictEqual(navigator.next()!.value, 0);
-    assert.strictEqual(navigator.next()!.value, 10);
-    assert.strictEqual(navigator.next()!.value, 11);
-    assert.strictEqual(navigator.next()!.value, 12);
-    assert.strictEqual(navigator.next()!.value, 1);
-    assert.strictEqual(navigator.next()!.value, 2);
-    assert.strictEqual(navigator.next()!, null);
+		tree.setInput(empty);
+		tree.setInput(root, viewState);
+		navigator = tree.navigate();
+		assert.strictEqual(navigator.next()!.value, 0);
+		assert.strictEqual(navigator.next()!.value, 1);
+		assert.strictEqual(navigator.next()!.value, 2);
+		assert.strictEqual(navigator.next()!, null);
 
-    tree.collapse(root.children![0]);
-    navigator = tree.navigate();
-    assert.strictEqual(navigator.next()!.value, 0);
-    assert.strictEqual(navigator.next()!.value, 1);
-    assert.strictEqual(navigator.next()!.value, 2);
-    assert.strictEqual(navigator.next()!, null);
-
-    tree.setSelection([root.children![1]]);
-    tree.setFocus([root.children![2]]);
-
-    const viewState = tree.getViewState();
-
-    tree.setInput(empty);
-    tree.setInput(root, viewState);
-    navigator = tree.navigate();
-    assert.strictEqual(navigator.next()!.value, 0);
-    assert.strictEqual(navigator.next()!.value, 1);
-    assert.strictEqual(navigator.next()!.value, 2);
-    assert.strictEqual(navigator.next()!, null);
-
-    assert.deepStrictEqual(tree.getSelection(), [root.children![1]]);
-    assert.deepStrictEqual(tree.getFocus(), [root.children![2]]);
-  });
+		assert.deepStrictEqual(tree.getSelection(), [root.children![1]]);
+		assert.deepStrictEqual(tree.getFocus(), [root.children![2]]);
+	});
 });

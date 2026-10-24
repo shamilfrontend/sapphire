@@ -7,263 +7,306 @@ import * as objects from '../../common/objects.js';
 import { ensureNoDisposablesAreLeakedInTestSuite } from './utils.js';
 
 const check = (one: any, other: any, msg: string) => {
-  assert(objects.equals(one, other), msg);
-  assert(objects.equals(other, one), `[reverse] ${msg}`);
+	assert(objects.equals(one, other), msg);
+	assert(objects.equals(other, one), '[reverse] ' + msg);
 };
 
 const checkNot = (one: any, other: any, msg: string) => {
-  assert(!objects.equals(one, other), msg);
-  assert(!objects.equals(other, one), `[reverse] ${msg}`);
+	assert(!objects.equals(one, other), msg);
+	assert(!objects.equals(other, one), '[reverse] ' + msg);
 };
 
 suite('Objects', () => {
-  ensureNoDisposablesAreLeakedInTestSuite();
 
-  test('equals', () => {
-    check(null, null, 'null');
-    check(undefined, undefined, 'undefined');
-    check(1234, 1234, 'numbers');
-    check('', '', 'empty strings');
-    check('1234', '1234', 'strings');
-    check([], [], 'empty arrays');
-    // check(['', 123], ['', 123], 'arrays');
-    check(
-      [
-        [1, 2, 3],
-        [4, 5, 6],
-      ],
-      [
-        [1, 2, 3],
-        [4, 5, 6],
-      ],
-      'nested arrays',
-    );
-    check({}, {}, 'empty objects');
-    check({ a: 1, b: '123' }, { a: 1, b: '123' }, 'objects');
-    check({ a: 1, b: '123' }, { b: '123', a: 1 }, 'objects (key order)');
-    check({ a: { b: 1, c: 2 }, b: 3 }, { a: { b: 1, c: 2 }, b: 3 }, 'nested objects');
+	ensureNoDisposablesAreLeakedInTestSuite();
 
-    checkNot(null, undefined, 'null != undefined');
-    checkNot(null, '', 'null != empty string');
-    checkNot(null, [], 'null != empty array');
-    checkNot(null, {}, 'null != empty object');
-    checkNot(null, 0, 'null != zero');
-    checkNot(undefined, '', 'undefined != empty string');
-    checkNot(undefined, [], 'undefined != empty array');
-    checkNot(undefined, {}, 'undefined != empty object');
-    checkNot(undefined, 0, 'undefined != zero');
-    checkNot('', [], 'empty string != empty array');
-    checkNot('', {}, 'empty string != empty object');
-    checkNot('', 0, 'empty string != zero');
-    checkNot([], {}, 'empty array != empty object');
-    checkNot([], 0, 'empty array != zero');
-    checkNot(0, [], 'zero != empty array');
+	test('equals', () => {
+		check(null, null, 'null');
+		check(undefined, undefined, 'undefined');
+		check(1234, 1234, 'numbers');
+		check('', '', 'empty strings');
+		check('1234', '1234', 'strings');
+		check([], [], 'empty arrays');
+		// check(['', 123], ['', 123], 'arrays');
+		check([[1, 2, 3], [4, 5, 6]], [[1, 2, 3], [4, 5, 6]], 'nested arrays');
+		check({}, {}, 'empty objects');
+		check({ a: 1, b: '123' }, { a: 1, b: '123' }, 'objects');
+		check({ a: 1, b: '123' }, { b: '123', a: 1 }, 'objects (key order)');
+		check({ a: { b: 1, c: 2 }, b: 3 }, { a: { b: 1, c: 2 }, b: 3 }, 'nested objects');
 
-    checkNot('1234', 1234, 'string !== number');
+		checkNot(null, undefined, 'null != undefined');
+		checkNot(null, '', 'null != empty string');
+		checkNot(null, [], 'null != empty array');
+		checkNot(null, {}, 'null != empty object');
+		checkNot(null, 0, 'null != zero');
+		checkNot(undefined, '', 'undefined != empty string');
+		checkNot(undefined, [], 'undefined != empty array');
+		checkNot(undefined, {}, 'undefined != empty object');
+		checkNot(undefined, 0, 'undefined != zero');
+		checkNot('', [], 'empty string != empty array');
+		checkNot('', {}, 'empty string != empty object');
+		checkNot('', 0, 'empty string != zero');
+		checkNot([], {}, 'empty array != empty object');
+		checkNot([], 0, 'empty array != zero');
+		checkNot(0, [], 'zero != empty array');
 
-    checkNot(
-      [
-        [1, 2, 3],
-        [4, 5, 6],
-      ],
-      [
-        [1, 2, 3],
-        [4, 5, 6000],
-      ],
-      'arrays',
-    );
-    checkNot({ a: { b: 1, c: 2 }, b: 3 }, { b: 3, a: { b: 9, c: 2 } }, 'objects');
-  });
+		checkNot('1234', 1234, 'string !== number');
 
-  test('mixin - array', () => {
-    const foo: any = {};
-    objects.mixin(foo, { bar: [1, 2, 3] });
+		checkNot([[1, 2, 3], [4, 5, 6]], [[1, 2, 3], [4, 5, 6000]], 'arrays');
+		checkNot({ a: { b: 1, c: 2 }, b: 3 }, { b: 3, a: { b: 9, c: 2 } }, 'objects');
+	});
 
-    assert(foo.bar);
-    assert(Array.isArray(foo.bar));
-    assert.strictEqual(foo.bar.length, 3);
-    assert.strictEqual(foo.bar[0], 1);
-    assert.strictEqual(foo.bar[1], 2);
-    assert.strictEqual(foo.bar[2], 3);
-  });
+	test('mixin - array', function () {
 
-  test('mixin - no overwrite', () => {
-    const foo: any = {
-      bar: '123',
-    };
+		const foo: any = {};
+		objects.mixin(foo, { bar: [1, 2, 3] });
 
-    const bar: any = {
-      bar: '456',
-    };
+		assert(foo.bar);
+		assert(Array.isArray(foo.bar));
+		assert.strictEqual(foo.bar.length, 3);
+		assert.strictEqual(foo.bar[0], 1);
+		assert.strictEqual(foo.bar[1], 2);
+		assert.strictEqual(foo.bar[2], 3);
+	});
 
-    objects.mixin(foo, bar, false);
+	test('mixin - no overwrite', function () {
+		const foo: any = {
+			bar: '123'
+		};
 
-    assert.strictEqual(foo.bar, '123');
-  });
+		const bar: any = {
+			bar: '456'
+		};
 
-  test('cloneAndChange', () => {
-    const o1 = { something: 'hello' };
-    const o = {
-      o1,
-      o2: o1,
-    };
-    assert.deepStrictEqual(
-      objects.cloneAndChange(o, () => {}),
-      o,
-    );
-  });
+		objects.mixin(foo, bar, false);
 
-  test('safeStringify', () => {
-    const obj1: any = {
-      friend: null,
-    };
+		assert.strictEqual(foo.bar, '123');
+	});
 
-    const obj2: any = {
-      friend: null,
-    };
+	test('cloneAndChange', () => {
+		const o1 = { something: 'hello' };
+		const o = {
+			o1: o1,
+			o2: o1
+		};
+		assert.deepStrictEqual(objects.cloneAndChange(o, () => { }), o);
+	});
 
-    obj1.friend = obj2;
-    obj2.friend = obj1;
+	test('safeStringify', () => {
+		const obj1: any = {
+			friend: null
+		};
 
-    const arr: any = [1];
-    arr.push(arr);
+		const obj2: any = {
+			friend: null
+		};
 
-    const circular: any = {
-      a: 42,
-      b: null,
-      c: [obj1, obj2],
-      d: null,
-      e: BigInt(42),
-    };
+		obj1.friend = obj2;
+		obj2.friend = obj1;
 
-    arr.push(circular);
+		const arr: any = [1];
+		arr.push(arr);
 
-    circular.b = circular;
-    circular.d = arr;
+		const circular: any = {
+			a: 42,
+			b: null,
+			c: [
+				obj1, obj2
+			],
+			d: null,
+			e: BigInt(42)
+		};
 
-    const result = objects.safeStringify(circular);
+		arr.push(circular);
 
-    assert.deepStrictEqual(JSON.parse(result), {
-      a: 42,
-      b: '[Circular]',
-      c: [
-        {
-          friend: {
-            friend: '[Circular]',
-          },
-        },
-        '[Circular]',
-      ],
-      d: [1, '[Circular]', '[Circular]'],
-      e: '[BigInt 42]',
-    });
-  });
 
-  test('distinct', () => {
-    const base = {
-      one: 'one',
-      two: 2,
-      three: {
-        3: true,
-      },
-      four: false,
-    };
+		circular.b = circular;
+		circular.d = arr;
 
-    let diff = objects.distinct(base, base);
-    assert.strictEqual(Object.keys(diff).length, 0);
+		const result = objects.safeStringify(circular);
 
-    let obj = {};
+		assert.deepStrictEqual(JSON.parse(result), {
+			a: 42,
+			b: '[Circular]',
+			c: [
+				{
+					friend: {
+						friend: '[Circular]'
+					}
+				},
+				{
+					friend: {
+						friend: '[Circular]'
+					}
+				}
+			],
+			d: [1, '[Circular]', '[Circular]'],
+			e: '[BigInt 42]'
+		});
+	});
 
-    diff = objects.distinct(base, obj);
-    assert.strictEqual(Object.keys(diff).length, 0);
+	test('safeStringify does not treat shared references as circular', () => {
+		const shared = { a: 1 };
+		assert.strictEqual(objects.safeStringify([shared, { x: shared, y: [shared] }]), '[{"a":1},{"x":{"a":1},"y":[{"a":1}]}]');
+	});
 
-    obj = {
-      one: 'one',
-      two: 2,
-    };
+	test('stableStringify', () => {
+		// Stable key order regardless of insertion order
+		const a = { b: 1, a: 2, c: { y: 1, x: 2 } };
+		const b = { c: { x: 2, y: 1 }, a: 2, b: 1 };
+		assert.strictEqual(objects.stableStringify(a), objects.stableStringify(b));
+		assert.strictEqual(objects.stableStringify(a), '{"a":2,"b":1,"c":{"x":2,"y":1}}');
 
-    diff = objects.distinct(base, obj);
-    assert.strictEqual(Object.keys(diff).length, 0);
+		// Nested keys must be preserved (regression: would be dropped if a
+		// global replacer-array was used).
+		assert.strictEqual(
+			objects.stableStringify({ outer: { inner: 1 } }),
+			'{"outer":{"inner":1}}'
+		);
 
-    obj = {
-      three: {
-        3: true,
-      },
-      four: false,
-    };
+		// Arrays preserve order; their object elements get sorted keys.
+		assert.strictEqual(
+			objects.stableStringify([{ b: 1, a: 2 }, 'x', null, 3]),
+			'[{"a":2,"b":1},"x",null,3]'
+		);
 
-    diff = objects.distinct(base, obj);
-    assert.strictEqual(Object.keys(diff).length, 0);
+		// Primitives
+		assert.strictEqual(objects.stableStringify(undefined), 'undefined');
+		assert.strictEqual(objects.stableStringify(null), 'null');
+		assert.strictEqual(objects.stableStringify(0), '0');
+		assert.strictEqual(objects.stableStringify(''), '""');
+		assert.strictEqual(objects.stableStringify(true), 'true');
 
-    obj = {
-      one: 'two',
-      two: 2,
-      three: {
-        3: true,
-      },
-      four: true,
-    };
+		// Properties whose value is undefined are omitted (matches JSON.stringify)
+		assert.strictEqual(
+			objects.stableStringify({ a: 1, b: undefined, c: 3 }),
+			'{"a":1,"c":3}'
+		);
 
-    diff = objects.distinct(base, obj);
-    assert.strictEqual(Object.keys(diff).length, 2);
-    assert.strictEqual(diff.one, 'two');
-    assert.strictEqual(diff.four, true);
+		// Circular references do not throw and produce stable output
+		const circular: any = { a: 1 };
+		circular.self = circular;
+		assert.strictEqual(
+			objects.stableStringify(circular),
+			'{"a":1,"self":"[Circular]"}'
+		);
 
-    obj = {
-      one: null,
-      two: 2,
-      three: {
-        3: true,
-      },
-      four: undefined,
-    };
+		const shared = { a: 1 };
+		assert.strictEqual(
+			objects.stableStringify({ x: shared, y: shared }),
+			'{"x":{"a":1},"y":{"a":1}}'
+		);
+		assert.strictEqual(
+			objects.stableStringify([shared, shared]),
+			'[{"a":1},{"a":1}]'
+		);
+	});
 
-    diff = objects.distinct(base, obj);
-    assert.strictEqual(Object.keys(diff).length, 2);
-    assert.strictEqual(diff.one, null);
-    assert.strictEqual(diff.four, undefined);
+	test('distinct', () => {
+		const base = {
+			one: 'one',
+			two: 2,
+			three: {
+				3: true
+			},
+			four: false
+		};
 
-    obj = {
-      one: 'two',
-      two: 3,
-      three: { 3: false },
-      four: true,
-    };
+		let diff = objects.distinct(base, base);
+		assert.strictEqual(Object.keys(diff).length, 0);
 
-    diff = objects.distinct(base, obj);
-    assert.strictEqual(Object.keys(diff).length, 4);
-    assert.strictEqual(diff.one, 'two');
-    assert.strictEqual(diff.two, 3);
-    assert.strictEqual(diff.three?.['3'], false);
-    assert.strictEqual(diff.four, true);
-  });
+		let obj = {};
 
-  test('getCaseInsensitive', () => {
-    const obj1 = {
-      lowercase: 123,
-      mIxEdCaSe: 456,
-    };
+		diff = objects.distinct(base, obj);
+		assert.strictEqual(Object.keys(diff).length, 0);
 
-    assert.strictEqual(obj1.lowercase, objects.getCaseInsensitive(obj1, 'lowercase'));
-    assert.strictEqual(obj1.lowercase, objects.getCaseInsensitive(obj1, 'lOwErCaSe'));
+		obj = {
+			one: 'one',
+			two: 2
+		};
 
-    assert.strictEqual(obj1.mIxEdCaSe, objects.getCaseInsensitive(obj1, 'MIXEDCASE'));
-    assert.strictEqual(obj1.mIxEdCaSe, objects.getCaseInsensitive(obj1, 'mixedcase'));
-  });
+		diff = objects.distinct(base, obj);
+		assert.strictEqual(Object.keys(diff).length, 0);
+
+		obj = {
+			three: {
+				3: true
+			},
+			four: false
+		};
+
+		diff = objects.distinct(base, obj);
+		assert.strictEqual(Object.keys(diff).length, 0);
+
+		obj = {
+			one: 'two',
+			two: 2,
+			three: {
+				3: true
+			},
+			four: true
+		};
+
+		diff = objects.distinct(base, obj);
+		assert.strictEqual(Object.keys(diff).length, 2);
+		assert.strictEqual(diff.one, 'two');
+		assert.strictEqual(diff.four, true);
+
+		obj = {
+			one: null,
+			two: 2,
+			three: {
+				3: true
+			},
+			four: undefined
+		};
+
+		diff = objects.distinct(base, obj);
+		assert.strictEqual(Object.keys(diff).length, 2);
+		assert.strictEqual(diff.one, null);
+		assert.strictEqual(diff.four, undefined);
+
+		obj = {
+			one: 'two',
+			two: 3,
+			three: { 3: false },
+			four: true
+		};
+
+		diff = objects.distinct(base, obj);
+		assert.strictEqual(Object.keys(diff).length, 4);
+		assert.strictEqual(diff.one, 'two');
+		assert.strictEqual(diff.two, 3);
+		assert.strictEqual(diff.three?.['3'], false);
+		assert.strictEqual(diff.four, true);
+	});
+
+	test('getCaseInsensitive', () => {
+		const obj1 = {
+			lowercase: 123,
+			mIxEdCaSe: 456
+		};
+
+		assert.strictEqual(obj1.lowercase, objects.getCaseInsensitive(obj1, 'lowercase'));
+		assert.strictEqual(obj1.lowercase, objects.getCaseInsensitive(obj1, 'lOwErCaSe'));
+
+		assert.strictEqual(obj1.mIxEdCaSe, objects.getCaseInsensitive(obj1, 'MIXEDCASE'));
+		assert.strictEqual(obj1.mIxEdCaSe, objects.getCaseInsensitive(obj1, 'mixedcase'));
+	});
 });
 
 test('mapValues', () => {
-  const obj = {
-    a: 1,
-    b: 2,
-    c: 3,
-  };
+	const obj = {
+		a: 1,
+		b: 2,
+		c: 3
+	};
 
-  const result = objects.mapValues(obj, (value, key) => `${key}: ${value * 2}`);
+	const result = objects.mapValues(obj, (value, key) => `${key}: ${value * 2}`);
 
-  assert.deepStrictEqual(result, {
-    a: 'a: 2',
-    b: 'b: 4',
-    c: 'c: 6',
-  });
+	assert.deepStrictEqual(result, {
+		a: 'a: 2',
+		b: 'b: 4',
+		c: 'c: 6',
+	});
 });

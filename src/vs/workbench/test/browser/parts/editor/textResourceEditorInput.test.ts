@@ -15,173 +15,106 @@ import { DisposableStore } from '../../../../../base/common/lifecycle.js';
 import { ensureNoDisposablesAreLeakedInTestSuite } from '../../../../../base/test/common/utils.js';
 
 suite('TextResourceEditorInput', () => {
-  const disposables = new DisposableStore();
 
-  let instantiationService: IInstantiationService;
-  let accessor: TestServiceAccessor;
+	const disposables = new DisposableStore();
 
-  setup(() => {
-    instantiationService = workbenchInstantiationService(undefined, disposables);
-    accessor = instantiationService.createInstance(TestServiceAccessor);
-  });
+	let instantiationService: IInstantiationService;
+	let accessor: TestServiceAccessor;
 
-  teardown(() => {
-    disposables.clear();
-  });
+	setup(() => {
+		instantiationService = workbenchInstantiationService(undefined, disposables);
+		accessor = instantiationService.createInstance(TestServiceAccessor);
+	});
 
-  test('basics', async () => {
-    const resource = URI.from({ scheme: 'inmemory', authority: null!, path: 'thePath' });
-    accessor.modelService.createModel(
-      'function test() {}',
-      accessor.languageService.createById(PLAINTEXT_LANGUAGE_ID),
-      resource,
-    );
+	teardown(() => {
+		disposables.clear();
+	});
 
-    const input = disposables.add(
-      instantiationService.createInstance(
-        TextResourceEditorInput,
-        resource,
-        'The Name',
-        'The Description',
-        undefined,
-        undefined,
-      ),
-    );
+	test('basics', async () => {
+		const resource = URI.from({ scheme: 'inmemory', authority: null!, path: 'thePath' });
+		accessor.modelService.createModel('function test() {}', accessor.languageService.createById(PLAINTEXT_LANGUAGE_ID), resource);
 
-    const model = disposables.add(await input.resolve());
+		const input = disposables.add(instantiationService.createInstance(TextResourceEditorInput, resource, 'The Name', 'The Description', undefined, undefined));
 
-    assert.ok(model);
-    assert.strictEqual(
-      snapshotToString((model as TextResourceEditorModel).createSnapshot()!),
-      'function test() {}',
-    );
-  });
+		const model = disposables.add(await input.resolve());
 
-  test('preferred language (via ctor)', async () => {
-    const registration = accessor.languageService.registerLanguage({
-      id: 'resource-input-test',
-    });
+		assert.ok(model);
+		assert.strictEqual(snapshotToString(((model as TextResourceEditorModel).createSnapshot()!)), 'function test() {}');
+	});
 
-    const resource = URI.from({ scheme: 'inmemory', authority: null!, path: 'thePath' });
-    accessor.modelService.createModel(
-      'function test() {}',
-      accessor.languageService.createById(PLAINTEXT_LANGUAGE_ID),
-      resource,
-    );
+	test('preferred language (via ctor)', async () => {
+		const registration = accessor.languageService.registerLanguage({
+			id: 'resource-input-test',
+		});
 
-    const input = disposables.add(
-      instantiationService.createInstance(
-        TextResourceEditorInput,
-        resource,
-        'The Name',
-        'The Description',
-        'resource-input-test',
-        undefined,
-      ),
-    );
+		const resource = URI.from({ scheme: 'inmemory', authority: null!, path: 'thePath' });
+		accessor.modelService.createModel('function test() {}', accessor.languageService.createById(PLAINTEXT_LANGUAGE_ID), resource);
 
-    const model = disposables.add(await input.resolve());
-    assert.ok(model);
-    assert.strictEqual(model.textEditorModel?.getLanguageId(), 'resource-input-test');
+		const input = disposables.add(instantiationService.createInstance(TextResourceEditorInput, resource, 'The Name', 'The Description', 'resource-input-test', undefined));
 
-    input.setLanguageId('text');
-    assert.strictEqual(model.textEditorModel?.getLanguageId(), PLAINTEXT_LANGUAGE_ID);
+		const model = disposables.add(await input.resolve());
+		assert.ok(model);
+		assert.strictEqual(model.textEditorModel?.getLanguageId(), 'resource-input-test');
 
-    disposables.add(await input.resolve());
-    assert.strictEqual(model.textEditorModel?.getLanguageId(), PLAINTEXT_LANGUAGE_ID);
-    registration.dispose();
-  });
+		input.setLanguageId('text');
+		assert.strictEqual(model.textEditorModel?.getLanguageId(), PLAINTEXT_LANGUAGE_ID);
 
-  test('preferred language (via setPreferredLanguageId)', async () => {
-    const registration = accessor.languageService.registerLanguage({
-      id: 'resource-input-test',
-    });
+		disposables.add(await input.resolve());
+		assert.strictEqual(model.textEditorModel?.getLanguageId(), PLAINTEXT_LANGUAGE_ID);
+		registration.dispose();
+	});
 
-    const resource = URI.from({ scheme: 'inmemory', authority: null!, path: 'thePath' });
-    accessor.modelService.createModel(
-      'function test() {}',
-      accessor.languageService.createById(PLAINTEXT_LANGUAGE_ID),
-      resource,
-    );
+	test('preferred language (via setPreferredLanguageId)', async () => {
+		const registration = accessor.languageService.registerLanguage({
+			id: 'resource-input-test',
+		});
 
-    const input = disposables.add(
-      instantiationService.createInstance(
-        TextResourceEditorInput,
-        resource,
-        'The Name',
-        'The Description',
-        undefined,
-        undefined,
-      ),
-    );
-    input.setPreferredLanguageId('resource-input-test');
+		const resource = URI.from({ scheme: 'inmemory', authority: null!, path: 'thePath' });
+		accessor.modelService.createModel('function test() {}', accessor.languageService.createById(PLAINTEXT_LANGUAGE_ID), resource);
 
-    const model = disposables.add(await input.resolve());
-    assert.ok(model);
-    assert.strictEqual(model.textEditorModel?.getLanguageId(), 'resource-input-test');
-    registration.dispose();
-  });
+		const input = disposables.add(instantiationService.createInstance(TextResourceEditorInput, resource, 'The Name', 'The Description', undefined, undefined));
+		input.setPreferredLanguageId('resource-input-test');
 
-  test('preferred contents (via ctor)', async () => {
-    const resource = URI.from({ scheme: 'inmemory', authority: null!, path: 'thePath' });
-    accessor.modelService.createModel(
-      'function test() {}',
-      accessor.languageService.createById(PLAINTEXT_LANGUAGE_ID),
-      resource,
-    );
+		const model = disposables.add(await input.resolve());
+		assert.ok(model);
+		assert.strictEqual(model.textEditorModel?.getLanguageId(), 'resource-input-test');
+		registration.dispose();
+	});
 
-    const input = disposables.add(
-      instantiationService.createInstance(
-        TextResourceEditorInput,
-        resource,
-        'The Name',
-        'The Description',
-        undefined,
-        'My Resource Input Contents',
-      ),
-    );
+	test('preferred contents (via ctor)', async () => {
+		const resource = URI.from({ scheme: 'inmemory', authority: null!, path: 'thePath' });
+		accessor.modelService.createModel('function test() {}', accessor.languageService.createById(PLAINTEXT_LANGUAGE_ID), resource);
 
-    const model = disposables.add(await input.resolve());
-    assert.ok(model);
-    assert.strictEqual(model.textEditorModel?.getValue(), 'My Resource Input Contents');
+		const input = disposables.add(instantiationService.createInstance(TextResourceEditorInput, resource, 'The Name', 'The Description', undefined, 'My Resource Input Contents'));
 
-    model.textEditorModel.setValue('Some other contents');
-    assert.strictEqual(model.textEditorModel?.getValue(), 'Some other contents');
+		const model = disposables.add(await input.resolve());
+		assert.ok(model);
+		assert.strictEqual(model.textEditorModel?.getValue(), 'My Resource Input Contents');
 
-    disposables.add(await input.resolve());
-    assert.strictEqual(model.textEditorModel?.getValue(), 'Some other contents'); // preferred contents only used once
-  });
+		model.textEditorModel.setValue('Some other contents');
+		assert.strictEqual(model.textEditorModel?.getValue(), 'Some other contents');
 
-  test('preferred contents (via setPreferredContents)', async () => {
-    const resource = URI.from({ scheme: 'inmemory', authority: null!, path: 'thePath' });
-    accessor.modelService.createModel(
-      'function test() {}',
-      accessor.languageService.createById(PLAINTEXT_LANGUAGE_ID),
-      resource,
-    );
+		disposables.add(await input.resolve());
+		assert.strictEqual(model.textEditorModel?.getValue(), 'Some other contents'); // preferred contents only used once
+	});
 
-    const input = disposables.add(
-      instantiationService.createInstance(
-        TextResourceEditorInput,
-        resource,
-        'The Name',
-        'The Description',
-        undefined,
-        undefined,
-      ),
-    );
-    input.setPreferredContents('My Resource Input Contents');
+	test('preferred contents (via setPreferredContents)', async () => {
+		const resource = URI.from({ scheme: 'inmemory', authority: null!, path: 'thePath' });
+		accessor.modelService.createModel('function test() {}', accessor.languageService.createById(PLAINTEXT_LANGUAGE_ID), resource);
 
-    const model = disposables.add(await input.resolve());
-    assert.ok(model);
-    assert.strictEqual(model.textEditorModel?.getValue(), 'My Resource Input Contents');
+		const input = disposables.add(instantiationService.createInstance(TextResourceEditorInput, resource, 'The Name', 'The Description', undefined, undefined));
+		input.setPreferredContents('My Resource Input Contents');
 
-    model.textEditorModel.setValue('Some other contents');
-    assert.strictEqual(model.textEditorModel?.getValue(), 'Some other contents');
+		const model = disposables.add(await input.resolve());
+		assert.ok(model);
+		assert.strictEqual(model.textEditorModel?.getValue(), 'My Resource Input Contents');
 
-    disposables.add(await input.resolve());
-    assert.strictEqual(model.textEditorModel?.getValue(), 'Some other contents'); // preferred contents only used once
-  });
+		model.textEditorModel.setValue('Some other contents');
+		assert.strictEqual(model.textEditorModel?.getValue(), 'Some other contents');
 
-  ensureNoDisposablesAreLeakedInTestSuite();
+		disposables.add(await input.resolve());
+		assert.strictEqual(model.textEditorModel?.getValue(), 'Some other contents'); // preferred contents only used once
+	});
+
+	ensureNoDisposablesAreLeakedInTestSuite();
 });

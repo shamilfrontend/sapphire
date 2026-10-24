@@ -8,12 +8,10 @@ import * as fs from 'fs';
 import * as vscode from 'vscode';
 import { Api, getExtensionApi } from './api';
 import { CommandManager } from './commands/commandManager';
+import { DisableTsgoCommand, tsNativeExtensionIds } from './commands/useTsgo';
 import { registerBaseCommands } from './commands/index';
 import { ElectronServiceConfigurationProvider } from './configuration/configuration.electron';
-import {
-  ExperimentationTelemetryReporter,
-  IExperimentationTelemetryReporter,
-} from './experimentTelemetryReporter';
+import { ExperimentationTelemetryReporter, IExperimentationTelemetryReporter } from './experimentTelemetryReporter';
 import { ExperimentationService } from './experimentationService';
 import { createLazyClientHost, lazilyActivateClient } from './lazyClientHost';
 import { Logger } from './logging/logger';
@@ -23,79 +21,94 @@ import { PluginManager } from './tsServer/plugins';
 import { ElectronServiceProcessFactory } from './tsServer/serverProcess.electron';
 import { DiskTypeScriptVersionProvider } from './tsServer/versionProvider.electron';
 import { ActiveJsTsEditorTracker } from './ui/activeJsTsEditorTracker';
+import { suggestNativePreview } from './ui/suggestNativePreview';
 import { onCaseInsensitiveFileSystem } from './utils/fs.electron';
 import { Lazy } from './utils/lazy';
 import { getPackageInfo } from './utils/packageInfo';
 import * as temp from './utils/temp.electron';
+import { conditionalRegistration, requireGlobalUnifiedConfig, requireHasVsCodeExtension } from './languageFeatures/util/dependentRegistration';
+import { DisposableStore } from './utils/dispose';
 
-export function activate(context: vscode.ExtensionContext): Api {
-  const pluginManager = new PluginManager();
-  context.subscriptions.push(pluginManager);
+export function activate(
+	context: vscode.ExtensionContext
+): Api {
+	const pluginManager = new PluginManager();
+	context.subscriptions.push(pluginManager);
 
-  const commandManager = new CommandManager();
-  context.subscriptions.push(commandManager);
+	const onCompletionAccepted = new vscode.EventEmitter<vscode.CompletionItem>();
+	context.subscriptions.push(onCompletionAccepted);
 
-  const onCompletionAccepted = new vscode.EventEmitter<vscode.CompletionItem>();
-  context.subscriptions.push(onCompletionAccepted);
+	const logDirectoryProvider = new NodeLogDirectoryProvider(context);
+	const versionProvider = new DiskTypeScriptVersionProvider();
 
-  const logDirectoryProvider = new NodeLogDirectoryProvider(context);
-  const versionProvider = new DiskTypeScriptVersionProvider();
+	let experimentTelemetryReporter: IExperimentationTelemetryReporter | undefined;
+	const packageInfo = getPackageInfo(context);
+	if (packageInfo) {
+		const { name: id, version, aiKey } = packageInfo;
+		const vscTelemetryReporter = new VsCodeTelemetryReporter(aiKey);
+		experimentTelemetryReporter = new ExperimentationTelemetryReporter(vscTelemetryReporter);
+		context.subscriptions.push(experimentTelemetryReporter);
 
-  const activeJsTsEditorTracker = new ActiveJsTsEditorTracker();
-  context.subscriptions.push(activeJsTsEditorTracker);
+		const experimentationService = new ExperimentationService(experimentTelemetryReporter, id, version, context.globalState);
+		suggestNativePreview(context, experimentationService, pluginManager);
+	}
 
-  let experimentTelemetryReporter: IExperimentationTelemetryReporter | undefined;
-  const packageInfo = getPackageInfo(context);
-  if (packageInfo) {
-    const { name: id, version, aiKey } = packageInfo;
-    const vscTelemetryReporter = new VsCodeTelemetryReporter(aiKey);
-    experimentTelemetryReporter = new ExperimentationTelemetryReporter(vscTelemetryReporter);
-    context.subscriptions.push(experimentTelemetryReporter);
+	// Register features that work in both TSGO and non-TSGO modes
+	import('./languageFeatures/tsconfig').then(module => {
+		context.subscriptions.push(module.register());
+	});
 
-    // Currently we have no experiments, but creating the service adds the appropriate
-    // shared properties to the ExperimentationTelemetryReporter we just created.
-    new ExperimentationService(experimentTelemetryReporter, id, version, context.globalState);
-  }
+	// Conditionally register features based on whether TSGO is enabled
+	context.subscriptions.push(conditionalRegistration([
+		requireGlobalUnifiedConfig('experimental.useTsgo', { fallbackSection: 'typescript' }),
+		requireHasVsCodeExtension(tsNativeExtensionIds),
+	], () => {
+		// TSGO. Only register a small set of features that don't use TS Server
+		const disposables = new DisposableStore();
 
-  const logger = new Logger();
+		const commandManager = disposables.add(new CommandManager());
+		commandManager.register(new DisableTsgoCommand());
 
-  const lazyClientHost = createLazyClientHost(
-    context,
-    onCaseInsensitiveFileSystem(),
-    {
-      pluginManager,
-      commandManager,
-      logDirectoryProvider,
-      cancellerFactory: nodeRequestCancellerFactory,
-      versionProvider,
-      processFactory: new ElectronServiceProcessFactory(),
-      activeJsTsEditorTracker,
-      serviceConfigurationProvider: new ElectronServiceConfigurationProvider(),
-      experimentTelemetryReporter,
-      logger,
-    },
-    (item) => {
-      onCompletionAccepted.fire(item);
-    },
-  );
+		return disposables;
+	}, () => {
+		// Normal registration path
+		const disposables = new DisposableStore();
 
-  registerBaseCommands(commandManager, lazyClientHost, pluginManager, activeJsTsEditorTracker);
+		const commandManager = disposables.add(new CommandManager());
+		const activeJsTsEditorTracker = disposables.add(new ActiveJsTsEditorTracker());
 
-  import('./task/taskProvider').then((module) => {
-    context.subscriptions.push(module.register(new Lazy(() => lazyClientHost.value.serviceClient)));
-  });
+		const lazyClientHost = createLazyClientHost(context, onCaseInsensitiveFileSystem(), {
+			pluginManager,
+			commandManager,
+			logDirectoryProvider,
+			cancellerFactory: nodeRequestCancellerFactory,
+			versionProvider,
+			processFactory: new ElectronServiceProcessFactory(),
+			activeJsTsEditorTracker,
+			serviceConfigurationProvider: new ElectronServiceConfigurationProvider(),
+			experimentTelemetryReporter,
+			logger: new Logger(),
+		}, item => {
+			onCompletionAccepted.fire(item);
+		}).map(clientHost => {
+			return disposables.add(clientHost);
+		});
 
-  import('./languageFeatures/tsconfig').then((module) => {
-    context.subscriptions.push(module.register());
-  });
+		// Register features
+		registerBaseCommands(commandManager, lazyClientHost, pluginManager, activeJsTsEditorTracker);
 
-  context.subscriptions.push(
-    lazilyActivateClient(lazyClientHost, pluginManager, activeJsTsEditorTracker),
-  );
+		import('./task/taskProvider').then(module => {
+			disposables.add(module.register(new Lazy(() => lazyClientHost.value.serviceClient)));
+		});
 
-  return getExtensionApi(onCompletionAccepted.event, pluginManager);
+		disposables.add(lazilyActivateClient(lazyClientHost, pluginManager, activeJsTsEditorTracker));
+
+		return disposables;
+	},));
+
+	return getExtensionApi(onCompletionAccepted.event, pluginManager);
 }
 
-export function deactivate() {
-  fs.rmSync(temp.instanceTempDir.value, { recursive: true, force: true });
+export async function deactivate(): Promise<void> {
+	await fs.promises.rm(temp.instanceTempDir.value, { recursive: true, force: true });
 }

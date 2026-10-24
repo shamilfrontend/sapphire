@@ -7,100 +7,82 @@ import * as nls from '../../../../nls.js';
 import { Disposable, IDisposable } from '../../../../base/common/lifecycle.js';
 import { ContextKeyExpr } from '../../../../platform/contextkey/common/contextkey.js';
 import { IWorkbenchContribution } from '../../../common/contributions.js';
-import {
-  IExtensionPoint,
-  IExtensionPointUser,
-} from '../../../services/extensions/common/extensionsRegistry.js';
-import {
-  ViewsWelcomeExtensionPoint,
-  ViewWelcome,
-  ViewIdentifierMap,
-} from './viewsWelcomeExtensionPoint.js';
+import { IExtensionPoint, IExtensionPointUser } from '../../../services/extensions/common/extensionsRegistry.js';
+import { ViewsWelcomeExtensionPoint, ViewWelcome, ViewIdentifierMap } from './viewsWelcomeExtensionPoint.js';
 import { Registry } from '../../../../platform/registry/common/platform.js';
-import {
-  Extensions as ViewContainerExtensions,
-  IViewContentDescriptor,
-  IViewsRegistry,
-} from '../../../common/views.js';
+import { Extensions as ViewContainerExtensions, IViewContentDescriptor, IViewsRegistry } from '../../../common/views.js';
 import { isProposedApiEnabled } from '../../../services/extensions/common/extensions.js';
 
 const viewsRegistry = Registry.as<IViewsRegistry>(ViewContainerExtensions.ViewsRegistry);
 
 export class ViewsWelcomeContribution extends Disposable implements IWorkbenchContribution {
-  private viewWelcomeContents = new Map<ViewWelcome, IDisposable>();
 
-  constructor(extensionPoint: IExtensionPoint<ViewsWelcomeExtensionPoint>) {
-    super();
+	private viewWelcomeContents = new Map<ViewWelcome, IDisposable>();
 
-    extensionPoint.setHandler((_, { added, removed }) => {
-      for (const contribution of removed) {
-        for (const welcome of contribution.value) {
-          const disposable = this.viewWelcomeContents.get(welcome);
+	constructor(extensionPoint: IExtensionPoint<ViewsWelcomeExtensionPoint>) {
+		super();
 
-          disposable?.dispose();
-        }
-      }
+		extensionPoint.setHandler((_, { added, removed }) => {
+			for (const contribution of removed) {
+				for (const welcome of contribution.value) {
+					const disposable = this.viewWelcomeContents.get(welcome);
 
-      const welcomesByViewId = new Map<string, Map<ViewWelcome, IViewContentDescriptor>>();
+					disposable?.dispose();
+				}
+			}
 
-      for (const contribution of added) {
-        for (const welcome of contribution.value) {
-          const { group, order } = parseGroupAndOrder(welcome, contribution);
-          const precondition = ContextKeyExpr.deserialize(welcome.enablement);
+			const welcomesByViewId = new Map<string, Map<ViewWelcome, IViewContentDescriptor>>();
 
-          const id = ViewIdentifierMap[welcome.view] ?? welcome.view;
-          let viewContentMap = welcomesByViewId.get(id);
-          if (!viewContentMap) {
-            viewContentMap = new Map();
-            welcomesByViewId.set(id, viewContentMap);
-          }
+			for (const contribution of added) {
+				for (const welcome of contribution.value) {
+					const { group, order } = parseGroupAndOrder(welcome, contribution);
+					const precondition = ContextKeyExpr.deserialize(welcome.enablement);
 
-          viewContentMap.set(welcome, {
-            content: welcome.contents,
-            when: ContextKeyExpr.deserialize(welcome.when),
-            precondition,
-            group,
-            order,
-          });
-        }
-      }
+					const id = ViewIdentifierMap[welcome.view] ?? welcome.view;
+					let viewContentMap = welcomesByViewId.get(id);
+					if (!viewContentMap) {
+						viewContentMap = new Map();
+						welcomesByViewId.set(id, viewContentMap);
+					}
 
-      for (const [id, viewContentMap] of welcomesByViewId) {
-        const disposables = viewsRegistry.registerViewWelcomeContent2(id, viewContentMap);
+					viewContentMap.set(welcome, {
+						content: welcome.contents,
+						when: ContextKeyExpr.deserialize(welcome.when),
+						precondition,
+						group,
+						order
+					});
+				}
+			}
 
-        for (const [welcome, disposable] of disposables) {
-          this.viewWelcomeContents.set(welcome, disposable);
-        }
-      }
-    });
-  }
+			for (const [id, viewContentMap] of welcomesByViewId) {
+				const disposables = viewsRegistry.registerViewWelcomeContent2(id, viewContentMap);
+
+				for (const [welcome, disposable] of disposables) {
+					this.viewWelcomeContents.set(welcome, disposable);
+				}
+			}
+		});
+	}
 }
 
-function parseGroupAndOrder(
-  welcome: ViewWelcome,
-  contribution: IExtensionPointUser<ViewsWelcomeExtensionPoint>,
-): { group: string | undefined; order: number | undefined } {
-  let group: string | undefined;
-  let order: number | undefined;
-  if (welcome.group) {
-    if (!isProposedApiEnabled(contribution.description, 'contribViewsWelcome')) {
-      contribution.collector.warn(
-        nls.localize(
-          'ViewsWelcomeExtensionPoint.proposedAPI',
-          "The viewsWelcome contribution in '{0}' requires 'enabledApiProposals: [\"contribViewsWelcome\"]' in order to use the 'group' proposed property.",
-          contribution.description.identifier.value,
-        ),
-      );
-      return { group, order };
-    }
+function parseGroupAndOrder(welcome: ViewWelcome, contribution: IExtensionPointUser<ViewsWelcomeExtensionPoint>): { group: string | undefined; order: number | undefined } {
 
-    const idx = welcome.group.lastIndexOf('@');
-    if (idx > 0) {
-      group = welcome.group.substr(0, idx);
-      order = Number(welcome.group.substr(idx + 1)) || undefined;
-    } else {
-      group = welcome.group;
-    }
-  }
-  return { group, order };
+	let group: string | undefined;
+	let order: number | undefined;
+	if (welcome.group) {
+		if (!isProposedApiEnabled(contribution.description, 'contribViewsWelcome')) {
+			contribution.collector.warn(nls.localize('ViewsWelcomeExtensionPoint.proposedAPI', "The viewsWelcome contribution in '{0}' requires 'enabledApiProposals: [\"contribViewsWelcome\"]' in order to use the 'group' proposed property.", contribution.description.identifier.value));
+			return { group, order };
+		}
+
+		const idx = welcome.group.lastIndexOf('@');
+		if (idx > 0) {
+			group = welcome.group.substr(0, idx);
+			order = Number(welcome.group.substr(idx + 1)) || undefined;
+		} else {
+			group = welcome.group;
+		}
+	}
+	return { group, order };
 }

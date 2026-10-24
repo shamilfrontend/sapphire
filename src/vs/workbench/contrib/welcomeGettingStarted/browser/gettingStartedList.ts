@@ -7,160 +7,141 @@ import { Disposable, IDisposable } from '../../../../base/common/lifecycle.js';
 import { $, Dimension } from '../../../../base/browser/dom.js';
 import { DomScrollableElement } from '../../../../base/browser/ui/scrollbar/scrollableElement.js';
 import { Emitter, Event } from '../../../../base/common/event.js';
-import {
-  ContextKeyExpression,
-  IContextKeyService,
-} from '../../../../platform/contextkey/common/contextkey.js';
+import { ContextKeyExpression, IContextKeyService } from '../../../../platform/contextkey/common/contextkey.js';
 import { equals } from '../../../../base/common/arrays.js';
 
 type GettingStartedIndexListOptions<T> = {
-  title: string;
-  klass: string;
-  limit: number;
-  empty?: HTMLElement | undefined;
-  more?: HTMLElement | undefined;
-  footer?: HTMLElement | undefined;
-  renderElement: (item: T) => HTMLElement;
-  rankElement?: (item: T) => number | null;
-  contextService: IContextKeyService;
+	title: string;
+	klass: string;
+	limit: number;
+	empty?: HTMLElement | undefined;
+	more?: HTMLElement | undefined;
+	footer?: HTMLElement | undefined;
+	renderElement: (item: T) => HTMLElement;
+	rankElement?: (item: T) => number | null;
+	contextService: IContextKeyService;
 };
 
-export class GettingStartedIndexList<
-  T extends { id: string; when?: ContextKeyExpression },
-> extends Disposable {
-  private readonly _onDidChangeEntries = new Emitter<void>();
+export class GettingStartedIndexList<T extends { id: string; when?: ContextKeyExpression }> extends Disposable {
+	private readonly _onDidChangeEntries = this._register(new Emitter<void>());
+	private readonly onDidChangeEntries: Event<void> = this._onDidChangeEntries.event;
 
-  private readonly onDidChangeEntries: Event<void> = this._onDidChangeEntries.event;
+	private domElement: HTMLElement;
+	private list: HTMLUListElement;
+	private scrollbar: DomScrollableElement;
 
-  private domElement: HTMLElement;
+	private entries: undefined | T[];
 
-  private list: HTMLUListElement;
+	private lastRendered: string[] | undefined;
 
-  private scrollbar: DomScrollableElement;
+	public itemCount: number;
 
-  private entries: undefined | T[];
+	private isDisposed = false;
 
-  private lastRendered: string[] | undefined;
+	private contextService: IContextKeyService;
+	private contextKeysToWatch = new Set<string>();
 
-  public itemCount: number;
+	constructor(
+		private options: GettingStartedIndexListOptions<T>
+	) {
+		super();
 
-  private isDisposed = false;
+		this.contextService = options.contextService;
 
-  private contextService: IContextKeyService;
+		this.entries = undefined;
 
-  private contextKeysToWatch = new Set<string>();
+		this.itemCount = 0;
+		this.list = $('ul');
+		this.scrollbar = this._register(new DomScrollableElement(this.list, {}));
+		this._register(this.onDidChangeEntries(() => this.scrollbar.scanDomNode()));
+		this.domElement = $('.index-list.' + options.klass, {},
+			$('h2', {}, options.title),
+			this.scrollbar.getDomNode());
 
-  constructor(private options: GettingStartedIndexListOptions<T>) {
-    super();
+		this._register(this.contextService.onDidChangeContext(e => {
+			if (e.affectsSome(this.contextKeysToWatch)) {
+				this.rerender();
+			}
+		}));
+	}
 
-    this.contextService = options.contextService;
+	getDomElement() {
+		return this.domElement;
+	}
 
-    this.entries = undefined;
+	layout(size: Dimension) {
+		this.scrollbar.scanDomNode();
+	}
 
-    this.itemCount = 0;
-    this.list = $('ul');
-    this.scrollbar = this._register(new DomScrollableElement(this.list, {}));
-    this._register(this.onDidChangeEntries(() => this.scrollbar.scanDomNode()));
-    this.domElement = $(
-      `.index-list.${options.klass}`,
-      {},
-      $('h2', {}, options.title),
-      this.scrollbar.getDomNode(),
-    );
+	onDidChange(listener: () => void) {
+		this._register(this.onDidChangeEntries(listener));
+	}
 
-    this._register(
-      this.contextService.onDidChangeContext((e) => {
-        if (e.affectsSome(this.contextKeysToWatch)) {
-          this.rerender();
-        }
-      }),
-    );
-  }
+	register(d: IDisposable) { if (this.isDisposed) { d.dispose(); } else { this._register(d); } }
 
-  getDomElement() {
-    return this.domElement;
-  }
+	override dispose() {
+		this.isDisposed = true;
+		super.dispose();
+	}
 
-  layout(size: Dimension) {
-    this.scrollbar.scanDomNode();
-  }
+	setLimit(limit: number) {
+		this.options.limit = limit;
+		this.setEntries(this.entries);
+	}
 
-  onDidChange(listener: () => void) {
-    this._register(this.onDidChangeEntries(listener));
-  }
+	rerender() {
+		this.setEntries(this.entries);
+	}
 
-  register(d: IDisposable) {
-    if (this.isDisposed) {
-      d.dispose();
-    } else {
-      this._register(d);
-    }
-  }
+	setEntries(entries: undefined | T[]) {
+		let entryList = entries ?? [];
 
-  override dispose() {
-    this.isDisposed = true;
-    super.dispose();
-  }
+		this.itemCount = 0;
 
-  setLimit(limit: number) {
-    this.options.limit = limit;
-    this.setEntries(this.entries);
-  }
+		const ranker = this.options.rankElement;
+		if (ranker) {
+			entryList = entryList.filter(e => ranker(e) !== null);
+			entryList.sort((a, b) => ranker(b)! - ranker(a)!);
+		}
 
-  rerender() {
-    this.setEntries(this.entries);
-  }
+		const activeEntries = entryList.filter(e => !e.when || this.contextService.contextMatchesRules(e.when));
+		const limitedEntries = activeEntries.slice(0, this.options.limit);
 
-  setEntries(entries: undefined | T[]) {
-    let entryList = entries ?? [];
+		const toRender = limitedEntries.map(e => e.id);
 
-    this.itemCount = 0;
+		if (this.entries === entries && equals(toRender, this.lastRendered)) { return; }
+		this.entries = entries;
 
-    const ranker = this.options.rankElement;
-    if (ranker) {
-      entryList = entryList.filter((e) => ranker(e) !== null);
-      entryList.sort((a, b) => ranker(b)! - ranker(a)!);
-    }
+		this.contextKeysToWatch.clear();
+		entryList.forEach(e => {
+			const keys = e.when?.keys();
+			keys?.forEach(key => this.contextKeysToWatch.add(key));
+		});
 
-    const activeEntries = entryList.filter(
-      (e) => !e.when || this.contextService.contextMatchesRules(e.when),
-    );
-    const limitedEntries = activeEntries.slice(0, this.options.limit);
+		this.lastRendered = toRender;
+		this.itemCount = limitedEntries.length;
 
-    const toRender = limitedEntries.map((e) => e.id);
 
-    if (this.entries === entries && equals(toRender, this.lastRendered)) {
-      return;
-    }
-    this.entries = entries;
+		while (this.list.firstChild) {
+			this.list.firstChild.remove();
+		}
 
-    this.contextKeysToWatch.clear();
-    entryList.forEach((e) => {
-      const keys = e.when?.keys();
-      keys?.forEach((key) => this.contextKeysToWatch.add(key));
-    });
+		this.itemCount = limitedEntries.length;
+		for (const entry of limitedEntries) {
+			const rendered = this.options.renderElement(entry);
+			this.list.appendChild(rendered);
+		}
 
-    this.lastRendered = toRender;
-    this.itemCount = limitedEntries.length;
+		if (activeEntries.length > limitedEntries.length && this.options.more) {
+			this.list.appendChild(this.options.more);
+		}
+		else if (entries !== undefined && this.itemCount === 0 && this.options.empty) {
+			this.list.appendChild(this.options.empty);
+		}
+		else if (this.options.footer) {
+			this.list.appendChild(this.options.footer);
+		}
 
-    while (this.list.firstChild) {
-      this.list.firstChild.remove();
-    }
-
-    this.itemCount = limitedEntries.length;
-    for (const entry of limitedEntries) {
-      const rendered = this.options.renderElement(entry);
-      this.list.appendChild(rendered);
-    }
-
-    if (activeEntries.length > limitedEntries.length && this.options.more) {
-      this.list.appendChild(this.options.more);
-    } else if (entries !== undefined && this.itemCount === 0 && this.options.empty) {
-      this.list.appendChild(this.options.empty);
-    } else if (this.options.footer) {
-      this.list.appendChild(this.options.footer);
-    }
-
-    this._onDidChangeEntries.fire();
-  }
+		this._onDidChangeEntries.fire();
+	}
 }

@@ -8,46 +8,31 @@ import { URI } from '../../../base/common/uri.js';
 import { ITextBufferFactory, ITextModel, ITextModelCreationOptions } from '../model.js';
 import { ILanguageSelection } from '../languages/language.js';
 import { createDecorator } from '../../../platform/instantiation/common/instantiation.js';
-import {
-  DocumentSemanticTokensProvider,
-  DocumentRangeSemanticTokensProvider,
-} from '../languages.js';
+import { DocumentSemanticTokensProvider, DocumentRangeSemanticTokensProvider } from '../languages.js';
+import { TextModelEditSource } from '../textModelEditSource.js';
 
 export const IModelService = createDecorator<IModelService>('modelService');
 
-export type DocumentTokensProvider =
-  DocumentSemanticTokensProvider | DocumentRangeSemanticTokensProvider;
+export type DocumentTokensProvider = DocumentSemanticTokensProvider | DocumentRangeSemanticTokensProvider;
 
 export interface IModelService {
-  readonly _serviceBrand: undefined;
+	readonly _serviceBrand: undefined;
 
-  createModel(
-    value: string | ITextBufferFactory,
-    languageSelection: ILanguageSelection | null,
-    resource?: URI,
-    isForSimpleWidget?: boolean,
-  ): ITextModel;
+	createModel(value: string | ITextBufferFactory, languageSelection: ILanguageSelection | null, resource?: URI, isForSimpleWidget?: boolean): ITextModel;
 
-  updateModel(model: ITextModel, value: string | ITextBufferFactory): void;
+	updateModel(model: ITextModel, value: string | ITextBufferFactory, reason?: TextModelEditSource): void;
 
-  destroyModel(resource: URI): void;
+	destroyModel(resource: URI): void;
 
-  getModels(): ITextModel[];
+	getModels(): ITextModel[];
 
-  getCreationOptions(
-    language: string,
-    resource: URI,
-    isForSimpleWidget: boolean,
-  ): ITextModelCreationOptions;
+	getCreationOptions(language: string, resource: URI, isForSimpleWidget: boolean): ITextModelCreationOptions;
 
-  getModel(resource: URI): ITextModel | null;
+	getModel(resource: URI): ITextModel | null;
 
-  readonly onModelAdded: Event<ITextModel>;
+	readonly onModelAdded: Event<ITextModel>;
 
-  readonly onModelRemoved: Event<ITextModel>;
+	readonly onModelRemoved: Event<ITextModel>;
 
-  readonly onModelLanguageChanged: Event<{
-    readonly model: ITextModel;
-    readonly oldLanguageId: string;
-  }>;
+	readonly onModelLanguageChanged: Event<{ readonly model: ITextModel; readonly oldLanguageId: string }>;
 }

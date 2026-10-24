@@ -10,105 +10,75 @@ import { ensureNoDisposablesAreLeakedInTestSuite } from '../../../../../base/tes
 import { EditorService } from '../../../editor/browser/editorService.js';
 import { IEditorGroupsService } from '../../../editor/common/editorGroupsService.js';
 import { UntitledTextEditorInput } from '../../../untitled/common/untitledTextEditorInput.js';
-import {
-  IWorkingCopyEditorHandler,
-  WorkingCopyEditorService,
-} from '../../common/workingCopyEditorService.js';
-import {
-  createEditorPart,
-  registerTestResourceEditor,
-  TestEditorService,
-  TestServiceAccessor,
-  workbenchInstantiationService,
-} from '../../../../test/browser/workbenchTestServices.js';
+import { IWorkingCopyEditorHandler, WorkingCopyEditorService } from '../../common/workingCopyEditorService.js';
+import { createEditorPart, registerTestResourceEditor, TestEditorService, TestServiceAccessor, workbenchInstantiationService } from '../../../../test/browser/workbenchTestServices.js';
 import { TestWorkingCopy } from '../../../../test/common/workbenchTestServices.js';
 
 suite('WorkingCopyEditorService', () => {
-  const disposables = new DisposableStore();
 
-  setup(() => {
-    disposables.add(registerTestResourceEditor());
-  });
+	const disposables = new DisposableStore();
 
-  teardown(() => {
-    disposables.clear();
-  });
+	setup(() => {
+		disposables.add(registerTestResourceEditor());
+	});
 
-  test('registry - basics', () => {
-    const service = disposables.add(
-      new WorkingCopyEditorService(disposables.add(new TestEditorService())),
-    );
+	teardown(() => {
+		disposables.clear();
+	});
 
-    let handlerEvent: IWorkingCopyEditorHandler | undefined;
-    disposables.add(
-      service.onDidRegisterHandler((handler) => {
-        handlerEvent = handler;
-      }),
-    );
+	test('registry - basics', () => {
+		const service = disposables.add(new WorkingCopyEditorService(disposables.add(new TestEditorService())));
 
-    const editorHandler: IWorkingCopyEditorHandler = {
-      handles: (workingCopy) => false,
-      isOpen: () => false,
-      createEditor: (workingCopy) => {
-        throw new Error();
-      },
-    };
+		let handlerEvent: IWorkingCopyEditorHandler | undefined = undefined;
+		disposables.add(service.onDidRegisterHandler(handler => {
+			handlerEvent = handler;
+		}));
 
-    disposables.add(service.registerHandler(editorHandler));
+		const editorHandler: IWorkingCopyEditorHandler = {
+			handles: workingCopy => false,
+			isOpen: () => false,
+			createEditor: workingCopy => { throw new Error(); }
+		};
 
-    assert.strictEqual(handlerEvent, editorHandler);
-  });
+		disposables.add(service.registerHandler(editorHandler));
 
-  test('findEditor', async () => {
-    const disposables = new DisposableStore();
+		assert.strictEqual(handlerEvent, editorHandler);
+	});
 
-    const instantiationService = workbenchInstantiationService(undefined, disposables);
-    const part = await createEditorPart(instantiationService, disposables);
-    instantiationService.stub(IEditorGroupsService, part);
+	test('findEditor', async () => {
+		const disposables = new DisposableStore();
 
-    const editorService = disposables.add(
-      instantiationService.createInstance(EditorService, undefined),
-    );
-    const accessor = instantiationService.createInstance(TestServiceAccessor);
+		const instantiationService = workbenchInstantiationService(undefined, disposables);
+		const part = await createEditorPart(instantiationService, disposables);
+		instantiationService.stub(IEditorGroupsService, part);
 
-    const service = disposables.add(new WorkingCopyEditorService(editorService));
+		const editorService = disposables.add(instantiationService.createInstance(EditorService, undefined));
+		const accessor = instantiationService.createInstance(TestServiceAccessor);
 
-    const resource = URI.parse('custom://some/folder/custom.txt');
-    const testWorkingCopy = disposables.add(
-      new TestWorkingCopy(resource, false, 'testWorkingCopyTypeId1'),
-    );
+		const service = disposables.add(new WorkingCopyEditorService(editorService));
 
-    assert.strictEqual(service.findEditor(testWorkingCopy), undefined);
+		const resource = URI.parse('custom://some/folder/custom.txt');
+		const testWorkingCopy = disposables.add(new TestWorkingCopy(resource, false, 'testWorkingCopyTypeId1'));
 
-    const editorHandler: IWorkingCopyEditorHandler = {
-      handles: (workingCopy) => workingCopy === testWorkingCopy,
-      isOpen: (workingCopy, editor) => workingCopy === testWorkingCopy,
-      createEditor: (workingCopy) => {
-        throw new Error();
-      },
-    };
+		assert.strictEqual(service.findEditor(testWorkingCopy), undefined);
 
-    disposables.add(service.registerHandler(editorHandler));
+		const editorHandler: IWorkingCopyEditorHandler = {
+			handles: workingCopy => workingCopy === testWorkingCopy,
+			isOpen: (workingCopy, editor) => workingCopy === testWorkingCopy,
+			createEditor: workingCopy => { throw new Error(); }
+		};
 
-    const editor1 = disposables.add(
-      instantiationService.createInstance(
-        UntitledTextEditorInput,
-        accessor.untitledTextEditorService.create({ initialValue: 'foo' }),
-      ),
-    );
-    const editor2 = disposables.add(
-      instantiationService.createInstance(
-        UntitledTextEditorInput,
-        accessor.untitledTextEditorService.create({ initialValue: 'foo' }),
-      ),
-    );
+		disposables.add(service.registerHandler(editorHandler));
 
-    await editorService.openEditors([{ editor: editor1 }, { editor: editor2 }]);
+		const editor1 = disposables.add(instantiationService.createInstance(UntitledTextEditorInput, accessor.untitledTextEditorService.create({ initialValue: 'foo' })));
+		const editor2 = disposables.add(instantiationService.createInstance(UntitledTextEditorInput, accessor.untitledTextEditorService.create({ initialValue: 'foo' })));
 
-    assert.ok(service.findEditor(testWorkingCopy));
+		await editorService.openEditors([{ editor: editor1 }, { editor: editor2 }]);
 
-    disposables.dispose();
-  });
+		assert.ok(service.findEditor(testWorkingCopy));
 
-  ensureNoDisposablesAreLeakedInTestSuite();
+		disposables.dispose();
+	});
+
+	ensureNoDisposablesAreLeakedInTestSuite();
 });

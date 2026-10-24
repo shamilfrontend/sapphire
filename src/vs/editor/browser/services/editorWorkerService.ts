@@ -6,24 +6,16 @@
 import { timeout } from '../../../base/common/async.js';
 import { Disposable, IDisposable } from '../../../base/common/lifecycle.js';
 import { URI } from '../../../base/common/uri.js';
-import {
-  logOnceWebWorkerWarning,
-  IWebWorkerClient,
-  Proxied,
-} from '../../../base/common/worker/webWorker.js';
-import { createWebWorker, IWebWorkerDescriptor } from '../../../base/browser/webWorkerFactory.js';
+import { logOnceWebWorkerWarning, IWebWorkerClient, Proxied } from '../../../base/common/worker/webWorker.js';
+import { WebWorkerDescriptor } from '../../../platform/webWorker/browser/webWorkerDescriptor.js';
+import { IWebWorkerService } from '../../../platform/webWorker/browser/webWorkerService.js';
 import { Position } from '../../common/core/position.js';
 import { IRange, Range } from '../../common/core/range.js';
 import { ITextModel } from '../../common/model.js';
 import * as languages from '../../common/languages.js';
 import { ILanguageConfigurationService } from '../../common/languages/languageConfigurationRegistry.js';
 import { EditorWorker } from '../../common/services/editorWebWorker.js';
-import {
-  DiffAlgorithmName,
-  IEditorWorkerService,
-  ILineChange,
-  IUnicodeHighlightsResult,
-} from '../../common/services/editorWorker.js';
+import { DiffAlgorithmName, IEditorWorkerService, ILineChange, IUnicodeHighlightsResult } from '../../common/services/editorWorker.js';
 import { IModelService } from '../../common/services/model.js';
 import { ITextResourceConfigurationService } from '../../common/services/textResourceConfiguration.js';
 import { isNonEmptyArray } from '../../../base/common/arrays.js';
@@ -33,25 +25,19 @@ import { canceled, onUnexpectedError } from '../../../base/common/errors.js';
 import { UnicodeHighlighterOptions } from '../../common/services/unicodeTextModelHighlighter.js';
 import { ILanguageFeaturesService } from '../../common/services/languageFeatures.js';
 import { IChange } from '../../common/diff/legacyLinesDiffComputer.js';
-import {
-  IDocumentDiff,
-  IDocumentDiffProviderOptions,
-} from '../../common/diff/documentDiffProvider.js';
+import { IDocumentDiff, IDocumentDiffProviderOptions } from '../../common/diff/documentDiffProvider.js';
 import { ILinesDiffComputerOptions, MovedText } from '../../common/diff/linesDiffComputer.js';
-import {
-  DetailedLineRangeMapping,
-  RangeMapping,
-  LineRangeMapping,
-} from '../../common/diff/rangeMapping.js';
-import { LineRange } from '../../common/core/lineRange.js';
-import {
-  SectionHeader,
-  FindSectionHeaderOptions,
-} from '../../common/services/findSectionHeaders.js';
+import { DetailedLineRangeMapping, RangeMapping, LineRangeMapping } from '../../common/diff/rangeMapping.js';
+import { LineRange } from '../../common/core/ranges/lineRange.js';
+import { SectionHeader, FindSectionHeaderOptions } from '../../common/services/findSectionHeaders.js';
 import { mainWindow } from '../../../base/browser/window.js';
 import { WindowIntervalTimer } from '../../../base/browser/dom.js';
 import { WorkerTextModelSyncClient } from '../../common/services/textModelSync/textModelSync.impl.js';
 import { EditorWorkerHost } from '../../common/services/editorWorkerHost.js';
+import { StringEdit } from '../../common/core/edits/stringEdit.js';
+import { OffsetRange } from '../../common/core/ranges/offsetRange.js';
+import { FileAccess } from '../../../base/common/network.js';
+import { isCompletionsEnabledWithTextResourceConfig } from '../../common/services/completionsEnablement.js';
 
 /**
  * Stop the worker if it was not needed for 5 min.
@@ -59,576 +45,484 @@ import { EditorWorkerHost } from '../../common/services/editorWorkerHost.js';
 const STOP_WORKER_DELTA_TIME_MS = 5 * 60 * 1000;
 
 function canSyncModel(modelService: IModelService, resource: URI): boolean {
-  const model = modelService.getModel(resource);
-  if (!model) {
-    return false;
-  }
-  if (model.isTooLargeForSyncing()) {
-    return false;
-  }
-  return true;
+	const model = modelService.getModel(resource);
+	if (!model) {
+		return false;
+	}
+	if (model.isTooLargeForSyncing()) {
+		return false;
+	}
+	return true;
 }
 
-export abstract class EditorWorkerService extends Disposable implements IEditorWorkerService {
-  declare readonly _serviceBrand: undefined;
+export class EditorWorkerService extends Disposable implements IEditorWorkerService {
 
-  private readonly _modelService: IModelService;
+	declare readonly _serviceBrand: undefined;
 
-  private readonly _workerManager: WorkerManager;
+	public static readonly workerDescriptor = new WebWorkerDescriptor({
+		esmModuleLocation: () => FileAccess.asBrowserUri('vs/editor/common/services/editorWebWorkerMain.js'),
+		esmModuleLocationBundler: () => new URL('../../common/services/editorWebWorkerMain.ts?esm', import.meta.url),
+		label: 'editorWorkerService'
+	});
 
-  private readonly _logService: ILogService;
+	private readonly _modelService: IModelService;
+	private readonly _workerManager: WorkerManager;
+	private readonly _logService: ILogService;
 
-  constructor(
-    workerDescriptor: IWebWorkerDescriptor,
-    @IModelService modelService: IModelService,
-    @ITextResourceConfigurationService configurationService: ITextResourceConfigurationService,
-    @ILogService logService: ILogService,
-    @ILanguageConfigurationService
-    private readonly _languageConfigurationService: ILanguageConfigurationService,
-    @ILanguageFeaturesService languageFeaturesService: ILanguageFeaturesService,
-  ) {
-    super();
-    this._modelService = modelService;
-    this._workerManager = this._register(new WorkerManager(workerDescriptor, this._modelService));
-    this._logService = logService;
+	constructor(
+		@IModelService modelService: IModelService,
+		@ITextResourceConfigurationService configurationService: ITextResourceConfigurationService,
+		@ILogService logService: ILogService,
+		@ILanguageConfigurationService private readonly _languageConfigurationService: ILanguageConfigurationService,
+		@ILanguageFeaturesService languageFeaturesService: ILanguageFeaturesService,
+		@IWebWorkerService private readonly _webWorkerService: IWebWorkerService,
+	) {
+		super();
+		this._modelService = modelService;
 
-    // register default link-provider and default completions-provider
-    this._register(
-      languageFeaturesService.linkProvider.register(
-        { language: '*', hasAccessToAllModels: true },
-        {
-          provideLinks: async (model, token) => {
-            if (!canSyncModel(this._modelService, model.uri)) {
-              return Promise.resolve({ links: [] }); // File too large
-            }
-            const worker = await this._workerWithResources([model.uri]);
-            const links = await worker.$computeLinks(model.uri.toString());
-            return links && { links };
-          },
-        },
-      ),
-    );
-    this._register(
-      languageFeaturesService.completionProvider.register(
-        '*',
-        new WordBasedCompletionItemProvider(
-          this._workerManager,
-          configurationService,
-          this._modelService,
-          this._languageConfigurationService,
-        ),
-      ),
-    );
-  }
+		this._workerManager = this._register(new WorkerManager(EditorWorkerService.workerDescriptor, this._modelService, this._webWorkerService));
+		this._logService = logService;
 
-  public override dispose(): void {
-    super.dispose();
-  }
+		// register default link-provider and default completions-provider
+		this._register(languageFeaturesService.linkProvider.register({ language: '*', hasAccessToAllModels: true }, {
+			provideLinks: async (model, token) => {
+				if (!canSyncModel(this._modelService, model.uri)) {
+					return Promise.resolve({ links: [] }); // File too large
+				}
+				const worker = await this._workerWithResources([model.uri]);
+				const links = await worker.$computeLinks(model.uri.toString());
+				return links && { links };
+			}
+		}));
+		this._register(languageFeaturesService.completionProvider.register('*', new WordBasedCompletionItemProvider(this._workerManager, configurationService, this._modelService, this._languageConfigurationService, this._logService, languageFeaturesService)));
+	}
 
-  public canComputeUnicodeHighlights(uri: URI): boolean {
-    return canSyncModel(this._modelService, uri);
-  }
 
-  public async computedUnicodeHighlights(
-    uri: URI,
-    options: UnicodeHighlighterOptions,
-    range?: IRange,
-  ): Promise<IUnicodeHighlightsResult> {
-    const worker = await this._workerWithResources([uri]);
-    return worker.$computeUnicodeHighlights(uri.toString(), options, range);
-  }
+	public canComputeUnicodeHighlights(uri: URI): boolean {
+		return canSyncModel(this._modelService, uri);
+	}
 
-  public async computeDiff(
-    original: URI,
-    modified: URI,
-    options: IDocumentDiffProviderOptions,
-    algorithm: DiffAlgorithmName,
-  ): Promise<IDocumentDiff | null> {
-    const worker = await this._workerWithResources(
-      [original, modified],
-      /* forceLargeModels */ true,
-    );
-    const result = await worker.$computeDiff(
-      original.toString(),
-      modified.toString(),
-      options,
-      algorithm,
-    );
-    if (!result) {
-      return null;
-    }
-    // Convert from space efficient JSON data to rich objects.
-    const diff: IDocumentDiff = {
-      identical: result.identical,
-      quitEarly: result.quitEarly,
-      changes: toLineRangeMappings(result.changes),
-      moves: result.moves.map(
-        (m) =>
-          new MovedText(
-            new LineRangeMapping(new LineRange(m[0], m[1]), new LineRange(m[2], m[3])),
-            toLineRangeMappings(m[4]),
-          ),
-      ),
-    };
-    return diff;
+	public async computedUnicodeHighlights(uri: URI, options: UnicodeHighlighterOptions, range?: IRange): Promise<IUnicodeHighlightsResult> {
+		const worker = await this._workerWithResources([uri]);
+		return worker.$computeUnicodeHighlights(uri.toString(), options, range);
+	}
 
-    function toLineRangeMappings(
-      changes: readonly ILineChange[],
-    ): readonly DetailedLineRangeMapping[] {
-      return changes.map(
-        (c) =>
-          new DetailedLineRangeMapping(
-            new LineRange(c[0], c[1]),
-            new LineRange(c[2], c[3]),
-            c[4]?.map(
-              (c) =>
-                new RangeMapping(
-                  new Range(c[0], c[1], c[2], c[3]),
-                  new Range(c[4], c[5], c[6], c[7]),
-                ),
-            ),
-          ),
-      );
-    }
-  }
+	public async computeDiff(original: URI, modified: URI, options: IDocumentDiffProviderOptions, algorithm: DiffAlgorithmName): Promise<IDocumentDiff | null> {
+		const worker = await this._workerWithResources([original, modified], /* forceLargeModels */true);
+		const result = await worker.$computeDiff(original.toString(), modified.toString(), options, algorithm);
+		if (!result) {
+			return null;
+		}
+		// Convert from space efficient JSON data to rich objects.
+		const diff: IDocumentDiff = {
+			identical: result.identical,
+			quitEarly: result.quitEarly,
+			changes: toLineRangeMappings(result.changes),
+			moves: result.moves.map(m => new MovedText(
+				new LineRangeMapping(new LineRange(m[0], m[1]), new LineRange(m[2], m[3])),
+				toLineRangeMappings(m[4])
+			))
+		};
+		return diff;
 
-  public canComputeDirtyDiff(original: URI, modified: URI): boolean {
-    return canSyncModel(this._modelService, original) && canSyncModel(this._modelService, modified);
-  }
+		function toLineRangeMappings(changes: readonly ILineChange[]): readonly DetailedLineRangeMapping[] {
+			return changes.map(
+				(c) => new DetailedLineRangeMapping(
+					new LineRange(c[0], c[1]),
+					new LineRange(c[2], c[3]),
+					c[4]?.map(
+						(c) => new RangeMapping(
+							new Range(c[0], c[1], c[2], c[3]),
+							new Range(c[4], c[5], c[6], c[7])
+						)
+					)
+				)
+			);
+		}
+	}
 
-  public async computeDirtyDiff(
-    original: URI,
-    modified: URI,
-    ignoreTrimWhitespace: boolean,
-  ): Promise<IChange[] | null> {
-    const worker = await this._workerWithResources([original, modified]);
-    return worker.$computeDirtyDiff(original.toString(), modified.toString(), ignoreTrimWhitespace);
-  }
+	public canComputeDirtyDiff(original: URI, modified: URI): boolean {
+		return (canSyncModel(this._modelService, original) && canSyncModel(this._modelService, modified));
+	}
 
-  public async computeMoreMinimalEdits(
-    resource: URI,
-    edits: languages.TextEdit[] | null | undefined,
-    pretty: boolean = false,
-  ): Promise<languages.TextEdit[] | undefined> {
-    if (isNonEmptyArray(edits)) {
-      if (!canSyncModel(this._modelService, resource)) {
-        return Promise.resolve(edits); // File too large
-      }
-      const sw = StopWatch.create();
-      const result = this._workerWithResources([resource]).then((worker) =>
-        worker.$computeMoreMinimalEdits(resource.toString(), edits, pretty),
-      );
-      result.finally(() =>
-        this._logService.trace(
-          'FORMAT#computeMoreMinimalEdits',
-          resource.toString(true),
-          sw.elapsed(),
-        ),
-      );
-      return Promise.race([result, timeout(1000).then(() => edits)]);
-    }
-    return Promise.resolve(undefined);
-  }
+	public async computeDirtyDiff(original: URI, modified: URI, ignoreTrimWhitespace: boolean): Promise<IChange[] | null> {
+		const worker = await this._workerWithResources([original, modified]);
+		return worker.$computeDirtyDiff(original.toString(), modified.toString(), ignoreTrimWhitespace);
+	}
 
-  public computeHumanReadableDiff(
-    resource: URI,
-    edits: languages.TextEdit[] | null | undefined,
-  ): Promise<languages.TextEdit[] | undefined> {
-    if (isNonEmptyArray(edits)) {
-      if (!canSyncModel(this._modelService, resource)) {
-        return Promise.resolve(edits); // File too large
-      }
-      const sw = StopWatch.create();
-      const opts: ILinesDiffComputerOptions = {
-        ignoreTrimWhitespace: false,
-        maxComputationTimeMs: 1000,
-        computeMoves: false,
-      };
-      const result = this._workerWithResources([resource])
-        .then((worker) => worker.$computeHumanReadableDiff(resource.toString(), edits, opts))
-        .catch((err) => {
-          onUnexpectedError(err);
-          // In case of an exception, fall back to computeMoreMinimalEdits
-          return this.computeMoreMinimalEdits(resource, edits, true);
-        });
-      result.finally(() =>
-        this._logService.trace(
-          'FORMAT#computeHumanReadableDiff',
-          resource.toString(true),
-          sw.elapsed(),
-        ),
-      );
-      return result;
-    }
-    return Promise.resolve(undefined);
-  }
+	public async computeMoreMinimalEdits(resource: URI, edits: languages.TextEdit[] | null | undefined, pretty: boolean = false): Promise<languages.TextEdit[] | undefined> {
+		if (isNonEmptyArray(edits)) {
+			if (!canSyncModel(this._modelService, resource)) {
+				return Promise.resolve(edits); // File too large
+			}
+			const sw = StopWatch.create();
+			const result = this._workerWithResources([resource]).then(worker => worker.$computeMoreMinimalEdits(resource.toString(), edits, pretty));
+			result.finally(() => this._logService.trace('FORMAT#computeMoreMinimalEdits', resource.toString(true), sw.elapsed()));
+			return Promise.race([result, timeout(1000).then(() => edits)]);
 
-  public canNavigateValueSet(resource: URI): boolean {
-    return canSyncModel(this._modelService, resource);
-  }
+		} else {
+			return Promise.resolve(undefined);
+		}
+	}
 
-  public async navigateValueSet(
-    resource: URI,
-    range: IRange,
-    up: boolean,
-  ): Promise<languages.IInplaceReplaceSupportResult | null> {
-    const model = this._modelService.getModel(resource);
-    if (!model) {
-      return null;
-    }
-    const wordDefRegExp = this._languageConfigurationService
-      .getLanguageConfiguration(model.getLanguageId())
-      .getWordDefinition();
-    const wordDef = wordDefRegExp.source;
-    const wordDefFlags = wordDefRegExp.flags;
-    const worker = await this._workerWithResources([resource]);
-    return worker.$navigateValueSet(resource.toString(), range, up, wordDef, wordDefFlags);
-  }
+	public computeHumanReadableDiff(resource: URI, edits: languages.TextEdit[] | null | undefined): Promise<languages.TextEdit[] | undefined> {
+		if (isNonEmptyArray(edits)) {
+			if (!canSyncModel(this._modelService, resource)) {
+				return Promise.resolve(edits); // File too large
+			}
+			const sw = StopWatch.create();
+			const opts: ILinesDiffComputerOptions = { ignoreTrimWhitespace: false, maxComputationTimeMs: 1000, computeMoves: false };
+			const result = (
+				this._workerWithResources([resource])
+					.then(worker => worker.$computeHumanReadableDiff(resource.toString(), edits, opts))
+					.catch((err) => {
+						onUnexpectedError(err);
+						// In case of an exception, fall back to computeMoreMinimalEdits
+						return this.computeMoreMinimalEdits(resource, edits, true);
+					})
+			);
+			result.finally(() => this._logService.trace('FORMAT#computeHumanReadableDiff', resource.toString(true), sw.elapsed()));
+			return result;
 
-  public canComputeWordRanges(resource: URI): boolean {
-    return canSyncModel(this._modelService, resource);
-  }
+		} else {
+			return Promise.resolve(undefined);
+		}
+	}
 
-  public async computeWordRanges(
-    resource: URI,
-    range: IRange,
-  ): Promise<{ [word: string]: IRange[] } | null> {
-    const model = this._modelService.getModel(resource);
-    if (!model) {
-      return Promise.resolve(null);
-    }
-    const wordDefRegExp = this._languageConfigurationService
-      .getLanguageConfiguration(model.getLanguageId())
-      .getWordDefinition();
-    const wordDef = wordDefRegExp.source;
-    const wordDefFlags = wordDefRegExp.flags;
-    const worker = await this._workerWithResources([resource]);
-    return worker.$computeWordRanges(resource.toString(), range, wordDef, wordDefFlags);
-  }
+	public async computeStringEditFromDiff(original: string, modified: string, options: { maxComputationTimeMs: number }, algorithm: DiffAlgorithmName): Promise<StringEdit> {
+		try {
+			const worker = await this._workerWithResources([]);
+			const edit = await worker.$computeStringDiff(original, modified, options, algorithm);
+			return StringEdit.fromJson(edit);
+		} catch (e) {
+			onUnexpectedError(e);
+			return StringEdit.replace(OffsetRange.ofLength(original.length), modified); // approximation
+		}
+	}
 
-  public async findSectionHeaders(
-    uri: URI,
-    options: FindSectionHeaderOptions,
-  ): Promise<SectionHeader[]> {
-    const worker = await this._workerWithResources([uri]);
-    return worker.$findSectionHeaders(uri.toString(), options);
-  }
+	public canNavigateValueSet(resource: URI): boolean {
+		return (canSyncModel(this._modelService, resource));
+	}
 
-  public async computeDefaultDocumentColors(
-    uri: URI,
-  ): Promise<languages.IColorInformation[] | null> {
-    const worker = await this._workerWithResources([uri]);
-    return worker.$computeDefaultDocumentColors(uri.toString());
-  }
+	public async navigateValueSet(resource: URI, range: IRange, up: boolean): Promise<languages.IInplaceReplaceSupportResult | null> {
+		const model = this._modelService.getModel(resource);
+		if (!model) {
+			return null;
+		}
+		const wordDefRegExp = this._languageConfigurationService.getLanguageConfiguration(model.getLanguageId()).getWordDefinition();
+		const wordDef = wordDefRegExp.source;
+		const wordDefFlags = wordDefRegExp.flags;
+		const worker = await this._workerWithResources([resource]);
+		return worker.$navigateValueSet(resource.toString(), range, up, wordDef, wordDefFlags);
+	}
 
-  private async _workerWithResources(
-    resources: URI[],
-    forceLargeModels: boolean = false,
-  ): Promise<Proxied<EditorWorker>> {
-    const worker = await this._workerManager.withWorker();
-    return await worker.workerWithSyncedResources(resources, forceLargeModels);
-  }
+	public canComputeWordRanges(resource: URI): boolean {
+		return canSyncModel(this._modelService, resource);
+	}
+
+	public async computeWordRanges(resource: URI, range: IRange): Promise<{ [word: string]: IRange[] } | null> {
+		const model = this._modelService.getModel(resource);
+		if (!model) {
+			return Promise.resolve(null);
+		}
+		const wordDefRegExp = this._languageConfigurationService.getLanguageConfiguration(model.getLanguageId()).getWordDefinition();
+		const wordDef = wordDefRegExp.source;
+		const wordDefFlags = wordDefRegExp.flags;
+		const worker = await this._workerWithResources([resource]);
+		return worker.$computeWordRanges(resource.toString(), range, wordDef, wordDefFlags);
+	}
+
+	public async findSectionHeaders(uri: URI, options: FindSectionHeaderOptions): Promise<SectionHeader[]> {
+		const worker = await this._workerWithResources([uri]);
+		return worker.$findSectionHeaders(uri.toString(), options);
+	}
+
+	public async computeDefaultDocumentColors(uri: URI): Promise<languages.IColorInformation[] | null> {
+		const worker = await this._workerWithResources([uri]);
+		return worker.$computeDefaultDocumentColors(uri.toString());
+	}
+
+	private async _workerWithResources(resources: URI[], forceLargeModels: boolean = false): Promise<Proxied<EditorWorker>> {
+		const worker = await this._workerManager.withWorker();
+		return await worker.workerWithSyncedResources(resources, forceLargeModels);
+	}
 }
 
 class WordBasedCompletionItemProvider implements languages.CompletionItemProvider {
-  private readonly _workerManager: WorkerManager;
 
-  private readonly _configurationService: ITextResourceConfigurationService;
+	private readonly _workerManager: WorkerManager;
+	private readonly _configurationService: ITextResourceConfigurationService;
+	private readonly _modelService: IModelService;
 
-  private readonly _modelService: IModelService;
+	readonly _debugDisplayName = 'wordbasedCompletions';
 
-  readonly _debugDisplayName = 'wordbasedCompletions';
+	constructor(
+		workerManager: WorkerManager,
+		configurationService: ITextResourceConfigurationService,
+		modelService: IModelService,
+		private readonly languageConfigurationService: ILanguageConfigurationService,
+		private readonly logService: ILogService,
+		private readonly languageFeaturesService: ILanguageFeaturesService,
+	) {
+		this._workerManager = workerManager;
+		this._configurationService = configurationService;
+		this._modelService = modelService;
+	}
 
-  constructor(
-    workerManager: WorkerManager,
-    configurationService: ITextResourceConfigurationService,
-    modelService: IModelService,
-    private readonly languageConfigurationService: ILanguageConfigurationService,
-  ) {
-    this._workerManager = workerManager;
-    this._configurationService = configurationService;
-    this._modelService = modelService;
-  }
+	async provideCompletionItems(model: ITextModel, position: Position): Promise<languages.CompletionList | undefined> {
+		type WordBasedSuggestionsConfig = {
+			wordBasedSuggestions?: 'off' | 'currentDocument' | 'matchingDocuments' | 'allDocuments' | 'offWithInlineSuggestions';
+		};
+		const config = this._configurationService.getValue<WordBasedSuggestionsConfig>(model.uri, position, 'editor');
+		if (config.wordBasedSuggestions === 'off') {
+			return undefined;
+		}
 
-  async provideCompletionItems(
-    model: ITextModel,
-    position: Position,
-  ): Promise<languages.CompletionList | undefined> {
-    type WordBasedSuggestionsConfig = {
-      wordBasedSuggestions?: 'off' | 'currentDocument' | 'matchingDocuments' | 'allDocuments';
-    };
-    const config = this._configurationService.getValue<WordBasedSuggestionsConfig>(
-      model.uri,
-      position,
-      'editor',
-    );
-    if (config.wordBasedSuggestions === 'off') {
-      return undefined;
-    }
+		if (config.wordBasedSuggestions === 'offWithInlineSuggestions'
+			&& this.languageFeaturesService.inlineCompletionsProvider.has(model)
+			&& isCompletionsEnabledWithTextResourceConfig(this._configurationService, model.uri, model.getLanguageId())) {
+			return undefined;
+		}
 
-    const models: URI[] = [];
-    if (config.wordBasedSuggestions === 'currentDocument') {
-      // only current file and only if not too large
-      if (canSyncModel(this._modelService, model.uri)) {
-        models.push(model.uri);
-      }
-    } else {
-      // either all files or files of same language
-      for (const candidate of this._modelService.getModels()) {
-        if (!canSyncModel(this._modelService, candidate.uri)) {
-          continue;
-        }
-        if (candidate === model) {
-          models.unshift(candidate.uri);
-        } else if (
-          config.wordBasedSuggestions === 'allDocuments' ||
-          candidate.getLanguageId() === model.getLanguageId()
-        ) {
-          models.push(candidate.uri);
-        }
-      }
-    }
+		const models: URI[] = [];
+		if (config.wordBasedSuggestions === 'currentDocument') {
+			// only current file and only if not too large
+			if (canSyncModel(this._modelService, model.uri)) {
+				models.push(model.uri);
+			}
+		} else {
+			// either all files or files of same language
+			for (const candidate of this._modelService.getModels()) {
+				if (!canSyncModel(this._modelService, candidate.uri)) {
+					continue;
+				}
+				if (candidate === model) {
+					models.unshift(candidate.uri);
 
-    if (models.length === 0) {
-      return undefined; // File too large, no other files
-    }
+				} else if (config.wordBasedSuggestions === 'allDocuments' || candidate.getLanguageId() === model.getLanguageId()) {
+					models.push(candidate.uri);
+				}
+			}
+		}
 
-    const wordDefRegExp = this.languageConfigurationService
-      .getLanguageConfiguration(model.getLanguageId())
-      .getWordDefinition();
-    const word = model.getWordAtPosition(position);
-    const replace = !word
-      ? Range.fromPositions(position)
-      : new Range(position.lineNumber, word.startColumn, position.lineNumber, word.endColumn);
-    const insert = replace.setEndPosition(position.lineNumber, position.column);
+		if (models.length === 0) {
+			return undefined; // File too large, no other files
+		}
 
-    const client = await this._workerManager.withWorker();
-    const data = await client.textualSuggest(models, word?.word, wordDefRegExp);
-    if (!data) {
-      return undefined;
-    }
+		const wordDefRegExp = this.languageConfigurationService.getLanguageConfiguration(model.getLanguageId()).getWordDefinition();
+		const word = model.getWordAtPosition(position);
+		const replace = !word ? Range.fromPositions(position) : new Range(position.lineNumber, word.startColumn, position.lineNumber, word.endColumn);
+		const insert = replace.setEndPosition(position.lineNumber, position.column);
 
-    return {
-      duration: data.duration,
-      suggestions: data.words.map((word): languages.CompletionItem => ({
-        kind: languages.CompletionItemKind.Text,
-        label: word,
-        insertText: word,
-        range: { insert, replace },
-      })),
-    };
-  }
+		// Trace logging about the word and replace/insert ranges
+		this.logService.trace('[WordBasedCompletionItemProvider]', `word: "${word?.word || ''}", wordDef: "${wordDefRegExp}", replace: [${replace.toString()}], insert: [${insert.toString()}]`);
+
+		const client = await this._workerManager.withWorker();
+		const data = await client.textualSuggest(models, word?.word, wordDefRegExp);
+		if (!data) {
+			return undefined;
+		}
+
+		return {
+			duration: data.duration,
+			suggestions: data.words.map((word): languages.CompletionItem => {
+				return {
+					kind: languages.CompletionItemKind.Text,
+					label: word,
+					insertText: word,
+					range: { insert, replace }
+				};
+			}),
+		};
+	}
 }
 
 class WorkerManager extends Disposable {
-  private readonly _modelService: IModelService;
 
-  private _editorWorkerClient: EditorWorkerClient | null;
+	private readonly _modelService: IModelService;
+	private readonly _webWorkerService: IWebWorkerService;
+	private _editorWorkerClient: EditorWorkerClient | null;
+	private _lastWorkerUsedTime: number;
 
-  private _lastWorkerUsedTime: number;
+	constructor(
+		private readonly _workerDescriptor: WebWorkerDescriptor,
+		@IModelService modelService: IModelService,
+		@IWebWorkerService webWorkerService: IWebWorkerService
+	) {
+		super();
+		this._modelService = modelService;
+		this._webWorkerService = webWorkerService;
+		this._editorWorkerClient = null;
+		this._lastWorkerUsedTime = (new Date()).getTime();
 
-  constructor(
-    private readonly _workerDescriptor: IWebWorkerDescriptor,
-    @IModelService modelService: IModelService,
-  ) {
-    super();
-    this._modelService = modelService;
-    this._editorWorkerClient = null;
-    this._lastWorkerUsedTime = new Date().getTime();
+		const stopWorkerInterval = this._register(new WindowIntervalTimer());
+		stopWorkerInterval.cancelAndSet(() => this._checkStopIdleWorker(), Math.round(STOP_WORKER_DELTA_TIME_MS / 2), mainWindow);
 
-    const stopWorkerInterval = this._register(new WindowIntervalTimer());
-    stopWorkerInterval.cancelAndSet(
-      () => this._checkStopIdleWorker(),
-      Math.round(STOP_WORKER_DELTA_TIME_MS / 2),
-      mainWindow,
-    );
+		this._register(this._modelService.onModelRemoved(_ => this._checkStopEmptyWorker()));
+	}
 
-    this._register(this._modelService.onModelRemoved((_) => this._checkStopEmptyWorker()));
-  }
+	public override dispose(): void {
+		if (this._editorWorkerClient) {
+			this._editorWorkerClient.dispose();
+			this._editorWorkerClient = null;
+		}
+		super.dispose();
+	}
 
-  public override dispose(): void {
-    if (this._editorWorkerClient) {
-      this._editorWorkerClient.dispose();
-      this._editorWorkerClient = null;
-    }
-    super.dispose();
-  }
+	/**
+	 * Check if the model service has no more models and stop the worker if that is the case.
+	 */
+	private _checkStopEmptyWorker(): void {
+		if (!this._editorWorkerClient) {
+			return;
+		}
 
-  /**
-   * Check if the model service has no more models and stop the worker if that is the case.
-   */
-  private _checkStopEmptyWorker(): void {
-    if (!this._editorWorkerClient) {
-      return;
-    }
+		const models = this._modelService.getModels();
+		if (models.length === 0) {
+			// There are no more models => nothing possible for me to do
+			this._editorWorkerClient.dispose();
+			this._editorWorkerClient = null;
+		}
+	}
 
-    const models = this._modelService.getModels();
-    if (models.length === 0) {
-      // There are no more models => nothing possible for me to do
-      this._editorWorkerClient.dispose();
-      this._editorWorkerClient = null;
-    }
-  }
+	/**
+	 * Check if the worker has been idle for a while and then stop it.
+	 */
+	private _checkStopIdleWorker(): void {
+		if (!this._editorWorkerClient) {
+			return;
+		}
 
-  /**
-   * Check if the worker has been idle for a while and then stop it.
-   */
-  private _checkStopIdleWorker(): void {
-    if (!this._editorWorkerClient) {
-      return;
-    }
+		const timeSinceLastWorkerUsedTime = (new Date()).getTime() - this._lastWorkerUsedTime;
+		if (timeSinceLastWorkerUsedTime > STOP_WORKER_DELTA_TIME_MS) {
+			this._editorWorkerClient.dispose();
+			this._editorWorkerClient = null;
+		}
+	}
 
-    const timeSinceLastWorkerUsedTime = new Date().getTime() - this._lastWorkerUsedTime;
-    if (timeSinceLastWorkerUsedTime > STOP_WORKER_DELTA_TIME_MS) {
-      this._editorWorkerClient.dispose();
-      this._editorWorkerClient = null;
-    }
-  }
-
-  public withWorker(): Promise<EditorWorkerClient> {
-    this._lastWorkerUsedTime = new Date().getTime();
-    if (!this._editorWorkerClient) {
-      this._editorWorkerClient = new EditorWorkerClient(
-        this._workerDescriptor,
-        false,
-        this._modelService,
-      );
-    }
-    return Promise.resolve(this._editorWorkerClient);
-  }
+	public withWorker(): Promise<EditorWorkerClient> {
+		this._lastWorkerUsedTime = (new Date()).getTime();
+		if (!this._editorWorkerClient) {
+			this._editorWorkerClient = new EditorWorkerClient(this._workerDescriptor, false, this._modelService, this._webWorkerService);
+		}
+		return Promise.resolve(this._editorWorkerClient);
+	}
 }
 
 class SynchronousWorkerClient<T extends IDisposable> implements IWebWorkerClient<T> {
-  private readonly _instance: T;
+	private readonly _instance: T;
+	public readonly proxy: Proxied<T>;
 
-  public readonly proxy: Proxied<T>;
+	constructor(instance: T) {
+		this._instance = instance;
+		this.proxy = this._instance as Proxied<T>;
+	}
 
-  constructor(instance: T) {
-    this._instance = instance;
-    this.proxy = this._instance as Proxied<T>;
-  }
+	public dispose(): void {
+		this._instance.dispose();
+	}
 
-  public dispose(): void {
-    this._instance.dispose();
-  }
+	public setChannel<T extends object>(channel: string, handler: T): void {
+		throw new Error(`Not supported`);
+	}
 
-  public setChannel<T extends object>(channel: string, handler: T): void {
-    throw new Error(`Not supported`);
-  }
-
-  public getChannel<T extends object>(channel: string): Proxied<T> {
-    throw new Error(`Not supported`);
-  }
+	public getChannel<T extends object>(channel: string): Proxied<T> {
+		throw new Error(`Not supported`);
+	}
 }
 
 export interface IEditorWorkerClient {
-  fhr(method: string, args: any[]): Promise<any>;
+	fhr(method: string, args: unknown[]): Promise<unknown>;
 }
 
 export class EditorWorkerClient extends Disposable implements IEditorWorkerClient {
-  private readonly _modelService: IModelService;
 
-  private readonly _keepIdleModels: boolean;
+	private readonly _modelService: IModelService;
+	private readonly _webWorkerService: IWebWorkerService;
+	private readonly _keepIdleModels: boolean;
+	private _worker: IWebWorkerClient<EditorWorker> | null;
+	private _modelManager: WorkerTextModelSyncClient | null;
+	private _disposed = false;
 
-  private _worker: IWebWorkerClient<EditorWorker> | null;
+	constructor(
+		private readonly _workerDescriptorOrWorker: WebWorkerDescriptor | Worker | Promise<Worker>,
+		keepIdleModels: boolean,
+		@IModelService modelService: IModelService,
+		@IWebWorkerService webWorkerService: IWebWorkerService
+	) {
+		super();
+		this._modelService = modelService;
+		this._webWorkerService = webWorkerService;
+		this._keepIdleModels = keepIdleModels;
+		this._worker = null;
+		this._modelManager = null;
+	}
 
-  private _modelManager: WorkerTextModelSyncClient | null;
+	// foreign host request
+	public fhr(method: string, args: unknown[]): Promise<unknown> {
+		throw new Error(`Not implemented!`);
+	}
 
-  private _disposed = false;
+	private _getOrCreateWorker(): IWebWorkerClient<EditorWorker> {
+		if (!this._worker) {
+			try {
+				this._worker = this._register(this._webWorkerService.createWorkerClient<EditorWorker>(this._workerDescriptorOrWorker));
+				EditorWorkerHost.setChannel(this._worker, this._createEditorWorkerHost());
+			} catch (err) {
+				logOnceWebWorkerWarning(err);
+				this._worker = this._createFallbackLocalWorker();
+			}
+		}
+		return this._worker;
+	}
 
-  constructor(
-    private readonly _workerDescriptorOrWorker: IWebWorkerDescriptor | Worker,
-    keepIdleModels: boolean,
-    @IModelService modelService: IModelService,
-  ) {
-    super();
-    this._modelService = modelService;
-    this._keepIdleModels = keepIdleModels;
-    this._worker = null;
-    this._modelManager = null;
-  }
+	protected async _getProxy(): Promise<Proxied<EditorWorker>> {
+		try {
+			const proxy = this._getOrCreateWorker().proxy;
+			await proxy.$ping();
+			return proxy;
+		} catch (err) {
+			logOnceWebWorkerWarning(err);
+			this._worker = this._createFallbackLocalWorker();
+			return this._worker.proxy;
+		}
+	}
 
-  // foreign host request
-  public fhr(method: string, args: any[]): Promise<any> {
-    throw new Error(`Not implemented!`);
-  }
+	private _createFallbackLocalWorker(): SynchronousWorkerClient<EditorWorker> {
+		return new SynchronousWorkerClient(new EditorWorker(null));
+	}
 
-  private _getOrCreateWorker(): IWebWorkerClient<EditorWorker> {
-    if (!this._worker) {
-      try {
-        this._worker = this._register(
-          createWebWorker<EditorWorker>(this._workerDescriptorOrWorker),
-        );
-        EditorWorkerHost.setChannel(this._worker, this._createEditorWorkerHost());
-      } catch (err) {
-        logOnceWebWorkerWarning(err);
-        this._worker = this._createFallbackLocalWorker();
-      }
-    }
-    return this._worker;
-  }
+	private _createEditorWorkerHost(): EditorWorkerHost {
+		return {
+			$fhr: (method, args) => this.fhr(method, args)
+		};
+	}
 
-  protected async _getProxy(): Promise<Proxied<EditorWorker>> {
-    try {
-      const proxy = this._getOrCreateWorker().proxy;
-      await proxy.$ping();
-      return proxy;
-    } catch (err) {
-      logOnceWebWorkerWarning(err);
-      this._worker = this._createFallbackLocalWorker();
-      return this._worker.proxy;
-    }
-  }
+	private _getOrCreateModelManager(proxy: Proxied<EditorWorker>): WorkerTextModelSyncClient {
+		if (!this._modelManager) {
+			this._modelManager = this._register(new WorkerTextModelSyncClient(proxy, this._modelService, this._keepIdleModels));
+		}
+		return this._modelManager;
+	}
 
-  private _createFallbackLocalWorker(): SynchronousWorkerClient<EditorWorker> {
-    return new SynchronousWorkerClient(new EditorWorker(null));
-  }
+	public async workerWithSyncedResources(resources: URI[], forceLargeModels: boolean = false): Promise<Proxied<EditorWorker>> {
+		if (this._disposed) {
+			return Promise.reject(canceled());
+		}
+		const proxy = await this._getProxy();
+		this._getOrCreateModelManager(proxy).ensureSyncedResources(resources, forceLargeModels);
+		return proxy;
+	}
 
-  private _createEditorWorkerHost(): EditorWorkerHost {
-    return {
-      $fhr: (method, args) => this.fhr(method, args),
-    };
-  }
+	public async textualSuggest(resources: URI[], leadingWord: string | undefined, wordDefRegExp: RegExp): Promise<{ words: string[]; duration: number } | null> {
+		const proxy = await this.workerWithSyncedResources(resources);
+		const wordDef = wordDefRegExp.source;
+		const wordDefFlags = wordDefRegExp.flags;
+		return proxy.$textualSuggest(resources.map(r => r.toString()), leadingWord, wordDef, wordDefFlags);
+	}
 
-  private _getOrCreateModelManager(proxy: Proxied<EditorWorker>): WorkerTextModelSyncClient {
-    if (!this._modelManager) {
-      this._modelManager = this._register(
-        new WorkerTextModelSyncClient(proxy, this._modelService, this._keepIdleModels),
-      );
-    }
-    return this._modelManager;
-  }
-
-  public async workerWithSyncedResources(
-    resources: URI[],
-    forceLargeModels: boolean = false,
-  ): Promise<Proxied<EditorWorker>> {
-    if (this._disposed) {
-      return Promise.reject(canceled());
-    }
-    const proxy = await this._getProxy();
-    this._getOrCreateModelManager(proxy).ensureSyncedResources(resources, forceLargeModels);
-    return proxy;
-  }
-
-  public async textualSuggest(
-    resources: URI[],
-    leadingWord: string | undefined,
-    wordDefRegExp: RegExp,
-  ): Promise<{ words: string[]; duration: number } | null> {
-    const proxy = await this.workerWithSyncedResources(resources);
-    const wordDef = wordDefRegExp.source;
-    const wordDefFlags = wordDefRegExp.flags;
-    return proxy.$textualSuggest(
-      resources.map((r) => r.toString()),
-      leadingWord,
-      wordDef,
-      wordDefFlags,
-    );
-  }
-
-  override dispose(): void {
-    super.dispose();
-    this._disposed = true;
-  }
+	override dispose(): void {
+		super.dispose();
+		this._disposed = true;
+	}
 }

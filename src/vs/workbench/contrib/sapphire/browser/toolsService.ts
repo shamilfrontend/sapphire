@@ -1298,6 +1298,7 @@ class ToolsService implements IToolsService {
               {
                 type: 'GET',
                 url: `https://api.duckduckgo.com/?q=${encodeURIComponent(query)}&format=json&no_html=1&skip_disambig=1`,
+                callSite: 'sapphire.webSearch',
               },
               cts.token,
             );
@@ -1334,6 +1335,7 @@ class ToolsService implements IToolsService {
                   type: 'GET',
                   url: `https://html.duckduckgo.com/html/?q=${encodeURIComponent(query)}`,
                   headers: { 'User-Agent': 'Mozilla/5.0 (compatible; SapphireCodeBot/1.0)' },
+                  callSite: 'sapphire.webSearch',
                 },
                 cts.token,
               );
@@ -1372,7 +1374,11 @@ class ToolsService implements IToolsService {
           let title: string | null = null;
           try {
             const extracted = await this.webContentExtractorService.extract([URI.parse(url)]);
-            content = (extracted?.[0] ?? '').trim();
+            const first = extracted?.[0];
+            if (first?.status === 'ok') {
+              content = (first.result ?? '').trim();
+              title = first.title ?? null;
+            }
           } catch {
             // экстрактор недоступен — сырой HTTP
           }
@@ -1382,6 +1388,7 @@ class ToolsService implements IToolsService {
                 type: 'GET',
                 url,
                 headers: { 'User-Agent': 'Mozilla/5.0 (compatible; SapphireCodeBot/1.0)' },
+                callSite: 'sapphire.browseUrl',
               },
               cts.token,
             );

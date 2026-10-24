@@ -9,25 +9,27 @@ import { ScopedLineTokens, createScopedLineTokens } from '../../common/languages
 import { LanguageIdCodec } from '../../common/services/languagesRegistry.js';
 
 export interface TokenText {
-  text: string;
-  type: StandardTokenType;
+	text: string;
+	type: StandardTokenType;
 }
 
 export function createFakeScopedLineTokens(rawTokens: TokenText[]): ScopedLineTokens {
-  const tokens = new Uint32Array(rawTokens.length << 1);
-  let line = '';
+	const tokens = new Uint32Array(rawTokens.length << 1);
+	let line = '';
 
-  for (let i = 0, len = rawTokens.length; i < len; i++) {
-    const rawToken = rawTokens[i];
+	for (let i = 0, len = rawTokens.length; i < len; i++) {
+		const rawToken = rawTokens[i];
 
-    const startOffset = line.length;
-    const metadata = (rawToken.type << MetadataConsts.TOKEN_TYPE_OFFSET) >>> 0;
+		const startOffset = line.length;
+		const metadata = (
+			(rawToken.type << MetadataConsts.TOKEN_TYPE_OFFSET)
+		) >>> 0;
 
-    tokens[i << 1] = startOffset;
-    tokens[(i << 1) + 1] = metadata;
-    line += rawToken.text;
-  }
+		tokens[(i << 1)] = startOffset;
+		tokens[(i << 1) + 1] = metadata;
+		line += rawToken.text;
+	}
 
-  LineTokens.convertToEndOffset(tokens, line.length);
-  return createScopedLineTokens(new LineTokens(tokens, line, new LanguageIdCodec()), 0);
+	LineTokens.convertToEndOffset(tokens, line.length);
+	return createScopedLineTokens(new LineTokens(tokens, line, new LanguageIdCodec()), 0);
 }

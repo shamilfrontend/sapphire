@@ -11,22 +11,12 @@ import { getMediaKindForMime, MediaKind, Mime, rootMediaMimesTypes } from '../..
 import { Schemes } from '../../util/schemes';
 import { UriList } from '../../util/uriList';
 import { NewFilePathGenerator } from './newFilePathGenerator';
-import {
-  audioEditKind,
-  baseLinkEditKind,
-  createInsertUriListEdit,
-  createUriListSnippet,
-  DropOrPasteEdit,
-  getSnippetLabelAndKind,
-  imageEditKind,
-  linkEditKind,
-  videoEditKind,
-} from './shared';
+import { audioEditKind, baseLinkEditKind, createInsertUriListEdit, createUriListSnippet, DropOrPasteEdit, getSnippetLabelAndKind, imageEditKind, linkEditKind, videoEditKind } from './shared';
 import { InsertMarkdownLink, shouldInsertMarkdownLinkByDefault } from './smartDropOrPaste';
 
-enum CopyFilesSettings {
-  Never = 'never',
-  MediaFiles = 'mediaFiles',
+export enum CopyFilesSettings {
+	Never = 'never',
+	MediaFiles = 'mediaFiles',
 }
 
 /**
@@ -38,334 +28,279 @@ enum CopyFilesSettings {
  * - File object in the data transfer.
  * - Media data in the data transfer, such as `image/png`.
  */
-class ResourcePasteOrDropProvider
-  implements vscode.DocumentPasteEditProvider, vscode.DocumentDropEditProvider
-{
-  public static readonly mimeTypes = [
-    Mime.textUriList,
-    'files',
-    ...Object.values(rootMediaMimesTypes).map((type) => `${type}/*`),
-  ];
+export class ResourcePasteOrDropProvider implements vscode.DocumentPasteEditProvider, vscode.DocumentDropEditProvider {
 
-  private readonly _yieldTo = [
-    vscode.DocumentDropOrPasteEditKind.Text,
-    vscode.DocumentDropOrPasteEditKind.Empty.append('markdown', 'link', 'image', 'attachment'), // Prefer notebook attachments
-  ];
+	public static readonly mimeTypes = [
+		Mime.textUriList,
+		'files',
+		...Object.values(rootMediaMimesTypes).map(type => `${type}/*`),
+	];
 
-  constructor(private readonly _parser: IMdParser) {}
+	readonly #yieldTo = [
+		vscode.DocumentDropOrPasteEditKind.Text,
+		vscode.DocumentDropOrPasteEditKind.Empty.append('markdown', 'link', 'image', 'attachment'), // Prefer notebook attachments
+	];
 
-  public async provideDocumentDropEdits(
-    document: vscode.TextDocument,
-    position: vscode.Position,
-    dataTransfer: vscode.DataTransfer,
-    token: vscode.CancellationToken,
-  ): Promise<vscode.DocumentDropEdit | undefined> {
-    const edit = await this._createEdit(
-      document,
-      [new vscode.Range(position, position)],
-      dataTransfer,
-      {
-        insert: this._getEnabled(document, 'editor.drop.enabled'),
-        copyIntoWorkspace: vscode.workspace
-          .getConfiguration('markdown', document)
-          .get<CopyFilesSettings>('editor.drop.copyIntoWorkspace', CopyFilesSettings.MediaFiles),
-      },
-      undefined,
-      token,
-    );
+	readonly #parser: IMdParser;
 
-    if (!edit || token.isCancellationRequested) {
-      return;
-    }
+	constructor(
+		parser: IMdParser,
+	) {
+		this.#parser = parser;
+	}
 
-    const dropEdit = new vscode.DocumentDropEdit(edit.snippet);
-    dropEdit.title = edit.label;
-    dropEdit.kind = edit.kind;
-    dropEdit.additionalEdit = edit.additionalEdits;
-    dropEdit.yieldTo = [...this._yieldTo, ...edit.yieldTo];
-    return dropEdit;
-  }
+	public async provideDocumentDropEdits(
+		document: vscode.TextDocument,
+		position: vscode.Position,
+		dataTransfer: vscode.DataTransfer,
+		token: vscode.CancellationToken,
+	): Promise<vscode.DocumentDropEdit | undefined> {
+		const edit = await this.#createEdit(document, [new vscode.Range(position, position)], dataTransfer, {
+			insert: this.#getEnabled(document, 'editor.drop.enabled'),
+			copyIntoWorkspace: vscode.workspace.getConfiguration('markdown', document).get<CopyFilesSettings>('editor.drop.copyIntoWorkspace', CopyFilesSettings.MediaFiles)
+		}, undefined, token);
 
-  public async provideDocumentPasteEdits(
-    document: vscode.TextDocument,
-    ranges: readonly vscode.Range[],
-    dataTransfer: vscode.DataTransfer,
-    context: vscode.DocumentPasteEditContext,
-    token: vscode.CancellationToken,
-  ): Promise<vscode.DocumentPasteEdit[] | undefined> {
-    const edit = await this._createEdit(
-      document,
-      ranges,
-      dataTransfer,
-      {
-        insert: this._getEnabled(document, 'editor.paste.enabled'),
-        copyIntoWorkspace: vscode.workspace
-          .getConfiguration('markdown', document)
-          .get<CopyFilesSettings>('editor.paste.copyIntoWorkspace', CopyFilesSettings.MediaFiles),
-      },
-      context,
-      token,
-    );
+		if (!edit || token.isCancellationRequested) {
+			return;
+		}
 
-    if (!edit || token.isCancellationRequested) {
-      return;
-    }
+		const dropEdit = new vscode.DocumentDropEdit(edit.snippet);
+		dropEdit.title = edit.label;
+		dropEdit.kind = edit.kind;
+		dropEdit.additionalEdit = edit.additionalEdits;
+		dropEdit.yieldTo = [...this.#yieldTo, ...edit.yieldTo];
+		return dropEdit;
+	}
 
-    const pasteEdit = new vscode.DocumentPasteEdit(edit.snippet, edit.label, edit.kind);
-    pasteEdit.additionalEdit = edit.additionalEdits;
-    pasteEdit.yieldTo = [...this._yieldTo, ...edit.yieldTo];
-    return [pasteEdit];
-  }
+	public async provideDocumentPasteEdits(
+		document: vscode.TextDocument,
+		ranges: readonly vscode.Range[],
+		dataTransfer: vscode.DataTransfer,
+		context: vscode.DocumentPasteEditContext,
+		token: vscode.CancellationToken,
+	): Promise<vscode.DocumentPasteEdit[] | undefined> {
+		const edit = await this.#createEdit(document, ranges, dataTransfer, {
+			insert: this.#getEnabled(document, 'editor.paste.enabled'),
+			copyIntoWorkspace: vscode.workspace.getConfiguration('markdown', document).get<CopyFilesSettings>('editor.paste.copyIntoWorkspace', CopyFilesSettings.MediaFiles)
+		}, context, token);
 
-  private _getEnabled(document: vscode.TextDocument, settingName: string): InsertMarkdownLink {
-    const setting = vscode.workspace
-      .getConfiguration('markdown', document)
-      .get<boolean | InsertMarkdownLink>(settingName, true);
-    // Convert old boolean values to new enum setting
-    if (setting === false) {
-      return InsertMarkdownLink.Never;
-    }
-    if (setting === true) {
-      return InsertMarkdownLink.Smart;
-    }
-    return setting;
-  }
+		if (!edit || token.isCancellationRequested) {
+			return;
+		}
 
-  private async _createEdit(
-    document: vscode.TextDocument,
-    ranges: readonly vscode.Range[],
-    dataTransfer: vscode.DataTransfer,
-    settings: Readonly<{
-      insert: InsertMarkdownLink;
-      copyIntoWorkspace: CopyFilesSettings;
-    }>,
-    context: vscode.DocumentPasteEditContext | undefined,
-    token: vscode.CancellationToken,
-  ): Promise<DropOrPasteEdit | undefined> {
-    if (settings.insert === InsertMarkdownLink.Never) {
-      return;
-    }
+		const pasteEdit = new vscode.DocumentPasteEdit(edit.snippet, edit.label, edit.kind);
+		pasteEdit.additionalEdit = edit.additionalEdits;
+		pasteEdit.yieldTo = [...this.#yieldTo, ...edit.yieldTo];
+		return [pasteEdit];
+	}
 
-    let edit = await this._createEditForMediaFiles(
-      document,
-      dataTransfer,
-      settings.copyIntoWorkspace,
-      token,
-    );
-    if (token.isCancellationRequested) {
-      return;
-    }
+	#getEnabled(document: vscode.TextDocument, settingName: string): InsertMarkdownLink {
+		const setting = vscode.workspace.getConfiguration('markdown', document).get<boolean | InsertMarkdownLink>(settingName, true);
+		// Convert old boolean values to new enum setting
+		if (setting === false) {
+			return InsertMarkdownLink.Never;
+		} else if (setting === true) {
+			return InsertMarkdownLink.Smart;
+		} else {
+			return setting;
+		}
+	}
 
-    if (!edit) {
-      edit = await this._createEditFromUriListData(document, ranges, dataTransfer, context, token);
-    }
+	async #createEdit(
+		document: vscode.TextDocument,
+		ranges: readonly vscode.Range[],
+		dataTransfer: vscode.DataTransfer,
+		settings: Readonly<{
+			insert: InsertMarkdownLink;
+			copyIntoWorkspace: CopyFilesSettings;
+		}>,
+		context: vscode.DocumentPasteEditContext | undefined,
+		token: vscode.CancellationToken,
+	): Promise<DropOrPasteEdit | undefined> {
+		if (settings.insert === InsertMarkdownLink.Never) {
+			return;
+		}
 
-    if (!edit || token.isCancellationRequested) {
-      return;
-    }
+		let edit = await ResourcePasteOrDropProvider.createEditForMediaFiles(document, dataTransfer, settings.copyIntoWorkspace, token);
+		if (token.isCancellationRequested) {
+			return;
+		}
 
-    if (
-      !(await shouldInsertMarkdownLinkByDefault(
-        this._parser,
-        document,
-        settings.insert,
-        ranges,
-        token,
-      ))
-    ) {
-      edit.yieldTo.push(vscode.DocumentDropOrPasteEditKind.Empty.append('uri'));
-    }
+		if (!edit) {
+			edit = await this.#createEditFromUriListData(document, ranges, dataTransfer, context, token);
+		}
 
-    return edit;
-  }
+		if (!edit || token.isCancellationRequested) {
+			return;
+		}
 
-  private async _createEditFromUriListData(
-    document: vscode.TextDocument,
-    ranges: readonly vscode.Range[],
-    dataTransfer: vscode.DataTransfer,
-    context: vscode.DocumentPasteEditContext | undefined,
-    token: vscode.CancellationToken,
-  ): Promise<DropOrPasteEdit | undefined> {
-    const uriListData = await dataTransfer.get(Mime.textUriList)?.asString();
-    if (!uriListData || token.isCancellationRequested) {
-      return;
-    }
+		if (!(await shouldInsertMarkdownLinkByDefault(this.#parser, document, settings.insert, ranges, token))) {
+			edit.yieldTo.push(vscode.DocumentDropOrPasteEditKind.Empty.append('uri'));
+		}
 
-    const uriList = UriList.from(uriListData);
-    if (!uriList.entries.length) {
-      return;
-    }
+		return edit;
+	}
 
-    // In some browsers, copying from the address bar sets both text/uri-list and text/plain.
-    // Disable ourselves if there's also a text entry with the same http(s) uri as our list,
-    // unless we are explicitly requested.
-    if (
-      uriList.entries.length === 1 &&
-      (uriList.entries[0].uri.scheme === Schemes.http ||
-        uriList.entries[0].uri.scheme === Schemes.https) &&
-      !context?.only?.contains(baseLinkEditKind)
-    ) {
-      const text = await dataTransfer.get(Mime.textPlain)?.asString();
-      if (token.isCancellationRequested) {
-        return;
-      }
+	async #createEditFromUriListData(
+		document: vscode.TextDocument,
+		ranges: readonly vscode.Range[],
+		dataTransfer: vscode.DataTransfer,
+		context: vscode.DocumentPasteEditContext | undefined,
+		token: vscode.CancellationToken,
+	): Promise<DropOrPasteEdit | undefined> {
+		const uriListData = await dataTransfer.get(Mime.textUriList)?.asString();
+		if (!uriListData || token.isCancellationRequested) {
+			return;
+		}
 
-      if (text && textMatchesUriList(text, uriList)) {
-        return;
-      }
-    }
+		const uriList = UriList.from(uriListData);
+		if (!uriList.entries.length) {
+			return;
+		}
 
-    const edit = createInsertUriListEdit(document, ranges, uriList, {
-      linkKindHint: context?.only,
-    });
-    if (!edit) {
-      return;
-    }
+		// In some browsers, copying from the address bar sets both text/uri-list and text/plain.
+		// Disable ourselves if there's also a text entry with the same http(s) uri as our list,
+		// unless we are explicitly requested.
+		if (
+			uriList.entries.length === 1
+			&& (uriList.entries[0].uri.scheme === Schemes.http || uriList.entries[0].uri.scheme === Schemes.https)
+			&& !context?.only?.contains(baseLinkEditKind)
+		) {
+			const text = await dataTransfer.get(Mime.textPlain)?.asString();
+			if (token.isCancellationRequested) {
+				return;
+			}
 
-    const additionalEdits = new vscode.WorkspaceEdit();
-    additionalEdits.set(document.uri, edit.edits);
+			if (text && textMatchesUriList(text, uriList)) {
+				return;
+			}
+		}
 
-    return {
-      label: edit.label,
-      kind: edit.kind,
-      snippet: new vscode.SnippetString(''),
-      additionalEdits,
-      yieldTo: [],
-    };
-  }
+		const edit = createInsertUriListEdit(document, ranges, uriList, { linkKindHint: context?.only });
+		if (!edit) {
+			return;
+		}
 
-  /**
-   * Create a new edit for media files in a data transfer.
-   *
-   * This tries copying files outside of the workspace into the workspace.
-   */
-  private async _createEditForMediaFiles(
-    document: vscode.TextDocument,
-    dataTransfer: vscode.DataTransfer,
-    copyIntoWorkspace: CopyFilesSettings,
-    token: vscode.CancellationToken,
-  ): Promise<DropOrPasteEdit | undefined> {
-    if (
-      copyIntoWorkspace !== CopyFilesSettings.MediaFiles ||
-      getParentDocumentUri(document.uri).scheme === Schemes.untitled
-    ) {
-      return;
-    }
+		const additionalEdits = new vscode.WorkspaceEdit();
+		additionalEdits.set(document.uri, edit.edits);
 
-    interface FileEntry {
-      readonly uri: vscode.Uri;
-      readonly kind: MediaKind;
-      readonly newFile?: {
-        readonly contents: vscode.DataTransferFile;
-        readonly overwrite: boolean;
-      };
-    }
+		return {
+			label: edit.label,
+			kind: edit.kind,
+			snippet: new vscode.SnippetString(''),
+			additionalEdits,
+			yieldTo: []
+		};
+	}
 
-    const pathGenerator = new NewFilePathGenerator();
-    const fileEntries = coalesce(
-      await Promise.all(
-        Array.from(dataTransfer, async ([mime, item]): Promise<FileEntry | undefined> => {
-          const mediaKind = getMediaKindForMime(mime);
-          if (!mediaKind) {
-            return;
-          }
+	/**
+	 * Create a new edit for media files in a data transfer.
+	 *
+	 * This tries copying files outside of the workspace into the workspace.
+	 */
+	static async createEditForMediaFiles(
+		document: vscode.TextDocument,
+		dataTransfer: vscode.DataTransfer,
+		copyIntoWorkspace: CopyFilesSettings,
+		token: vscode.CancellationToken,
+		materializeContents = false,
+	): Promise<DropOrPasteEdit | undefined> {
+		if (copyIntoWorkspace !== CopyFilesSettings.MediaFiles || getParentDocumentUri(document.uri).scheme === Schemes.untitled) {
+			return;
+		}
 
-          const file = item?.asFile();
-          if (!file) {
-            return;
-          }
+		interface FileEntry {
+			readonly uri: vscode.Uri;
+			readonly kind: MediaKind;
+			readonly newFile?: { readonly contents: vscode.DataTransferFile; readonly overwrite: boolean };
+		}
 
-          if (file.uri) {
-            // If the file is already in a workspace, we don't want to create a copy of it
-            const workspaceFolder = vscode.workspace.getWorkspaceFolder(file.uri);
-            if (workspaceFolder) {
-              return { uri: file.uri, kind: mediaKind };
-            }
-          }
+		const pathGenerator = new NewFilePathGenerator();
+		const fileEntries = coalesce(await Promise.all(Array.from(dataTransfer, async ([mime, item]): Promise<FileEntry | undefined> => {
+			const mediaKind = getMediaKindForMime(mime);
+			if (!mediaKind) {
+				return;
+			}
 
-          const newFile = await pathGenerator.getNewFilePath(document, file, token);
-          if (!newFile) {
-            return;
-          }
-          return {
-            uri: newFile.uri,
-            kind: mediaKind,
-            newFile: { contents: file, overwrite: newFile.overwrite },
-          };
-        }),
-      ),
-    );
-    if (!fileEntries.length) {
-      return;
-    }
+			const file = item?.asFile();
+			if (!file) {
+				return;
+			}
 
-    const snippet = createUriListSnippet(document.uri, fileEntries);
-    if (!snippet) {
-      return;
-    }
+			if (file.uri) {
+				// If the file is already in a workspace, we don't want to create a copy of it
+				const workspaceFolder = vscode.workspace.getWorkspaceFolder(file.uri);
+				if (workspaceFolder) {
+					return { uri: file.uri, kind: mediaKind };
+				}
+			}
 
-    const additionalEdits = new vscode.WorkspaceEdit();
-    for (const entry of fileEntries) {
-      if (entry.newFile) {
-        additionalEdits.createFile(entry.uri, {
-          contents: entry.newFile.contents,
-          overwrite: entry.newFile.overwrite,
-        });
-      }
-    }
+			const newFile = await pathGenerator.getNewFilePath(document, file, token);
+			if (!newFile) {
+				return;
+			}
+			return { uri: newFile.uri, kind: mediaKind, newFile: { contents: file, overwrite: newFile.overwrite } };
+		})));
+		if (!fileEntries.length) {
+			return;
+		}
 
-    const { label, kind } = getSnippetLabelAndKind(snippet);
-    return {
-      snippet: snippet.snippet,
-      label,
-      kind,
-      additionalEdits,
-      yieldTo: [],
-    };
-  }
+		const snippet = createUriListSnippet(document.uri, fileEntries);
+		if (!snippet) {
+			return;
+		}
+
+		const additionalEdits = new vscode.WorkspaceEdit();
+		for (const entry of fileEntries) {
+			if (entry.newFile) {
+				additionalEdits.createFile(entry.uri, {
+					contents: materializeContents ? await entry.newFile.contents.data() : entry.newFile.contents,
+					overwrite: entry.newFile.overwrite,
+				});
+			}
+		}
+
+		const { label, kind } = getSnippetLabelAndKind(snippet);
+		return {
+			snippet: snippet.snippet,
+			label,
+			kind,
+			additionalEdits,
+			yieldTo: [],
+		};
+	}
 }
 
 function textMatchesUriList(text: string, uriList: UriList): boolean {
-  if (text === uriList.entries[0].str) {
-    return true;
-  }
+	if (text === uriList.entries[0].str) {
+		return true;
+	}
 
-  try {
-    const uri = vscode.Uri.parse(text);
-    return uriList.entries.some((entry) => entry.uri.toString() === uri.toString());
-  } catch {
-    return false;
-  }
+	try {
+		const uri = vscode.Uri.parse(text);
+		return uriList.entries.some(entry => entry.uri.toString() === uri.toString());
+	} catch {
+		return false;
+	}
 }
 
-export function registerResourceDropOrPasteSupport(
-  selector: vscode.DocumentSelector,
-  parser: IMdParser,
-): vscode.Disposable {
-  const providedEditKinds = [
-    baseLinkEditKind,
-    linkEditKind,
-    imageEditKind,
-    audioEditKind,
-    videoEditKind,
-  ];
+export function registerResourceDropOrPasteSupport(selector: vscode.DocumentSelector, parser: IMdParser): vscode.Disposable {
+	const providedEditKinds = [
+		baseLinkEditKind,
+		linkEditKind,
+		imageEditKind,
+		audioEditKind,
+		videoEditKind,
+	];
 
-  return vscode.Disposable.from(
-    vscode.languages.registerDocumentPasteEditProvider(
-      selector,
-      new ResourcePasteOrDropProvider(parser),
-      {
-        providedPasteEditKinds: providedEditKinds,
-        pasteMimeTypes: ResourcePasteOrDropProvider.mimeTypes,
-      },
-    ),
-    vscode.languages.registerDocumentDropEditProvider(
-      selector,
-      new ResourcePasteOrDropProvider(parser),
-      {
-        providedDropEditKinds: providedEditKinds,
-        dropMimeTypes: ResourcePasteOrDropProvider.mimeTypes,
-      },
-    ),
-  );
+	return vscode.Disposable.from(
+		vscode.languages.registerDocumentPasteEditProvider(selector, new ResourcePasteOrDropProvider(parser), {
+			providedPasteEditKinds: providedEditKinds,
+			pasteMimeTypes: ResourcePasteOrDropProvider.mimeTypes,
+		}),
+		vscode.languages.registerDocumentDropEditProvider(selector, new ResourcePasteOrDropProvider(parser), {
+			providedDropEditKinds: providedEditKinds,
+			dropMimeTypes: ResourcePasteOrDropProvider.mimeTypes,
+		}),
+	);
 }

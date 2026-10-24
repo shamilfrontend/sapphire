@@ -4,17 +4,39 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { VSBuffer } from '../../../../base/common/buffer.js';
+import { CancellationToken } from '../../../../base/common/cancellation.js';
 import { Event } from '../../../../base/common/event.js';
 import { createDecorator } from '../../../../platform/instantiation/common/instantiation.js';
-import {
-  IWindowOpenable,
-  IOpenWindowOptions,
-  IOpenEmptyWindowOptions,
-  IPoint,
-  IRectangle,
-} from '../../../../platform/window/common/window.js';
+import { FocusMode } from '../../../../platform/native/common/native.js';
+import { IWindowOpenable, IOpenWindowOptions, IOpenEmptyWindowOptions, IPoint, IRectangle, IOpenedMainWindow, IOpenedAuxiliaryWindow } from '../../../../platform/window/common/window.js';
 
 export const IHostService = createDecorator<IHostService>('hostService');
+
+export interface IToastOptions {
+	/**
+	 * Prevents another live native toast with the same key from being shown.
+	 */
+	readonly dedupeKey?: string;
+
+	readonly title: string;
+	readonly body?: string;
+
+	readonly actions?: readonly string[];
+
+	readonly silent?: boolean;
+}
+
+export interface IToastResult {
+	readonly supported: boolean;
+
+	/**
+	 * True when a live native toast with the requested dedupe key is already visible.
+	 */
+	readonly suppressed?: boolean;
+
+	readonly clicked: boolean;
+	readonly actionIndex?: number;
+}
 
 /**
  * A set of methods supported in both web and native environments.
@@ -23,128 +45,151 @@ export const IHostService = createDecorator<IHostService>('hostService');
  * environments.
  */
 export interface IHostService {
-  readonly _serviceBrand: undefined;
 
-  // #region Focus
+	readonly _serviceBrand: undefined;
 
-  /**
-   * Emitted when the focus of the window changes.
-   *
-   * Note: this considers the main window as well as auxiliary windows
-   * when they are in focus. As long as the main window or any of its
-   * auxiliary windows have focus, this event fires with `true`. It will
-   * fire with `false` when neither the main window nor any of its
-   * auxiliary windows have focus.
-   */
-  readonly onDidChangeFocus: Event<boolean>;
+	//#region Focus
 
-  /**
-   * Find out if the window or any of its auxiliary windows have focus.
-   */
-  readonly hasFocus: boolean;
+	/**
+	 * Emitted when the focus of the window changes.
+	 *
+	 * Note: this considers the main window as well as auxiliary windows
+	 * when they are in focus. As long as the main window or any of its
+	 * auxiliary windows have focus, this event fires with `true`. It will
+	 * fire with `false` when neither the main window nor any of its
+	 * auxiliary windows have focus.
+	 */
+	readonly onDidChangeFocus: Event<boolean>;
 
-  /**
-   * Find out if the window had the last focus.
-   */
-  hadLastFocus(): Promise<boolean>;
+	/**
+	 * Find out if the window or any of its auxiliary windows have focus.
+	 */
+	readonly hasFocus: boolean;
 
-  /**
-   * Attempt to bring the window to the foreground and focus it.
-   *
-   * @param options Pass `force: true` if you want to make the window take
-   * focus even if the application does not have focus currently. This option
-   * should only be used if it is necessary to steal focus from the current
-   * focused application which may not be VSCode. It may not be supported
-   * in all environments.
-   */
-  focus(targetWindow: Window, options?: { force: boolean }): Promise<void>;
+	/**
+	 * Find out if the window had the last focus.
+	 */
+	hadLastFocus(): Promise<boolean>;
 
-  // #endregion
+	/**
+	 * Attempt to bring the window to the foreground and focus it.
+	 *
+	 * @param options How to focus the window, defaults to {@link FocusMode.Transfer}
+	 */
+	focus(targetWindow: Window, options?: { mode?: FocusMode }): Promise<void>;
 
-  // #region Window
+	//#endregion
 
-  /**
-   * Emitted when the active window changes between main window
-   * and auxiliary windows.
-   */
-  readonly onDidChangeActiveWindow: Event<number>;
+	//#region Window
 
-  /**
-   * Emitted when the window with the given identifier changes
-   * its fullscreen state.
-   */
-  readonly onDidChangeFullScreen: Event<{ windowId: number; fullscreen: boolean }>;
+	/**
+	 * Emitted when the active window changes between main window
+	 * and auxiliary windows.
+	 */
+	readonly onDidChangeActiveWindow: Event<number>;
 
-  /**
-   * Opens an empty window. The optional parameter allows to define if
-   * a new window should open or the existing one change to an empty.
-   */
-  openWindow(options?: IOpenEmptyWindowOptions): Promise<void>;
+	/**
+	 * Emitted when the window with the given identifier changes
+	 * its fullscreen state.
+	 */
+	readonly onDidChangeFullScreen: Event<{ windowId: number; fullscreen: boolean }>;
 
-  /**
-   * Opens the provided array of openables in a window with the provided options.
-   */
-  openWindow(toOpen: IWindowOpenable[], options?: IOpenWindowOptions): Promise<void>;
+	/**
+	 * Opens an empty window. The optional parameter allows to define if
+	 * a new window should open or the existing one change to an empty.
+	 */
+	openWindow(options?: IOpenEmptyWindowOptions): Promise<void>;
 
-  /**
-   * Switch between fullscreen and normal window.
-   */
-  toggleFullScreen(targetWindow: Window): Promise<void>;
+	/**
+	 * Opens the provided array of openables in a window with the provided options.
+	 */
+	openWindow(toOpen: IWindowOpenable[], options?: IOpenWindowOptions): Promise<void>;
 
-  /**
-   * Bring a window to the front and restore it if needed.
-   */
-  moveTop(targetWindow: Window): Promise<void>;
+	/**
+	 * Switch between fullscreen and normal window.
+	 */
+	toggleFullScreen(targetWindow: Window): Promise<void>;
 
-  /**
-   * Get the location of the mouse cursor and its display bounds or `undefined` if unavailable.
-   */
-  getCursorScreenPoint(): Promise<
-    { readonly point: IPoint; readonly display: IRectangle } | undefined
-  >;
+	/**
+	 * Bring a window to the front and restore it if needed.
+	 */
+	moveTop(targetWindow: Window): Promise<void>;
 
-  // #endregion
+	/**
+	 * Toggle dimming of window control overlays (e.g. when showing
+	 * a modal dialog or modal editor part).
+	 */
+	setWindowDimmed(targetWindow: Window, dimmed: boolean): Promise<void>;
 
-  // #region Lifecycle
+	/**
+	 * Get the location of the mouse cursor and its display bounds or `undefined` if unavailable.
+	 */
+	getCursorScreenPoint(): Promise<{ readonly point: IPoint; readonly display: IRectangle } | undefined>;
 
-  /**
-   * Restart the entire application.
-   */
-  restart(): Promise<void>;
+	/**
+	 * Get the list of opened windows, optionally including auxiliary windows.
+	 */
+	getWindows(options: { includeAuxiliaryWindows: true }): Promise<Array<IOpenedMainWindow | IOpenedAuxiliaryWindow>>;
+	getWindows(options: { includeAuxiliaryWindows: false }): Promise<Array<IOpenedMainWindow>>;
 
-  /**
-   * Reload the currently active main window.
-   */
-  reload(options?: { disableExtensions?: boolean }): Promise<void>;
+	//#endregion
 
-  /**
-   * Attempt to close the active main window.
-   */
-  close(): Promise<void>;
+	//#region Lifecycle
 
-  /**
-   * Execute an asynchronous `expectedShutdownTask`. While this task is
-   * in progress, attempts to quit the application will not be vetoed with a dialog.
-   */
-  withExpectedShutdown<T>(expectedShutdownTask: () => Promise<T>): Promise<T>;
+	/**
+	 * Restart the entire application.
+	 */
+	restart(): Promise<void>;
 
-  // #endregion
+	/**
+	 * Reload the currently active main window.
+	 */
+	reload(options?: { disableExtensions?: boolean }): Promise<void>;
 
-  // #region Screenshots
+	/**
+	 * Attempt to close the active main window.
+	 */
+	close(): Promise<void>;
 
-  /**
-   * Captures a screenshot.
-   */
-  getScreenshot(): Promise<ArrayBufferLike | undefined>;
+	/**
+	 * Quit the entire application. Unlike {@link close}, this will
+	 * terminate the process even on macOS where closing the last
+	 * window normally keeps the app running.
+	 */
+	shutdown(): Promise<void>;
 
-  // #endregion
+	/**
+	 * Execute an asynchronous `expectedShutdownTask`. While this task is
+	 * in progress, attempts to quit the application will not be vetoed with a dialog.
+	 */
+	withExpectedShutdown<T>(expectedShutdownTask: () => Promise<T>): Promise<T>;
 
-  // #region Native Handle
+	//#endregion
 
-  /**
-   * Get the native handle of the window.
-   */
-  getNativeWindowHandle(windowId: number): Promise<VSBuffer | undefined>;
+	//#region Screenshots
 
-  // #endregion
+	/**
+	 * Captures a screenshot.
+	 */
+	getScreenshot(rect?: IRectangle): Promise<VSBuffer | undefined>;
+
+	//#endregion
+
+	//#region Native Handle
+
+	/**
+	 * Get the native handle of the window.
+	 */
+	getNativeWindowHandle(windowId: number): Promise<VSBuffer | undefined>;
+
+	//#endregion
+
+	//#region Toast Notifications
+
+	/**
+	 * Show an OS-level toast notification.
+	 */
+	showToast(options: IToastOptions, token: CancellationToken): Promise<IToastResult>;
+
+	//#endregion
 }

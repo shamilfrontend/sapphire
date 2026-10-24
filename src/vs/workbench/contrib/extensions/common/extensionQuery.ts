@@ -4,116 +4,96 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { IExtensionGalleryManifest } from '../../../../platform/extensionManagement/common/extensionGalleryManifest.js';
-import {
-  FilterType,
-  SortBy,
-} from '../../../../platform/extensionManagement/common/extensionManagement.js';
+import { FilterType, SortBy } from '../../../../platform/extensionManagement/common/extensionManagement.js';
 import { EXTENSION_CATEGORIES } from '../../../../platform/extensions/common/extensions.js';
+import { Registry } from '../../../../platform/registry/common/platform.js';
+import { Extensions, IExtensionFeaturesRegistry } from '../../../services/extensionManagement/common/extensionFeatures.js';
 
 export class Query {
-  constructor(
-    public value: string,
-    public sortBy: string,
-  ) {
-    this.value = value.trim();
-  }
 
-  static suggestions(query: string, galleryManifest: IExtensionGalleryManifest | null): string[] {
-    const commands = ['installed', 'updates', 'enabled', 'disabled', 'builtin'];
-    if (
-      galleryManifest?.capabilities.extensionQuery?.filtering?.some(
-        (c) => c.name === FilterType.Featured,
-      )
-    ) {
-      commands.push('featured');
-    }
+	constructor(public value: string, public sortBy: string) {
+		this.value = value.trim();
+	}
 
-    commands.push(
-      ...[
-        'popular',
-        'recommended',
-        'recentlyPublished',
-        'workspaceUnsupported',
-        'deprecated',
-        'sort',
-      ],
-    );
-    const isCategoriesEnabled = galleryManifest?.capabilities.extensionQuery?.filtering?.some(
-      (c) => c.name === FilterType.Category,
-    );
-    if (isCategoriesEnabled) {
-      commands.push('category');
-    }
+	static suggestions(query: string, galleryManifest: IExtensionGalleryManifest | null): string[] {
 
-    commands.push(...['tag', 'ext', 'id', 'outdated', 'recentlyUpdated']);
-    const sortCommands = [];
-    if (
-      galleryManifest?.capabilities.extensionQuery?.sorting?.some(
-        (c) => c.name === SortBy.InstallCount,
-      )
-    ) {
-      sortCommands.push('installs');
-    }
-    if (
-      galleryManifest?.capabilities.extensionQuery?.sorting?.some(
-        (c) => c.name === SortBy.WeightedRating,
-      )
-    ) {
-      sortCommands.push('rating');
-    }
-    sortCommands.push('name', 'publishedDate', 'updateDate');
+		const commands = ['installed', 'updates', 'enabled', 'disabled', 'builtin', 'contribute'];
+		if (galleryManifest?.capabilities.extensionQuery?.filtering?.some(c => c.name === FilterType.Featured)) {
+			commands.push('featured');
+		}
 
-    const subcommands = {
-      sort: sortCommands,
-      category: isCategoriesEnabled ? EXTENSION_CATEGORIES.map((c) => `"${c.toLowerCase()}"`) : [],
-      tag: [''],
-      ext: [''],
-      id: [''],
-    } as const;
+		commands.push(...['mcp', 'agentPlugins', 'popular', 'recommended', 'recentlyPublished', 'workspaceUnsupported', 'deprecated', 'sort']);
+		const isCategoriesEnabled = galleryManifest?.capabilities.extensionQuery?.filtering?.some(c => c.name === FilterType.Category);
+		if (isCategoriesEnabled) {
+			commands.push('category');
+		}
 
-    const queryContains = (substr: string) => query.indexOf(substr) > -1;
-    const hasSort = subcommands.sort.some((subcommand) => queryContains(`@sort:${subcommand}`));
-    const hasCategory = subcommands.category.some((subcommand) =>
-      queryContains(`@category:${subcommand}`),
-    );
+		commands.push(...['tag', 'ext', 'id', 'outdated', 'recentlyUpdated', 'restartRequired']);
+		const sortCommands = [];
+		if (galleryManifest?.capabilities.extensionQuery?.sorting?.some(c => c.name === SortBy.InstallCount)) {
+			sortCommands.push('installs');
+		}
+		if (galleryManifest?.capabilities.extensionQuery?.sorting?.some(c => c.name === SortBy.WeightedRating)) {
+			sortCommands.push('rating');
+		}
+		sortCommands.push('name', 'publishedDate', 'updateDate');
 
-    return commands.flatMap((command) => {
-      if ((hasSort && command === 'sort') || (hasCategory && command === 'category')) {
-        return [];
-      }
-      if (command in subcommands) {
-        return (subcommands as Record<string, readonly string[]>)[command].map(
-          (subcommand) => `@${command}:${subcommand}${subcommand === '' ? '' : ' '}`,
-        );
-      }
-      return queryContains(`@${command}`) ? [] : [`@${command} `];
-    });
-  }
+		const contributeCommands = [];
+		for (const feature of Registry.as<IExtensionFeaturesRegistry>(Extensions.ExtensionFeaturesRegistry).getExtensionFeatures()) {
+			contributeCommands.push(feature.id);
+		}
 
-  static parse(value: string): Query {
-    let sortBy = '';
-    value = value.replace(/@sort:(\w+)(-\w*)?/g, (match, by: string, order: string) => {
-      sortBy = by;
+		const subcommands = {
+			'sort': sortCommands,
+			'category': isCategoriesEnabled ? EXTENSION_CATEGORIES.map(c => `"${c.toLowerCase()}"`) : [],
+			'tag': [''],
+			'ext': [''],
+			'id': [''],
+			'contribute': contributeCommands
+		} as const;
 
-      return '';
-    });
-    return new Query(value, sortBy);
-  }
+		const queryContains = (substr: string) => query.indexOf(substr) > -1;
+		const hasSort = subcommands.sort.some(subcommand => queryContains(`@sort:${subcommand}`));
+		const hasCategory = subcommands.category.some(subcommand => queryContains(`@category:${subcommand}`));
 
-  toString(): string {
-    let result = this.value;
+		return commands.flatMap(command => {
+			if (hasSort && command === 'sort' || hasCategory && command === 'category') {
+				return [];
+			}
+			if (command in subcommands) {
+				return (subcommands as Record<string, readonly string[]>)[command]
+					.map(subcommand => `@${command}:${subcommand}${subcommand === '' ? '' : ' '}`);
+			}
+			else {
+				return queryContains(`@${command}`) ? [] : [`@${command} `];
+			}
+		});
+	}
 
-    if (this.sortBy) {
-      result = `${result}${result ? ' ' : ''}@sort:${this.sortBy}`;
-    }
-    return result;
-  }
+	static parse(value: string): Query {
+		let sortBy = '';
+		value = value.replace(/@sort:(\w+)(-\w*)?/g, (match, by: string, order: string) => {
+			sortBy = by;
 
-  isValid(): boolean {
-    return !/@outdated/.test(this.value);
-  }
+			return '';
+		});
+		return new Query(value, sortBy);
+	}
 
-  equals(other: Query): boolean {
-    return this.value === other.value && this.sortBy === other.sortBy;
-  }
+	toString(): string {
+		let result = this.value;
+
+		if (this.sortBy) {
+			result = `${result}${result ? ' ' : ''}@sort:${this.sortBy}`;
+		}
+		return result;
+	}
+
+	isValid(): boolean {
+		return !/@outdated/.test(this.value);
+	}
+
+	equals(other: Query): boolean {
+		return this.value === other.value && this.sortBy === other.sortBy;
+	}
 }

@@ -10,17 +10,18 @@ import { ServicesAccessor } from '../../instantiation/common/instantiation.js';
 import { ILogService } from '../../log/common/log.js';
 
 export class MenuHiddenStatesReset extends Action2 {
-  constructor() {
-    super({
-      id: 'menu.resetHiddenStates',
-      title: localize2('title', 'Reset All Menus'),
-      category: Categories.View,
-      f1: true,
-    });
-  }
 
-  run(accessor: ServicesAccessor): void {
-    accessor.get(IMenuService).resetHiddenStates();
-    accessor.get(ILogService).info('did RESET all menu hidden states');
-  }
+	constructor() {
+		super({
+			id: 'menu.resetHiddenStates',
+			title: localize2('title', "Reset All Menus"),
+			category: Categories.View,
+			f1: true
+		});
+	}
+
+	run(accessor: ServicesAccessor): void {
+		accessor.get(IMenuService).resetHiddenStates();
+		accessor.get(ILogService).info('did RESET all menu hidden states');
+	}
 }

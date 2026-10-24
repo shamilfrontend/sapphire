@@ -12,58 +12,51 @@ import { binaryIndexOf } from '../common/buffer.js';
  * is not encountered.
  */
 export class StreamSplitter extends Transform {
-  private buffer: Buffer | undefined;
+	private buffer: Buffer | undefined;
+	private readonly splitter: Buffer | number;
+	private readonly spitterLen: number;
 
-  private readonly splitter: Buffer | number;
+	constructor(splitter: string | number | Buffer) {
+		super();
+		if (typeof splitter === 'number') {
+			this.splitter = splitter;
+			this.spitterLen = 1;
+		} else {
+			const buf = Buffer.isBuffer(splitter) ? splitter : Buffer.from(splitter);
+			this.splitter = buf.length === 1 ? buf[0] : buf;
+			this.spitterLen = buf.length;
+		}
+	}
 
-  private readonly spitterLen: number;
+	override _transform(chunk: Buffer, _encoding: string, callback: (error?: Error | null, data?: Buffer) => void): void {
+		if (!this.buffer) {
+			this.buffer = chunk;
+		} else {
+			this.buffer = Buffer.concat([this.buffer, chunk]);
+		}
 
-  constructor(splitter: string | number | Buffer) {
-    super();
-    if (typeof splitter === 'number') {
-      this.splitter = splitter;
-      this.spitterLen = 1;
-    } else {
-      const buf = Buffer.isBuffer(splitter) ? splitter : Buffer.from(splitter);
-      this.splitter = buf.length === 1 ? buf[0] : buf;
-      this.spitterLen = buf.length;
-    }
-  }
+		let offset = 0;
+		while (offset < this.buffer.length) {
+			const index = typeof this.splitter === 'number'
+				? this.buffer.indexOf(this.splitter, offset)
+				: binaryIndexOf(this.buffer, this.splitter, offset);
+			if (index === -1) {
+				break;
+			}
 
-  override _transform(
-    chunk: Buffer,
-    _encoding: string,
-    callback: (error?: Error | null, data?: any) => void,
-  ): void {
-    if (!this.buffer) {
-      this.buffer = chunk;
-    } else {
-      this.buffer = Buffer.concat([this.buffer, chunk]);
-    }
+			this.push(this.buffer.slice(offset, index + this.spitterLen));
+			offset = index + this.spitterLen;
+		}
 
-    let offset = 0;
-    while (offset < this.buffer.length) {
-      const index =
-        typeof this.splitter === 'number'
-          ? this.buffer.indexOf(this.splitter, offset)
-          : binaryIndexOf(this.buffer, this.splitter, offset);
-      if (index === -1) {
-        break;
-      }
+		this.buffer = offset === this.buffer.length ? undefined : this.buffer.slice(offset);
+		callback();
+	}
 
-      this.push(this.buffer.slice(offset, index + this.spitterLen));
-      offset = index + this.spitterLen;
-    }
+	override _flush(callback: (error?: Error | null, data?: Buffer) => void): void {
+		if (this.buffer) {
+			this.push(this.buffer);
+		}
 
-    this.buffer = offset === this.buffer.length ? undefined : this.buffer.slice(offset);
-    callback();
-  }
-
-  override _flush(callback: (error?: Error | null, data?: any) => void): void {
-    if (this.buffer) {
-      this.push(this.buffer);
-    }
-
-    callback();
-  }
+		callback();
+	}
 }

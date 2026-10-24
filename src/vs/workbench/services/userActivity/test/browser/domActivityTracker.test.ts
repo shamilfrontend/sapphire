@@ -3,60 +3,59 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import * as sinon from 'sinon';
 import assert from 'assert';
+import * as sinon from 'sinon';
+import { ensureNoDisposablesAreLeakedInTestSuite } from '../../../../../base/test/common/utils.js';
 import { TestInstantiationService } from '../../../../../platform/instantiation/test/common/instantiationServiceMock.js';
 import { DomActivityTracker } from '../../browser/domActivityTracker.js';
 import { UserActivityService } from '../../common/userActivityService.js';
 
 suite('DomActivityTracker', () => {
-  let uas: UserActivityService;
-  let dom: DomActivityTracker;
-  let insta: TestInstantiationService;
-  let clock: sinon.SinonFakeTimers;
-  const maxTimeToBecomeIdle = 3 * 30_000; // (MIN_INTERVALS_WITHOUT_ACTIVITY + 1) * CHECK_INTERVAL;
+	let uas: UserActivityService;
+	let insta: TestInstantiationService;
+	let clock: sinon.SinonFakeTimers;
+	const maxTimeToBecomeIdle = 3 * 30_000; // (MIN_INTERVALS_WITHOUT_ACTIVITY + 1) * CHECK_INTERVAL;
+	const store = ensureNoDisposablesAreLeakedInTestSuite();
 
-  setup(() => {
-    clock = sinon.useFakeTimers();
-    insta = new TestInstantiationService();
-    uas = new UserActivityService(insta);
-    dom = new DomActivityTracker(uas);
-  });
+	setup(() => {
+		clock = sinon.useFakeTimers();
+		insta = store.add(new TestInstantiationService());
+		uas = store.add(new UserActivityService(insta));
+		store.add(new DomActivityTracker(uas));
+	});
 
-  teardown(() => {
-    dom.dispose();
-    uas.dispose();
-    clock.restore();
-    insta.dispose();
-  });
+	teardown(() => {
+		clock.restore();
+	});
 
-  test('marks inactive on no input', () => {
-    assert.equal(uas.isActive, true);
-    clock.tick(maxTimeToBecomeIdle);
-    assert.equal(uas.isActive, false);
-  });
 
-  test('preserves activity state when active', () => {
-    assert.equal(uas.isActive, true);
+	test('marks inactive on no input', () => {
+		assert.equal(uas.isActive, true);
+		clock.tick(maxTimeToBecomeIdle);
+		assert.equal(uas.isActive, false);
+	});
 
-    const div = 10;
-    for (let i = 0; i < div; i++) {
-      document.dispatchEvent(new MouseEvent('keydown'));
-      clock.tick(maxTimeToBecomeIdle / div);
-    }
+	test('preserves activity state when active', () => {
+		assert.equal(uas.isActive, true);
 
-    assert.equal(uas.isActive, true);
-  });
+		const div = 10;
+		for (let i = 0; i < div; i++) {
+			document.dispatchEvent(new MouseEvent('keydown'));
+			clock.tick(maxTimeToBecomeIdle / div);
+		}
 
-  test('restores active state', () => {
-    assert.equal(uas.isActive, true);
-    clock.tick(maxTimeToBecomeIdle);
-    assert.equal(uas.isActive, false);
+		assert.equal(uas.isActive, true);
+	});
 
-    document.dispatchEvent(new MouseEvent('keydown'));
-    assert.equal(uas.isActive, true);
+	test('restores active state', () => {
+		assert.equal(uas.isActive, true);
+		clock.tick(maxTimeToBecomeIdle);
+		assert.equal(uas.isActive, false);
 
-    clock.tick(maxTimeToBecomeIdle);
-    assert.equal(uas.isActive, false);
-  });
+		document.dispatchEvent(new MouseEvent('keydown'));
+		assert.equal(uas.isActive, true);
+
+		clock.tick(maxTimeToBecomeIdle);
+		assert.equal(uas.isActive, false);
+	});
 });

@@ -5,8 +5,22 @@
 
 import path from 'path';
 import fs from 'fs';
+import { execSync } from 'child_process';
 
-const root = path.join(__dirname, '..', '..');
+const root = path.join(import.meta.dirname, '..', '..');
+
+/**
+ * Get the ISO date for the build. Uses the git commit date of HEAD
+ * so that independent builds on different machines produce the same
+ * timestamp (required for deterministic builds, e.g. macOS Universal).
+ */
+export function getGitCommitDate(): string {
+	try {
+		return execSync('git log -1 --format=%cI HEAD', { cwd: root, encoding: 'utf8' }).trim();
+	} catch {
+		return new Date().toISOString();
+	}
+}
 
 /**
  * Writes a `outDir/date` file with the contents of the build
@@ -14,21 +28,28 @@ const root = path.join(__dirname, '..', '..');
  * all use the same date.
  */
 export function writeISODate(outDir: string) {
-  const result = () =>
-    new Promise<void>((resolve, _) => {
-      const outDirectory = path.join(root, outDir);
-      fs.mkdirSync(outDirectory, { recursive: true });
+	const result = () => new Promise<void>((resolve, _) => {
+		const outDirectory = path.join(root, outDir);
+		fs.mkdirSync(outDirectory, { recursive: true });
 
-      const date = new Date().toISOString();
-      fs.writeFileSync(path.join(outDirectory, 'date'), date, 'utf8');
+		const date = getGitCommitDate();
+		fs.writeFileSync(path.join(outDirectory, 'date'), date, 'utf8');
 
-      resolve();
-    });
-  result.taskName = 'build-date-file';
-  return result;
+		resolve();
+	});
+	result.taskName = 'build-date-file';
+	return result;
 }
 
 export function readISODate(outDir: string): string {
-  const outDirectory = path.join(root, outDir);
-  return fs.readFileSync(path.join(outDirectory, 'date'), 'utf8');
+	const outDirectory = path.join(root, outDir);
+	try {
+		return fs.readFileSync(path.join(outDirectory, 'date'), 'utf8');
+	} catch {
+		// Packaging can also use the shared date recorded by the build orchestration.
+		if (outDir !== 'out-build') {
+			return fs.readFileSync(path.join(root, 'out-build', 'date'), 'utf8');
+		}
+		throw new Error(`Could not find date file in ${outDir}`);
+	}
 }

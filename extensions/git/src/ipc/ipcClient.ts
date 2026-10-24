@@ -6,39 +6,40 @@
 import * as http from 'http';
 
 export class IPCClient {
-  private ipcHandlePath: string;
 
-  constructor(private handlerName: string) {
-    const ipcHandlePath = process.env.VSCODE_GIT_IPC_HANDLE;
+	private ipcHandlePath: string;
 
-    if (!ipcHandlePath) {
-      throw new Error('Missing VSCODE_GIT_IPC_HANDLE');
-    }
+	constructor(private handlerName: string) {
+		const ipcHandlePath = process.env['VSCODE_GIT_IPC_HANDLE'];
 
-    this.ipcHandlePath = ipcHandlePath;
-  }
+		if (!ipcHandlePath) {
+			throw new Error('Missing VSCODE_GIT_IPC_HANDLE');
+		}
 
-  call(request: any): Promise<any> {
-    const opts: http.RequestOptions = {
-      socketPath: this.ipcHandlePath,
-      path: `/${this.handlerName}`,
-      method: 'POST',
-    };
+		this.ipcHandlePath = ipcHandlePath;
+	}
 
-    return new Promise((c, e) => {
-      const req = http.request(opts, (res) => {
-        if (res.statusCode !== 200) {
-          return e(new Error(`Bad status code: ${res.statusCode}`));
-        }
+	call(request: unknown): Promise<unknown> {
+		const opts: http.RequestOptions = {
+			socketPath: this.ipcHandlePath,
+			path: `/${this.handlerName}`,
+			method: 'POST'
+		};
 
-        const chunks: Buffer[] = [];
-        res.on('data', (d) => chunks.push(d));
-        res.on('end', () => c(JSON.parse(Buffer.concat(chunks).toString('utf8'))));
-      });
+		return new Promise((c, e) => {
+			const req = http.request(opts, res => {
+				if (res.statusCode !== 200) {
+					return e(new Error(`Bad status code: ${res.statusCode}`));
+				}
 
-      req.on('error', (err) => e(err));
-      req.write(JSON.stringify(request));
-      req.end();
-    });
-  }
+				const chunks: Buffer[] = [];
+				res.on('data', d => chunks.push(d));
+				res.on('end', () => c(JSON.parse(Buffer.concat(chunks).toString('utf8'))));
+			});
+
+			req.on('error', err => e(err));
+			req.write(JSON.stringify(request));
+			req.end();
+		});
+	}
 }

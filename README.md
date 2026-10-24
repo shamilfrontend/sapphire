@@ -54,6 +54,7 @@ npm run docs:dev
 
 ```bash
 npm install
+npm run buildvue
 ```
 
 #### Dev mode
@@ -61,23 +62,23 @@ npm install
 Для ежедневной разработки:
 
 ```bash
-npm run dev            # watch + watchvue + запуск приложения
+npm run watch
+npm run watchvue
+./scripts/code.sh
 ```
 
-`npm run compile` / `npm run build:task -- compile-client` / packaging (`npm run build:task -- vscode-*`) сами вызывают **build-react** перед компиляцией TS — отдельный `buildvue` для полной сборки не нужен.
-
-По отдельности: `npm run watch`, `npm run watchvue`, `./scripts/code.sh` (или `npm run code`). Для итераций только по Vue UI удобен `npm run watchvue`.
+`npm run compile` собирает клиент. Перед запуском нужен `npm run buildvue`: Vue-бандлы лежат в `browser/vue/out` и не входят в компиляцию TypeScript.
 
 #### Production (executable)
 
-Локальная упаковка приложения под платформу (долго, ~25 мин):
+Локальная упаковка приложения под платформу. Сначала `npm run buildvue`.
 
 | ОС                  | Команда                            |
 | ------------------- | ---------------------------------- |
-| macOS Apple Silicon | `npm run build:task -- vscode-darwin-arm64` |
-| macOS Intel         | `npm run build:task -- vscode-darwin-x64`   |
-| Windows x64         | `npm run build:task -- vscode-win32-x64`    |
-| Linux x64           | `npm run build:task -- vscode-linux-x64`    |
+| macOS Apple Silicon | `npm run gulp vscode-darwin-arm64` |
+| macOS Intel         | `npm run gulp vscode-darwin-x64`   |
+| Windows x64         | `npm run gulp vscode-win32-x64`    |
+| Linux x64           | `npm run gulp vscode-linux-x64`    |
 
 Артефакт появится рядом с репозиторием, например `../VSCode-darwin-arm64/`.
 

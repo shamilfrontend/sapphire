@@ -4,36 +4,31 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { Disposable } from '../../../base/common/lifecycle.js';
-import { IChatStatusItemService } from '../../contrib/chat/browser/chatStatusItemService.js';
-import {
-  IExtHostContext,
-  extHostNamedCustomer,
-} from '../../services/extensions/common/extHostCustomers.js';
-import {
-  ChatStatusItemDto,
-  MainContext,
-  MainThreadChatStatusShape,
-} from '../common/extHost.protocol.js';
+import { IChatStatusItemService } from '../../contrib/chat/browser/chatStatus/chatStatusItemService.js';
+import { IExtHostContext, extHostNamedCustomer } from '../../services/extensions/common/extHostCustomers.js';
+import { ChatStatusItemDto, MainContext, MainThreadChatStatusShape } from '../common/extHost.protocol.js';
 
 @extHostNamedCustomer(MainContext.MainThreadChatStatus)
 export class MainThreadChatStatus extends Disposable implements MainThreadChatStatusShape {
-  constructor(
-    _extHostContext: IExtHostContext,
-    @IChatStatusItemService private readonly _chatStatusItemService: IChatStatusItemService,
-  ) {
-    super();
-  }
 
-  $setEntry(id: string, entry: ChatStatusItemDto): void {
-    this._chatStatusItemService.setOrUpdateEntry({
-      id,
-      label: entry.title,
-      description: entry.description,
-      detail: entry.detail,
-    });
-  }
+	constructor(
+		_extHostContext: IExtHostContext,
+		@IChatStatusItemService private readonly _chatStatusItemService: IChatStatusItemService,
+	) {
+		super();
+	}
 
-  $disposeEntry(id: string): void {
-    this._chatStatusItemService.deleteEntry(id);
-  }
+	$setEntry(id: string, entry: ChatStatusItemDto): void {
+		this._chatStatusItemService.setOrUpdateEntry({
+			id,
+			label: entry.title,
+			description: entry.description,
+			detail: entry.detail,
+			tooltip: entry.tooltip,
+		});
+	}
+
+	$disposeEntry(id: string): void {
+		this._chatStatusItemService.deleteEntry(id);
+	}
 }

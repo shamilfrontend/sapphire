@@ -15,334 +15,260 @@ import { Event } from '../../../../base/common/event.js';
 import { Disposable, MutableDisposable, toDisposable } from '../../../../base/common/lifecycle.js';
 import { ThemeIcon } from '../../../../base/common/themables.js';
 import { localize } from '../../../../nls.js';
-import {
-  ActionListItemKind,
-  IActionListItem,
-} from '../../../../platform/actionWidget/browser/actionList.js';
+import { ActionListItemKind, IActionListItem } from '../../../../platform/actionWidget/browser/actionList.js';
 import { IActionWidgetService } from '../../../../platform/actionWidget/browser/actionWidget.js';
-import {
-  IContextKey,
-  IContextKeyService,
-  RawContextKey,
-} from '../../../../platform/contextkey/common/contextkey.js';
+import { IContextKey, IContextKeyService, RawContextKey } from '../../../../platform/contextkey/common/contextkey.js';
 import { IInstantiationService } from '../../../../platform/instantiation/common/instantiation.js';
 import { IKeybindingService } from '../../../../platform/keybinding/common/keybinding.js';
 import { INotificationService } from '../../../../platform/notification/common/notification.js';
-import {
-  ContentWidgetPositionPreference,
-  ICodeEditor,
-  IContentWidget,
-  IContentWidgetPosition,
-} from '../../../browser/editorBrowser.js';
+import { ContentWidgetPositionPreference, ICodeEditor, IContentWidget, IContentWidgetPosition } from '../../../browser/editorBrowser.js';
 import { IBulkEditResult, IBulkEditService } from '../../../browser/services/bulkEditService.js';
 import { Range } from '../../../common/core/range.js';
 import { DocumentDropEdit, DocumentPasteEdit } from '../../../common/languages.js';
 import { TrackedRangeStickiness } from '../../../common/model.js';
-import {
-  CodeEditorStateFlag,
-  EditorStateCancellationTokenSource,
-} from '../../editorState/browser/editorState.js';
+import { CodeEditorStateFlag, EditorStateCancellationTokenSource } from '../../editorState/browser/editorState.js';
 import { createCombinedWorkspaceEdit } from './edit.js';
+import { PasteEditSession } from './pasteEditSession.js';
 import './postEditWidget.css';
 
+
 interface EditSet<Edit extends DocumentPasteEdit | DocumentDropEdit> {
-  readonly activeEditIndex: number;
-  readonly allEdits: ReadonlyArray<Edit>;
+	readonly activeEditIndex: number;
+	readonly allEdits: ReadonlyArray<Edit>;
 }
 
 interface ShowCommand {
-  readonly id: string;
-  readonly label: string;
+	readonly id: string;
+	readonly label: string;
 }
 
-class PostEditWidget<T extends DocumentPasteEdit | DocumentDropEdit>
-  extends Disposable
-  implements IContentWidget
-{
-  private static readonly baseId = 'editor.widget.postEditWidget';
+class PostEditWidget<T extends DocumentPasteEdit | DocumentDropEdit> extends Disposable implements IContentWidget {
+	private static readonly baseId = 'editor.widget.postEditWidget';
 
-  readonly allowEditorOverflow = true;
+	readonly allowEditorOverflow = true;
+	readonly suppressMouseDown = true;
 
-  readonly suppressMouseDown = true;
+	private readonly _editSession: PasteEditSession | undefined;
 
-  private domNode!: HTMLElement;
+	private domNode!: HTMLElement;
+	private button!: Button;
 
-  private button!: Button;
+	private readonly visibleContext: IContextKey<boolean>;
 
-  private readonly visibleContext: IContextKey<boolean>;
+	constructor(
+		private readonly typeId: string,
+		private readonly editor: ICodeEditor,
+		visibleContext: RawContextKey<boolean>,
+		private readonly showCommand: ShowCommand,
+		private readonly range: Range,
+		private readonly edits: EditSet<T>,
+		private readonly onSelectNewEdit: (editIndex: number, editSession: PasteEditSession | undefined) => void,
+		private readonly additionalActions: readonly IAction[],
+		editSessionOwner: PasteEditSession | undefined,
+		@IContextKeyService contextKeyService: IContextKeyService,
+		@IKeybindingService private readonly _keybindingService: IKeybindingService,
+		@IActionWidgetService private readonly _actionWidgetService: IActionWidgetService,
+	) {
+		super();
 
-  constructor(
-    private readonly typeId: string,
-    private readonly editor: ICodeEditor,
-    visibleContext: RawContextKey<boolean>,
-    private readonly showCommand: ShowCommand,
-    private readonly range: Range,
-    private readonly edits: EditSet<T>,
-    private readonly onSelectNewEdit: (editIndex: number) => void,
-    private readonly additionalActions: readonly IAction[],
-    @IContextKeyService contextKeyService: IContextKeyService,
-    @IKeybindingService private readonly _keybindingService: IKeybindingService,
-    @IActionWidgetService private readonly _actionWidgetService: IActionWidgetService,
-  ) {
-    super();
+		this._editSession = editSessionOwner ? this._register(editSessionOwner.take()) : undefined;
+		this.create();
 
-    this.create();
+		this.visibleContext = visibleContext.bindTo(contextKeyService);
+		this.visibleContext.set(true);
+		this._register(toDisposable(() => this.visibleContext.reset()));
 
-    this.visibleContext = visibleContext.bindTo(contextKeyService);
-    this.visibleContext.set(true);
-    this._register(toDisposable(() => this.visibleContext.reset()));
+		this.editor.addContentWidget(this);
+		this.editor.layoutContentWidget(this);
 
-    this.editor.addContentWidget(this);
-    this.editor.layoutContentWidget(this);
+		this._register(toDisposable((() => this.editor.removeContentWidget(this))));
 
-    this._register(toDisposable(() => this.editor.removeContentWidget(this)));
+		this._register(this.editor.onDidChangeCursorPosition(e => {
+			this.dispose();
+		}));
 
-    this._register(
-      this.editor.onDidChangeCursorPosition((e) => {
-        this.dispose();
-      }),
-    );
+		this._register(Event.runAndSubscribe(_keybindingService.onDidUpdateKeybindings, () => {
+			this._updateButtonTitle();
+		}));
+	}
 
-    this._register(
-      Event.runAndSubscribe(_keybindingService.onDidUpdateKeybindings, () => {
-        this._updateButtonTitle();
-      }),
-    );
-  }
+	private _updateButtonTitle() {
+		this.button.element.title = this._keybindingService.appendKeybinding(this.showCommand.label, this.showCommand.id);
+	}
 
-  private _updateButtonTitle() {
-    const binding = this._keybindingService.lookupKeybinding(this.showCommand.id)?.getLabel();
-    this.button.element.title = this.showCommand.label + (binding ? ` (${binding})` : '');
-  }
+	private create(): void {
+		this.domNode = dom.$('.post-edit-widget');
 
-  private create(): void {
-    this.domNode = dom.$('.post-edit-widget');
+		this.button = this._register(new Button(this.domNode, {
+			supportIcons: true,
+		}));
+		this.button.label = '$(insert)';
 
-    this.button = this._register(
-      new Button(this.domNode, {
-        supportIcons: true,
-      }),
-    );
-    this.button.label = '$(insert)';
+		this._register(dom.addDisposableListener(this.domNode, dom.EventType.CLICK, () => this.showSelector()));
+	}
 
-    this._register(
-      dom.addDisposableListener(this.domNode, dom.EventType.CLICK, () => this.showSelector()),
-    );
-  }
+	getId(): string {
+		return PostEditWidget.baseId + '.' + this.typeId;
+	}
 
-  getId(): string {
-    return `${PostEditWidget.baseId}.${this.typeId}`;
-  }
+	getDomNode(): HTMLElement {
+		return this.domNode;
+	}
 
-  getDomNode(): HTMLElement {
-    return this.domNode;
-  }
+	getPosition(): IContentWidgetPosition | null {
+		return {
+			position: this.range.getEndPosition(),
+			preference: [ContentWidgetPositionPreference.BELOW]
+		};
+	}
 
-  getPosition(): IContentWidgetPosition | null {
-    return {
-      position: this.range.getEndPosition(),
-      preference: [ContentWidgetPositionPreference.BELOW],
-    };
-  }
+	showSelector() {
+		const pos = dom.getDomNodePagePosition(this.button.element);
+		const anchor = { x: pos.left + pos.width, y: pos.top + pos.height };
 
-  showSelector() {
-    const pos = dom.getDomNodePagePosition(this.button.element);
-    const anchor = { x: pos.left + pos.width, y: pos.top + pos.height };
+		this._actionWidgetService.show('postEditWidget', false,
+			this.edits.allEdits.map((edit, i): IActionListItem<T> => {
+				return {
+					kind: ActionListItemKind.Action,
+					item: edit,
+					label: edit.title,
+					disabled: false,
+					canPreview: false,
+					group: { title: '', icon: ThemeIcon.fromId(i === this.edits.activeEditIndex ? Codicon.check.id : Codicon.blank.id) },
+				};
+			}), {
+			onHide: () => {
+				this.editor.focus();
+			},
+			onSelect: (item) => {
+				this._actionWidgetService.hide(false);
 
-    this._actionWidgetService.show(
-      'postEditWidget',
-      false,
-      this.edits.allEdits.map((edit, i): IActionListItem<T> => ({
-        kind: ActionListItemKind.Action,
-        item: edit,
-        label: edit.title,
-        disabled: false,
-        canPreview: false,
-        group: {
-          title: '',
-          icon: ThemeIcon.fromId(
-            i === this.edits.activeEditIndex ? Codicon.check.id : Codicon.blank.id,
-          ),
-        },
-      })),
-      {
-        onHide: () => {
-          this.editor.focus();
-        },
-        onSelect: (item) => {
-          this._actionWidgetService.hide(false);
-
-          const i = this.edits.allEdits.findIndex((edit) => edit === item);
-          if (i !== this.edits.activeEditIndex) {
-            return this.onSelectNewEdit(i);
-          }
-        },
-      },
-      anchor,
-      this.editor.getDomNode() ?? undefined,
-      this.additionalActions,
-    );
-  }
+				const i = this.edits.allEdits.findIndex(edit => edit === item);
+				if (i !== this.edits.activeEditIndex) {
+					// Transfer the edits before undo disposes this widget.
+					return this.onSelectNewEdit(i, this._editSession?.take());
+				}
+			},
+		}, anchor, this.editor.getDomNode() ?? undefined, this.additionalActions);
+	}
 }
 
-export class PostEditWidgetManager<
-  T extends DocumentPasteEdit | DocumentDropEdit,
-> extends Disposable {
-  private readonly _currentWidget = this._register(new MutableDisposable<PostEditWidget<T>>());
+export class PostEditWidgetManager<T extends DocumentPasteEdit | DocumentDropEdit> extends Disposable {
 
-  constructor(
-    private readonly _id: string,
-    private readonly _editor: ICodeEditor,
-    private readonly _visibleContext: RawContextKey<boolean>,
-    private readonly _showCommand: ShowCommand,
-    private readonly _getAdditionalActions: () => readonly IAction[],
-    @IInstantiationService private readonly _instantiationService: IInstantiationService,
-    @IBulkEditService private readonly _bulkEditService: IBulkEditService,
-    @INotificationService private readonly _notificationService: INotificationService,
-  ) {
-    super();
+	private readonly _currentWidget = this._register(new MutableDisposable<PostEditWidget<T>>());
 
-    this._register(
-      Event.any(_editor.onDidChangeModel, _editor.onDidChangeModelContent)(() => this.clear()),
-    );
-  }
+	constructor(
+		private readonly _id: string,
+		private readonly _editor: ICodeEditor,
+		private readonly _visibleContext: RawContextKey<boolean>,
+		private readonly _showCommand: ShowCommand,
+		private readonly _getAdditionalActions: () => readonly IAction[],
+		@IInstantiationService private readonly _instantiationService: IInstantiationService,
+		@IBulkEditService private readonly _bulkEditService: IBulkEditService,
+		@INotificationService private readonly _notificationService: INotificationService,
+	) {
+		super();
 
-  public async applyEditAndShowIfNeeded(
-    ranges: readonly Range[],
-    edits: EditSet<T>,
-    canShowWidget: boolean,
-    resolve: (edit: T, token: CancellationToken) => Promise<T>,
-    token: CancellationToken,
-  ) {
-    if (!ranges.length || !this._editor.hasModel()) {
-      return;
-    }
+		this._register(Event.any(
+			_editor.onDidChangeModel,
+			_editor.onDidChangeModelContent,
+		)(() => this.clear()));
+	}
 
-    const model = this._editor.getModel();
-    const edit = edits.allEdits.at(edits.activeEditIndex);
-    if (!edit) {
-      return;
-    }
+	public async applyEditAndShowIfNeeded(ranges: readonly Range[], edits: EditSet<T>, canShowWidget: boolean, resolve: (edit: T, token: CancellationToken) => Promise<T>, token: CancellationToken, editSessionOwner?: PasteEditSession) {
+		if (!ranges.length || !this._editor.hasModel()) {
+			return;
+		}
 
-    const onDidSelectEdit = async (newEditIndex: number) => {
-      const model = this._editor.getModel();
-      if (!model) {
-        return;
-      }
+		const model = this._editor.getModel();
+		const edit = edits.allEdits.at(edits.activeEditIndex);
+		if (!edit) {
+			return;
+		}
 
-      await model.undo();
-      this.applyEditAndShowIfNeeded(
-        ranges,
-        { activeEditIndex: newEditIndex, allEdits: edits.allEdits },
-        canShowWidget,
-        resolve,
-        token,
-      );
-    };
+		const onDidSelectEdit = async (newEditIndex: number, editSession: PasteEditSession | undefined) => {
+			try {
+				this.clear();
+				const model = this._editor.getModel();
+				if (!model) {
+					return;
+				}
 
-    const handleError = (e: Error, message: string) => {
-      if (isCancellationError(e)) {
-        return;
-      }
+				await model.undo();
+				await this.applyEditAndShowIfNeeded(ranges, { activeEditIndex: newEditIndex, allEdits: edits.allEdits }, canShowWidget, resolve, token, editSession);
+			} finally {
+				editSession?.dispose();
+			}
+		};
 
-      this._notificationService.error(message);
-      if (canShowWidget) {
-        this.show(ranges[0], edits, onDidSelectEdit);
-      }
-    };
+		const handleError = (e: Error, message: string) => {
+			if (isCancellationError(e)) {
+				return;
+			}
 
-    const editorStateCts = new EditorStateCancellationTokenSource(
-      this._editor,
-      CodeEditorStateFlag.Value | CodeEditorStateFlag.Selection,
-      undefined,
-      token,
-    );
-    let resolvedEdit: T;
-    try {
-      resolvedEdit = await raceCancellationError(
-        resolve(edit, editorStateCts.token),
-        editorStateCts.token,
-      );
-    } catch (e) {
-      return handleError(
-        e,
-        localize('resolveError', "Error resolving edit '{0}':\n{1}", edit.title, toErrorMessage(e)),
-      );
-    } finally {
-      editorStateCts.dispose();
-    }
+			this._notificationService.error(message);
+			if (canShowWidget) {
+				this.show(ranges[0], edits, onDidSelectEdit, editSessionOwner);
+			}
+		};
 
-    if (token.isCancellationRequested) {
-      return;
-    }
+		const editorStateCts = new EditorStateCancellationTokenSource(this._editor, CodeEditorStateFlag.Value | CodeEditorStateFlag.Selection, undefined, token);
+		let resolvedEdit: T;
+		try {
+			resolvedEdit = await raceCancellationError(resolve(edit, editorStateCts.token), editorStateCts.token);
+		} catch (e) {
+			return handleError(e, localize('resolveError', "Error resolving edit '{0}':\n{1}", edit.title, toErrorMessage(e)));
+		} finally {
+			editorStateCts.dispose();
+		}
 
-    const combinedWorkspaceEdit = createCombinedWorkspaceEdit(model.uri, ranges, resolvedEdit);
+		if (token.isCancellationRequested) {
+			return;
+		}
 
-    // Use a decoration to track edits around the trigger range
-    const primaryRange = ranges[0];
-    const editTrackingDecoration = model.deltaDecorations(
-      [],
-      [
-        {
-          range: primaryRange,
-          options: {
-            description: 'paste-line-suffix',
-            stickiness: TrackedRangeStickiness.AlwaysGrowsWhenTypingAtEdges,
-          },
-        },
-      ],
-    );
+		const combinedWorkspaceEdit = createCombinedWorkspaceEdit(model.uri, ranges, resolvedEdit);
 
-    this._editor.focus();
-    let editResult: IBulkEditResult;
-    let editRange: Range | null;
-    try {
-      editResult = await this._bulkEditService.apply(combinedWorkspaceEdit, {
-        editor: this._editor,
-        token,
-      });
-      editRange = model.getDecorationRange(editTrackingDecoration[0]);
-    } catch (e) {
-      return handleError(
-        e,
-        localize('applyError', "Error applying edit '{0}':\n{1}", edit.title, toErrorMessage(e)),
-      );
-    } finally {
-      model.deltaDecorations(editTrackingDecoration, []);
-    }
+		// Use a decoration to track edits around the trigger range
+		const primaryRange = ranges[0];
+		const editTrackingDecoration = model.deltaDecorations([], [{
+			range: primaryRange,
+			options: { description: 'paste-line-suffix', stickiness: TrackedRangeStickiness.AlwaysGrowsWhenTypingAtEdges }
+		}]);
 
-    if (token.isCancellationRequested) {
-      return;
-    }
+		this._editor.focus();
+		let editResult: IBulkEditResult;
+		let editRange: Range | null;
+		try {
+			editResult = await this._bulkEditService.apply(combinedWorkspaceEdit, { editor: this._editor, token });
+			editRange = model.getDecorationRange(editTrackingDecoration[0]);
+		} catch (e) {
+			return handleError(e, localize('applyError', "Error applying edit '{0}':\n{1}", edit.title, toErrorMessage(e)));
+		} finally {
+			model.deltaDecorations(editTrackingDecoration, []);
+		}
 
-    if (canShowWidget && editResult.isApplied && edits.allEdits.length > 1) {
-      this.show(editRange ?? primaryRange, edits, onDidSelectEdit);
-    }
-  }
+		if (token.isCancellationRequested) {
+			return;
+		}
 
-  public show(range: Range, edits: EditSet<T>, onDidSelectEdit: (newIndex: number) => void) {
-    this.clear();
+		if (canShowWidget && editResult.isApplied && edits.allEdits.length > 1) {
+			this.show(editRange ?? primaryRange, edits, onDidSelectEdit, editSessionOwner);
+		}
+	}
 
-    if (this._editor.hasModel()) {
-      this._currentWidget.value = this._instantiationService.createInstance(
-        PostEditWidget<T>,
-        this._id,
-        this._editor,
-        this._visibleContext,
-        this._showCommand,
-        range,
-        edits,
-        onDidSelectEdit,
-        this._getAdditionalActions(),
-      );
-    }
-  }
+	public show(range: Range, edits: EditSet<T>, onDidSelectEdit: (newIndex: number, editSession: PasteEditSession | undefined) => void, editSessionOwner?: PasteEditSession) {
+		this.clear();
 
-  public clear() {
-    this._currentWidget.clear();
-  }
+		if (this._editor.hasModel()) {
+			this._currentWidget.value = this._instantiationService.createInstance(PostEditWidget<T>, this._id, this._editor, this._visibleContext, this._showCommand, range, edits, onDidSelectEdit, this._getAdditionalActions(), editSessionOwner);
+		}
+	}
 
-  public tryShowSelector() {
-    this._currentWidget.value?.showSelector();
-  }
+	public clear() {
+		this._currentWidget.clear();
+	}
+
+	public tryShowSelector() {
+		this._currentWidget.value?.showSelector();
+	}
 }

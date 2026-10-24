@@ -11,6 +11,7 @@ export const untitled = 'untitled';
 export const git = 'git';
 export const github = 'github';
 export const azurerepos = 'azurerepos';
+export const chatEditingTextModel = 'chat-editing-text-model';
 
 /** Live share scheme */
 export const vsls = 'vsls';
@@ -22,24 +23,38 @@ export const officeScript = 'office-script';
 export const chatCodeBlock = 'vscode-chat-code-block';
 
 export function getSemanticSupportedSchemes() {
-  const alwaysSupportedSchemes = [untitled, walkThroughSnippet, vscodeNotebookCell, chatCodeBlock];
+	const alwaysSupportedSchemes = [
+		untitled,
+		walkThroughSnippet,
+		vscodeNotebookCell,
+		chatCodeBlock,
+	];
 
-  if (isWeb()) {
-    return [
-      ...(vscode.workspace.workspaceFolders ?? []).map((folder) => folder.uri.scheme),
-      ...alwaysSupportedSchemes,
-    ];
-  }
+	if (isWeb()) {
+		return [
+			...(vscode.workspace.workspaceFolders ?? []).map(folder => folder.uri.scheme),
+			...alwaysSupportedSchemes,
+		];
+	}
 
-  return [file, ...alwaysSupportedSchemes];
+	return [
+		file,
+		...alwaysSupportedSchemes,
+	];
 }
 
 /**
  * File scheme for which JS/TS language feature should be disabled
  */
-export const disabledSchemes = new Set([git, vsls, github, azurerepos]);
+export const disabledSchemes = new Set([
+	git,
+	vsls,
+	github,
+	azurerepos,
+	chatEditingTextModel,
+]);
 
 export function isOfScheme(uri: vscode.Uri, ...schemes: string[]): boolean {
-  const normalizedUriScheme = uri.scheme.toLowerCase();
-  return schemes.some((scheme) => normalizedUriScheme === scheme);
+	const normalizedUriScheme = uri.scheme.toLowerCase();
+	return schemes.some(scheme => normalizedUriScheme === scheme);
 }

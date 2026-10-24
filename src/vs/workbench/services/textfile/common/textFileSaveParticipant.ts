@@ -4,115 +4,98 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { raceCancellation } from '../../../../base/common/async.js';
-import {
-  CancellationToken,
-  CancellationTokenSource,
-} from '../../../../base/common/cancellation.js';
+import { CancellationToken, CancellationTokenSource } from '../../../../base/common/cancellation.js';
 import { ILogService } from '../../../../platform/log/common/log.js';
-import {
-  IProgress,
-  IProgressService,
-  IProgressStep,
-  ProgressLocation,
-} from '../../../../platform/progress/common/progress.js';
-import {
-  ITextFileSaveParticipant,
-  ITextFileEditorModel,
-  ITextFileSaveParticipantContext,
-} from './textfiles.js';
+import { IProgress, IProgressService, IProgressStep, ProgressLocation } from '../../../../platform/progress/common/progress.js';
+import { ITextFileSaveParticipant, ITextFileEditorModel, ITextFileSaveParticipantContext } from './textfiles.js';
 import { IDisposable, Disposable, toDisposable } from '../../../../base/common/lifecycle.js';
 import { LinkedList } from '../../../../base/common/linkedList.js';
 import { localize } from '../../../../nls.js';
 import { NotificationPriority } from '../../../../platform/notification/common/notification.js';
+import { NotificationTelemetryId } from '../../../../platform/notification/common/notificationTelemetry.js';
 import { CancellationError, isCancellationError } from '../../../../base/common/errors.js';
 
 export class TextFileSaveParticipant extends Disposable {
-  private readonly saveParticipants = new LinkedList<ITextFileSaveParticipant>();
 
-  constructor(
-    @ILogService private readonly logService: ILogService,
-    @IProgressService private readonly progressService: IProgressService,
-  ) {
-    super();
-  }
+	private readonly saveParticipants = new LinkedList<ITextFileSaveParticipant>();
 
-  addSaveParticipant(participant: ITextFileSaveParticipant): IDisposable {
-    const remove = this.saveParticipants.push(participant);
+	constructor(
+		@ILogService private readonly logService: ILogService,
+		@IProgressService private readonly progressService: IProgressService,
+	) {
+		super();
+	}
 
-    return toDisposable(() => remove());
-  }
+	addSaveParticipant(participant: ITextFileSaveParticipant): IDisposable {
+		const remove = this.saveParticipants.push(participant);
 
-  async participate(
-    model: ITextFileEditorModel,
-    context: ITextFileSaveParticipantContext,
-    progress: IProgress<IProgressStep>,
-    token: CancellationToken,
-  ): Promise<void> {
-    const cts = new CancellationTokenSource(token);
+		return toDisposable(() => remove());
+	}
 
-    // undoStop before participation
-    model.textEditorModel?.pushStackElement();
+	async participate(model: ITextFileEditorModel, context: ITextFileSaveParticipantContext, progress: IProgress<IProgressStep>, token: CancellationToken): Promise<void> {
+		const cts = new CancellationTokenSource(token);
 
-    // report to the "outer" progress
-    progress.report({
-      message: localize('saveParticipants1', 'Running Code Actions and Formatters...'),
-    });
+		// undoStop before participation
+		model.textEditorModel?.pushStackElement();
 
-    let bubbleCancel = false;
+		// report to the "outer" progress
+		progress.report({
+			message: localize('saveParticipants1', "Running Code Actions and Formatters...")
+		});
 
-    // create an "inner" progress to allow to skip over long running save participants
-    await this.progressService.withProgress(
-      {
-        priority: NotificationPriority.URGENT,
-        location: ProgressLocation.Notification,
-        cancellable: localize('skip', 'Skip'),
-        delay: model.isDirty() ? 5000 : 3000,
-      },
-      async (progress) => {
-        const participants = Array.from(this.saveParticipants).sort((a, b) => {
-          const aValue = a.ordinal ?? 0;
-          const bValue = b.ordinal ?? 0;
-          return aValue - bValue;
-        });
+		let bubbleCancel = false;
 
-        for (const saveParticipant of participants) {
-          if (cts.token.isCancellationRequested || !model.textEditorModel /* disposed */) {
-            break;
-          }
+		// create an "inner" progress to allow to skip over long running save participants
+		await this.progressService.withProgress({
+			telemetry: NotificationTelemetryId.FileSaveParticipants,
+			priority: NotificationPriority.URGENT,
+			location: ProgressLocation.Notification,
+			cancellable: localize('skip', "Skip"),
+			delay: model.isDirty() ? 5000 : 3000
+		}, async progress => {
 
-          try {
-            const promise = saveParticipant.participate(model, context, progress, cts.token);
-            await raceCancellation(promise, cts.token);
-          } catch (err) {
-            if (!isCancellationError(err)) {
-              this.logService.error(err);
-            } else if (!cts.token.isCancellationRequested) {
-              // we see a cancellation error BUT the token didn't signal it
-              // this means the participant wants the save operation to be cancelled
-              cts.cancel();
-              bubbleCancel = true;
-            }
-          }
-        }
-      },
-      () => {
-        cts.cancel();
-      },
-    );
+			const participants = Array.from(this.saveParticipants).sort((a, b) => {
+				const aValue = a.ordinal ?? 0;
+				const bValue = b.ordinal ?? 0;
+				return aValue - bValue;
+			});
 
-    // undoStop after participation
-    model.textEditorModel?.pushStackElement();
+			for (const saveParticipant of participants) {
+				if (cts.token.isCancellationRequested || !model.textEditorModel /* disposed */) {
+					break;
+				}
 
-    cts.dispose();
+				try {
+					const promise = saveParticipant.participate(model, context, progress, cts.token);
+					await raceCancellation(promise, cts.token);
+				} catch (err) {
+					if (!isCancellationError(err)) {
+						this.logService.error(err);
+					} else if (!cts.token.isCancellationRequested) {
+						// we see a cancellation error BUT the token didn't signal it
+						// this means the participant wants the save operation to be cancelled
+						cts.cancel();
+						bubbleCancel = true;
+					}
+				}
+			}
+		}, () => {
+			cts.cancel();
+		});
 
-    if (bubbleCancel) {
-      throw new CancellationError();
-    }
-  }
+		// undoStop after participation
+		model.textEditorModel?.pushStackElement();
 
-  override dispose(): void {
-    this.saveParticipants.clear();
+		cts.dispose();
 
-    super.dispose();
-  }
+		if (bubbleCancel) {
+			throw new CancellationError();
+		}
+	}
+
+	override dispose(): void {
+		this.saveParticipants.clear();
+
+		super.dispose();
+	}
 }

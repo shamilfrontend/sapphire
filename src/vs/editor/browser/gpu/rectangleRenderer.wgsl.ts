@@ -4,12 +4,12 @@
  *--------------------------------------------------------------------------------------------*/
 
 export const enum RectangleRendererBindingId {
-  Shapes,
-  LayoutInfoUniform,
-  ScrollOffset,
+	Shapes,
+	LayoutInfoUniform,
+	ScrollOffset,
 }
 
-export const rectangleRendererWgsl = /* wgsl */ `
+export const rectangleRendererWgsl = /*wgsl*/ `
 
 struct Vertex {
 	@location(0) position: vec2f,

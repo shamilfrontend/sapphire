@@ -3,17 +3,15 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import type { IGrammar } from 'vscode-textmate';
 import { createDecorator } from '../../../../platform/instantiation/common/instantiation.js';
+import type { IGrammar } from 'vscode-textmate';
 
-export const ITextMateTokenizationService = createDecorator<ITextMateTokenizationService>(
-  'textMateTokenizationFeature',
-);
+export const ITextMateTokenizationService = createDecorator<ITextMateTokenizationService>('textMateTokenizationFeature');
 
 export interface ITextMateTokenizationService {
-  readonly _serviceBrand: undefined;
+	readonly _serviceBrand: undefined;
 
-  createTokenizer(languageId: string): Promise<IGrammar | null>;
+	createTokenizer(languageId: string): Promise<IGrammar | null>;
 
-  startDebugMode(printFn: (str: string) => void, onStop: () => void): void;
+	startDebugMode(printFn: (str: string) => void, onStop: () => void): void;
 }

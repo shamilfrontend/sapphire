@@ -13,12 +13,6 @@ import { registerTerminalContribution } from '../../../terminal/browser/terminal
 import { TerminalStickyScrollContribution } from './terminalStickyScrollContribution.js';
 import { TerminalStickyScrollSettingId } from '../common/terminalStickyScrollConfiguration.js';
 
-// #endregion
-
-// #region Colors
-
-import './terminalStickyScrollColorRegistry.js';
-
 // #region Terminal Contributions
 
 registerTerminalContribution(TerminalStickyScrollContribution.ID, TerminalStickyScrollContribution);
@@ -28,26 +22,31 @@ registerTerminalContribution(TerminalStickyScrollContribution.ID, TerminalSticky
 // #region Actions
 
 const enum TerminalStickyScrollCommandId {
-  ToggleStickyScroll = 'workbench.action.terminal.toggleStickyScroll',
+	ToggleStickyScroll = 'workbench.action.terminal.toggleStickyScroll',
 }
 
 registerTerminalAction({
-  id: TerminalStickyScrollCommandId.ToggleStickyScroll,
-  title: localize2('workbench.action.terminal.toggleStickyScroll', 'Toggle Sticky Scroll'),
-  toggled: {
-    condition: ContextKeyExpr.equals(`config.${TerminalStickyScrollSettingId.Enabled}`, true),
-    title: localize('stickyScroll', 'Sticky Scroll'),
-    mnemonicTitle: localize(
-      { key: 'miStickyScroll', comment: ['&& denotes a mnemonic'] },
-      '&&Sticky Scroll',
-    ),
-  },
-  run: (c, accessor) => {
-    const configurationService = accessor.get(IConfigurationService);
-    const newValue = !configurationService.getValue(TerminalStickyScrollSettingId.Enabled);
-    return configurationService.updateValue(TerminalStickyScrollSettingId.Enabled, newValue);
-  },
-  menu: [{ id: MenuId.TerminalStickyScrollContext }],
+	id: TerminalStickyScrollCommandId.ToggleStickyScroll,
+	title: localize2('workbench.action.terminal.toggleStickyScroll', 'Toggle Sticky Scroll'),
+	toggled: {
+		condition: ContextKeyExpr.equals(`config.${TerminalStickyScrollSettingId.Enabled}`, true),
+		title: localize('stickyScroll', "Sticky Scroll"),
+		mnemonicTitle: localize({ key: 'miStickyScroll', comment: ['&& denotes a mnemonic'] }, "&&Sticky Scroll"),
+	},
+	run: (c, accessor) => {
+		const configurationService = accessor.get(IConfigurationService);
+		const newValue = !configurationService.getValue(TerminalStickyScrollSettingId.Enabled);
+		return configurationService.updateValue(TerminalStickyScrollSettingId.Enabled, newValue);
+	},
+	menu: [
+		{ id: MenuId.TerminalStickyScrollContext }
+	]
 });
+
+// #endregion
+
+// #region Colors
+
+import './terminalStickyScrollColorRegistry.js';
 
 // #endregion

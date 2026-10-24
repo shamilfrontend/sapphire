@@ -9,91 +9,82 @@ import { IChannel, IServerChannel } from '../../../base/parts/ipc/common/ipc.js'
 import { IUpdateService, State } from './update.js';
 
 export class UpdateChannel implements IServerChannel {
-  constructor(private service: IUpdateService) {}
 
-  listen(_: unknown, event: string): Event<any> {
-    switch (event) {
-      case 'onStateChange':
-        return this.service.onStateChange;
-    }
+	constructor(private service: IUpdateService) { }
 
-    throw new Error(`Event not found: ${event}`);
-  }
+	listen(_: unknown, event: string): Event<any> {
+		switch (event) {
+			case 'onStateChange': return this.service.onStateChange;
+		}
 
-  call(_: unknown, command: string, arg?: any): Promise<any> {
-    switch (command) {
-      case 'checkForUpdates':
-        return this.service.checkForUpdates(arg);
-      case 'downloadUpdate':
-        return this.service.downloadUpdate();
-      case 'applyUpdate':
-        return this.service.applyUpdate();
-      case 'quitAndInstall':
-        return this.service.quitAndInstall();
-      case '_getInitialState':
-        return Promise.resolve(this.service.state);
-      case 'isLatestVersion':
-        return this.service.isLatestVersion();
-      case '_applySpecificUpdate':
-        return this.service._applySpecificUpdate(arg);
-    }
+		throw new Error(`Event not found: ${event}`);
+	}
 
-    throw new Error(`Call not found: ${command}`);
-  }
+	call(_: unknown, command: string, arg?: any): Promise<any> {
+		switch (command) {
+			case 'checkForUpdates': return this.service.checkForUpdates(arg);
+			case 'downloadUpdate': return this.service.downloadUpdate(arg);
+			case 'applyUpdate': return this.service.applyUpdate();
+			case 'quitAndInstall': return this.service.quitAndInstall();
+			case '_getInitialState': return Promise.resolve(this.service.state);
+			case 'isLatestVersion': return this.service.isLatestVersion();
+			case '_applySpecificUpdate': return this.service._applySpecificUpdate(arg);
+			case 'setInternalOrg': return this.service.setInternalOrg(arg);
+		}
+
+		throw new Error(`Call not found: ${command}`);
+	}
 }
 
 export class UpdateChannelClient implements IUpdateService {
-  declare readonly _serviceBrand: undefined;
 
-  private readonly disposables = new DisposableStore();
+	declare readonly _serviceBrand: undefined;
+	private readonly disposables = new DisposableStore();
 
-  private readonly _onStateChange = new Emitter<State>();
+	private readonly _onStateChange = this.disposables.add(new Emitter<State>());
+	readonly onStateChange: Event<State> = this._onStateChange.event;
 
-  readonly onStateChange: Event<State> = this._onStateChange.event;
+	private _state: State = State.Uninitialized;
+	get state(): State { return this._state; }
+	set state(state: State) {
+		this._state = state;
+		this._onStateChange.fire(state);
+	}
 
-  private _state: State = State.Uninitialized;
+	constructor(private readonly channel: IChannel) {
+		this.disposables.add(this.channel.listen<State>('onStateChange')(state => this.state = state));
+		this.channel.call<State>('_getInitialState').then(state => this.state = state);
+	}
 
-  get state(): State {
-    return this._state;
-  }
+	checkForUpdates(explicit: boolean): Promise<void> {
+		return this.channel.call('checkForUpdates', explicit);
+	}
 
-  set state(state: State) {
-    this._state = state;
-    this._onStateChange.fire(state);
-  }
+	downloadUpdate(explicit: boolean): Promise<void> {
+		return this.channel.call('downloadUpdate', explicit);
+	}
 
-  constructor(private readonly channel: IChannel) {
-    this.disposables.add(
-      this.channel.listen<State>('onStateChange')((state) => (this.state = state)),
-    );
-    this.channel.call<State>('_getInitialState').then((state) => (this.state = state));
-  }
+	applyUpdate(): Promise<void> {
+		return this.channel.call('applyUpdate');
+	}
 
-  checkForUpdates(explicit: boolean): Promise<void> {
-    return this.channel.call('checkForUpdates', explicit);
-  }
+	quitAndInstall(): Promise<void> {
+		return this.channel.call('quitAndInstall');
+	}
 
-  downloadUpdate(): Promise<void> {
-    return this.channel.call('downloadUpdate');
-  }
+	isLatestVersion(): Promise<boolean | undefined> {
+		return this.channel.call('isLatestVersion');
+	}
 
-  applyUpdate(): Promise<void> {
-    return this.channel.call('applyUpdate');
-  }
+	_applySpecificUpdate(packagePath: string): Promise<void> {
+		return this.channel.call('_applySpecificUpdate', packagePath);
+	}
 
-  quitAndInstall(): Promise<void> {
-    return this.channel.call('quitAndInstall');
-  }
+	setInternalOrg(internalOrg: string | undefined): Promise<void> {
+		return this.channel.call('setInternalOrg', internalOrg);
+	}
 
-  isLatestVersion(): Promise<boolean | undefined> {
-    return this.channel.call('isLatestVersion');
-  }
-
-  _applySpecificUpdate(packagePath: string): Promise<void> {
-    return this.channel.call('_applySpecificUpdate', packagePath);
-  }
-
-  dispose(): void {
-    this.disposables.dispose();
-  }
+	dispose(): void {
+		this.disposables.dispose();
+	}
 }

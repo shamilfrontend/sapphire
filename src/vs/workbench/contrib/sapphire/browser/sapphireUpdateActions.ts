@@ -47,7 +47,7 @@ const notifyUpdate = (
         tooltip: '',
         class: undefined,
         run: () => {
-          updateService.downloadUpdate();
+          updateService.downloadUpdate(true);
         },
       });
     }

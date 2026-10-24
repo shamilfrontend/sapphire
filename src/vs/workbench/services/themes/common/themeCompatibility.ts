@@ -11,43 +11,40 @@ import * as editorColorRegistry from '../../../../editor/common/core/editorColor
 
 const settingToColorIdMapping: { [settingId: string]: string[] } = {};
 function addSettingMapping(settingId: string, colorId: string) {
-  let colorIds = settingToColorIdMapping[settingId];
-  if (!colorIds) {
-    settingToColorIdMapping[settingId] = colorIds = [];
-  }
-  colorIds.push(colorId);
+	let colorIds = settingToColorIdMapping[settingId];
+	if (!colorIds) {
+		settingToColorIdMapping[settingId] = colorIds = [];
+	}
+	colorIds.push(colorId);
 }
 
-export function convertSettings(
-  oldSettings: ITextMateThemingRule[],
-  result: { textMateRules: ITextMateThemingRule[]; colors: IColorMap },
-): void {
-  for (const rule of oldSettings) {
-    result.textMateRules.push(rule);
-    if (!rule.scope) {
-      const settings = rule.settings;
-      if (!settings) {
-        rule.settings = {};
-      } else {
-        for (const settingKey in settings) {
-          const key = <keyof typeof settings>settingKey;
-          const mappings = settingToColorIdMapping[key];
-          if (mappings) {
-            const colorHex = settings[key];
-            if (typeof colorHex === 'string') {
-              const color = Color.fromHex(colorHex);
-              for (const colorId of mappings) {
-                result.colors[colorId] = color;
-              }
-            }
-          }
-          if (key !== 'foreground' && key !== 'background' && key !== 'fontStyle') {
-            delete settings[key];
-          }
-        }
-      }
-    }
-  }
+export function convertSettings(oldSettings: ITextMateThemingRule[], result: { textMateRules: ITextMateThemingRule[]; colors: IColorMap }): void {
+	for (const rule of oldSettings) {
+		result.textMateRules.push(rule);
+		if (!rule.scope) {
+			const settings = rule.settings;
+			if (!settings) {
+				rule.settings = {};
+			} else {
+				for (const settingKey in settings) {
+					const key = <keyof typeof settings>settingKey;
+					const mappings = settingToColorIdMapping[key];
+					if (mappings) {
+						const colorHex = settings[key];
+						if (typeof colorHex === 'string') {
+							const color = Color.fromHex(colorHex);
+							for (const colorId of mappings) {
+								result.colors[colorId] = color;
+							}
+						}
+					}
+					if (key !== 'foreground' && key !== 'background' && key !== 'fontStyle') {
+						delete settings[key];
+					}
+				}
+			}
+		}
+	}
 }
 
 addSettingMapping('background', colorRegistry.editorBackground);
@@ -70,25 +67,10 @@ addSettingMapping('invisibles', editorColorRegistry.editorWhitespaces);
 addSettingMapping('guide', editorColorRegistry.editorIndentGuide1);
 addSettingMapping('activeGuide', editorColorRegistry.editorActiveIndentGuide1);
 
-const ansiColorMap = [
-  'ansiBlack',
-  'ansiRed',
-  'ansiGreen',
-  'ansiYellow',
-  'ansiBlue',
-  'ansiMagenta',
-  'ansiCyan',
-  'ansiWhite',
-  'ansiBrightBlack',
-  'ansiBrightRed',
-  'ansiBrightGreen',
-  'ansiBrightYellow',
-  'ansiBrightBlue',
-  'ansiBrightMagenta',
-  'ansiBrightCyan',
-  'ansiBrightWhite',
+const ansiColorMap = ['ansiBlack', 'ansiRed', 'ansiGreen', 'ansiYellow', 'ansiBlue', 'ansiMagenta', 'ansiCyan', 'ansiWhite',
+	'ansiBrightBlack', 'ansiBrightRed', 'ansiBrightGreen', 'ansiBrightYellow', 'ansiBrightBlue', 'ansiBrightMagenta', 'ansiBrightCyan', 'ansiBrightWhite'
 ];
 
 for (const color of ansiColorMap) {
-  addSettingMapping(color, `terminal.${color}`);
+	addSettingMapping(color, 'terminal.' + color);
 }

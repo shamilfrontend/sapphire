@@ -4,67 +4,61 @@
  *--------------------------------------------------------------------------------------------*/
 
 export interface ITask<T> {
-  (): T;
+	(): T;
 }
 
 export class Delayer<T> {
-  public defaultDelay: number;
 
-  private _timeout: any; // Timer
+	public defaultDelay: number;
+	#timeout: ReturnType<typeof setTimeout> | null;
+	#cancelTimeout: Promise<T | null> | null;
+	#onSuccess: ((value: T | PromiseLike<T> | undefined) => void) | null;
+	#task: ITask<T> | null;
 
-  private _cancelTimeout: Promise<T | null> | null;
+	constructor(defaultDelay: number) {
+		this.defaultDelay = defaultDelay;
+		this.#timeout = null;
+		this.#cancelTimeout = null;
+		this.#onSuccess = null;
+		this.#task = null;
+	}
 
-  private _onSuccess: ((value: T | PromiseLike<T> | undefined) => void) | null;
+	dispose() {
+		this.#doCancelTimeout();
+	}
 
-  private _task: ITask<T> | null;
+	public trigger(task: ITask<T>, delay: number = this.defaultDelay): Promise<T | null> {
+		this.#task = task;
+		if (delay >= 0) {
+			this.#doCancelTimeout();
+		}
 
-  constructor(defaultDelay: number) {
-    this.defaultDelay = defaultDelay;
-    this._timeout = null;
-    this._cancelTimeout = null;
-    this._onSuccess = null;
-    this._task = null;
-  }
+		if (!this.#cancelTimeout) {
+			this.#cancelTimeout = new Promise<T | undefined>((resolve) => {
+				this.#onSuccess = resolve;
+			}).then(() => {
+				this.#cancelTimeout = null;
+				this.#onSuccess = null;
+				const result = this.#task?.() ?? null;
+				this.#task = null;
+				return result;
+			});
+		}
 
-  dispose() {
-    this._doCancelTimeout();
-  }
+		if (delay >= 0 || this.#timeout === null) {
+			this.#timeout = setTimeout(() => {
+				this.#timeout = null;
+				this.#onSuccess?.(undefined);
+			}, delay >= 0 ? delay : this.defaultDelay);
+		}
 
-  public trigger(task: ITask<T>, delay: number = this.defaultDelay): Promise<T | null> {
-    this._task = task;
-    if (delay >= 0) {
-      this._doCancelTimeout();
-    }
+		return this.#cancelTimeout;
+	}
 
-    if (!this._cancelTimeout) {
-      this._cancelTimeout = new Promise<T | undefined>((resolve) => {
-        this._onSuccess = resolve;
-      }).then(() => {
-        this._cancelTimeout = null;
-        this._onSuccess = null;
-        const result = this._task && this._task?.();
-        this._task = null;
-        return result;
-      });
-    }
-
-    if (delay >= 0 || this._timeout === null) {
-      this._timeout = setTimeout(
-        () => {
-          this._timeout = null;
-          this._onSuccess?.(undefined);
-        },
-        delay >= 0 ? delay : this.defaultDelay,
-      );
-    }
-
-    return this._cancelTimeout;
-  }
-
-  private _doCancelTimeout(): void {
-    if (this._timeout !== null) {
-      clearTimeout(this._timeout);
-      this._timeout = null;
-    }
-  }
+	#doCancelTimeout(): void {
+		if (this.#timeout !== null) {
+			clearTimeout(this.#timeout);
+			this.#timeout = null;
+		}
+	}
 }

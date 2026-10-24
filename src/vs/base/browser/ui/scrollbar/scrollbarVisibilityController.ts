@@ -9,121 +9,110 @@ import { Disposable } from '../../../common/lifecycle.js';
 import { ScrollbarVisibility } from '../../../common/scrollable.js';
 
 export class ScrollbarVisibilityController extends Disposable {
-  private _visibility: ScrollbarVisibility;
+	private _visibility: ScrollbarVisibility;
+	private _visibleClassName: string;
+	private _invisibleClassName: string;
+	private _domNode: FastDomNode<HTMLElement> | null;
+	private _rawShouldBeVisible: boolean;
+	private _shouldBeVisible: boolean;
+	private _isNeeded: boolean;
+	private _isVisible: boolean;
+	private _revealTimer: TimeoutTimer;
 
-  private _visibleClassName: string;
+	constructor(visibility: ScrollbarVisibility, visibleClassName: string, invisibleClassName: string) {
+		super();
+		this._visibility = visibility;
+		this._visibleClassName = visibleClassName;
+		this._invisibleClassName = invisibleClassName;
+		this._domNode = null;
+		this._isVisible = false;
+		this._isNeeded = false;
+		this._rawShouldBeVisible = false;
+		this._shouldBeVisible = false;
+		this._revealTimer = this._register(new TimeoutTimer());
+	}
 
-  private _invisibleClassName: string;
+	public setVisibility(visibility: ScrollbarVisibility): void {
+		if (this._visibility !== visibility) {
+			this._visibility = visibility;
+			this._updateShouldBeVisible();
+		}
+	}
 
-  private _domNode: FastDomNode<HTMLElement> | null;
+	// ----------------- Hide / Reveal
 
-  private _rawShouldBeVisible: boolean;
+	public setShouldBeVisible(rawShouldBeVisible: boolean): void {
+		this._rawShouldBeVisible = rawShouldBeVisible;
+		this._updateShouldBeVisible();
+	}
 
-  private _shouldBeVisible: boolean;
+	private _applyVisibilitySetting(): boolean {
+		if (this._visibility === ScrollbarVisibility.Hidden) {
+			return false;
+		}
+		if (this._visibility === ScrollbarVisibility.Visible) {
+			return true;
+		}
+		return this._rawShouldBeVisible;
+	}
 
-  private _isNeeded: boolean;
+	private _updateShouldBeVisible(): void {
+		const shouldBeVisible = this._applyVisibilitySetting();
 
-  private _isVisible: boolean;
+		if (this._shouldBeVisible !== shouldBeVisible) {
+			this._shouldBeVisible = shouldBeVisible;
+			this.ensureVisibility();
+		}
+	}
 
-  private _revealTimer: TimeoutTimer;
+	public setIsNeeded(isNeeded: boolean): void {
+		if (this._isNeeded !== isNeeded) {
+			this._isNeeded = isNeeded;
+			this.ensureVisibility();
+		}
+	}
 
-  constructor(
-    visibility: ScrollbarVisibility,
-    visibleClassName: string,
-    invisibleClassName: string,
-  ) {
-    super();
-    this._visibility = visibility;
-    this._visibleClassName = visibleClassName;
-    this._invisibleClassName = invisibleClassName;
-    this._domNode = null;
-    this._isVisible = false;
-    this._isNeeded = false;
-    this._rawShouldBeVisible = false;
-    this._shouldBeVisible = false;
-    this._revealTimer = this._register(new TimeoutTimer());
-  }
+	public setDomNode(domNode: FastDomNode<HTMLElement>): void {
+		this._domNode = domNode;
+		this._domNode.setClassName(this._invisibleClassName);
 
-  public setVisibility(visibility: ScrollbarVisibility): void {
-    if (this._visibility !== visibility) {
-      this._visibility = visibility;
-      this._updateShouldBeVisible();
-    }
-  }
+		// Now that the flags & the dom node are in a consistent state, ensure the Hidden/Visible configuration
+		this.setShouldBeVisible(false);
+	}
 
-  // ----------------- Hide / Reveal
+	public ensureVisibility(): void {
 
-  public setShouldBeVisible(rawShouldBeVisible: boolean): void {
-    this._rawShouldBeVisible = rawShouldBeVisible;
-    this._updateShouldBeVisible();
-  }
+		if (!this._isNeeded) {
+			// Nothing to be rendered
+			this._hide(false);
+			return;
+		}
 
-  private _applyVisibilitySetting(): boolean {
-    if (this._visibility === ScrollbarVisibility.Hidden) {
-      return false;
-    }
-    if (this._visibility === ScrollbarVisibility.Visible) {
-      return true;
-    }
-    return this._rawShouldBeVisible;
-  }
+		if (this._shouldBeVisible) {
+			this._reveal();
+		} else {
+			this._hide(true);
+		}
+	}
 
-  private _updateShouldBeVisible(): void {
-    const shouldBeVisible = this._applyVisibilitySetting();
+	private _reveal(): void {
+		if (this._isVisible) {
+			return;
+		}
+		this._isVisible = true;
 
-    if (this._shouldBeVisible !== shouldBeVisible) {
-      this._shouldBeVisible = shouldBeVisible;
-      this.ensureVisibility();
-    }
-  }
+		// The CSS animation doesn't play otherwise
+		this._revealTimer.setIfNotSet(() => {
+			this._domNode?.setClassName(this._visibleClassName);
+		}, 0);
+	}
 
-  public setIsNeeded(isNeeded: boolean): void {
-    if (this._isNeeded !== isNeeded) {
-      this._isNeeded = isNeeded;
-      this.ensureVisibility();
-    }
-  }
-
-  public setDomNode(domNode: FastDomNode<HTMLElement>): void {
-    this._domNode = domNode;
-    this._domNode.setClassName(this._invisibleClassName);
-
-    // Now that the flags & the dom node are in a consistent state, ensure the Hidden/Visible configuration
-    this.setShouldBeVisible(false);
-  }
-
-  public ensureVisibility(): void {
-    if (!this._isNeeded) {
-      // Nothing to be rendered
-      this._hide(false);
-      return;
-    }
-
-    if (this._shouldBeVisible) {
-      this._reveal();
-    } else {
-      this._hide(true);
-    }
-  }
-
-  private _reveal(): void {
-    if (this._isVisible) {
-      return;
-    }
-    this._isVisible = true;
-
-    // The CSS animation doesn't play otherwise
-    this._revealTimer.setIfNotSet(() => {
-      this._domNode?.setClassName(this._visibleClassName);
-    }, 0);
-  }
-
-  private _hide(withFadeAway: boolean): void {
-    this._revealTimer.cancel();
-    if (!this._isVisible) {
-      return;
-    }
-    this._isVisible = false;
-    this._domNode?.setClassName(this._invisibleClassName + (withFadeAway ? ' fade' : ''));
-  }
+	private _hide(withFadeAway: boolean): void {
+		this._revealTimer.cancel();
+		if (!this._isVisible) {
+			return;
+		}
+		this._isVisible = false;
+		this._domNode?.setClassName(this._invisibleClassName + (withFadeAway ? ' fade' : ''));
+	}
 }

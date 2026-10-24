@@ -5,94 +5,104 @@
 
 import type * as vscode from 'vscode';
 import * as extHostProtocol from './extHost.protocol.js';
-import {
-  ExtensionIdentifier,
-  IExtensionDescription,
-} from '../../../platform/extensions/common/extensions.js';
+import { ExtensionIdentifier, IExtensionDescription } from '../../../platform/extensions/common/extensions.js';
 
 export class ExtHostChatStatus {
-  private readonly _proxy: extHostProtocol.MainThreadChatStatusShape;
 
-  private readonly _items = new Map<string, vscode.ChatStatusItem>();
+	private readonly _proxy: extHostProtocol.MainThreadChatStatusShape;
 
-  constructor(mainContext: extHostProtocol.IMainContext) {
-    this._proxy = mainContext.getProxy(extHostProtocol.MainContext.MainThreadChatStatus);
-  }
+	private readonly _items = new Map<string, vscode.ChatStatusItem>();
 
-  createChatStatusItem(extension: IExtensionDescription, id: string): vscode.ChatStatusItem {
-    const internalId = asChatItemIdentifier(extension.identifier, id);
-    if (this._items.has(internalId)) {
-      throw new Error(`Chat status item '${id}' already exists`);
-    }
+	constructor(
+		mainContext: extHostProtocol.IMainContext
+	) {
+		this._proxy = mainContext.getProxy(extHostProtocol.MainContext.MainThreadChatStatus);
+	}
 
-    const state: extHostProtocol.ChatStatusItemDto = {
-      id: internalId,
-      title: '',
-      description: '',
-      detail: '',
-    };
+	createChatStatusItem(extension: IExtensionDescription, id: string): vscode.ChatStatusItem {
+		const internalId = asChatItemIdentifier(extension.identifier, id);
+		if (this._items.has(internalId)) {
+			throw new Error(`Chat status item '${id}' already exists`);
+		}
 
-    let disposed = false;
-    let visible = false;
-    const syncState = () => {
-      if (disposed) {
-        throw new Error('Chat status item is disposed');
-      }
+		const state: extHostProtocol.ChatStatusItemDto = {
+			id: internalId,
+			title: '',
+			description: '',
+			detail: '',
+			tooltip: undefined,
+		};
 
-      if (!visible) {
-        return;
-      }
+		let disposed = false;
+		let visible = false;
+		const syncState = () => {
+			if (disposed) {
+				throw new Error('Chat status item is disposed');
+			}
 
-      this._proxy.$setEntry(id, state);
-    };
+			if (!visible) {
+				return;
+			}
 
-    const item = Object.freeze<vscode.ChatStatusItem>({
-      id,
+			this._proxy.$setEntry(id, state);
+		};
 
-      get title(): string {
-        return state.title;
-      },
-      set title(value: string) {
-        state.title = value;
-        syncState();
-      },
+		const item = Object.freeze<vscode.ChatStatusItem>({
+			id: id,
 
-      get description(): string {
-        return state.description;
-      },
-      set description(value: string) {
-        state.description = value;
-        syncState();
-      },
+			get title(): string | { label: string; link: string; helpText?: string } {
+				return state.title;
+			},
+			set title(value: string | { label: string; link: string; helpText?: string }) {
+				state.title = value;
+				syncState();
+			},
 
-      get detail(): string | undefined {
-        return state.detail;
-      },
-      set detail(value: string | undefined) {
-        state.detail = value;
-        syncState();
-      },
+			get description(): string {
+				return state.description;
+			},
+			set description(value: string) {
+				state.description = value;
+				syncState();
+			},
 
-      show: () => {
-        visible = true;
-        syncState();
-      },
-      hide: () => {
-        visible = false;
-        this._proxy.$disposeEntry(id);
-      },
-      dispose: () => {
-        disposed = true;
-        this._proxy.$disposeEntry(id);
-        this._items.delete(internalId);
-      },
-    });
+			get detail(): string | undefined {
+				return state.detail;
+			},
+			set detail(value: string | undefined) {
+				state.detail = value;
+				syncState();
+			},
 
-    this._items.set(internalId, item);
-    return item;
-  }
+			get tooltip(): string | undefined {
+				return state.tooltip;
+			},
+			set tooltip(value: string | undefined) {
+				state.tooltip = value;
+				syncState();
+			},
+
+			show: () => {
+				visible = true;
+				syncState();
+			},
+			hide: () => {
+				visible = false;
+				this._proxy.$disposeEntry(id);
+			},
+			dispose: () => {
+				disposed = true;
+				this._proxy.$disposeEntry(id);
+				this._items.delete(internalId);
+			},
+		});
+
+		this._items.set(internalId, item);
+		return item;
+	}
 }
 
 function asChatItemIdentifier(extension: ExtensionIdentifier, id: string): string {
-  return `${ExtensionIdentifier.toKey(extension)}.${id}`;
+	return `${ExtensionIdentifier.toKey(extension)}.${id}`;
 }
+

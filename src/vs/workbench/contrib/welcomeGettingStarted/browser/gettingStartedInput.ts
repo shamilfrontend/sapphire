@@ -14,117 +14,119 @@ import { IEditorOptions } from '../../../../platform/editor/common/editor.js';
 export const gettingStartedInputTypeId = 'workbench.editors.gettingStartedInput';
 
 export interface GettingStartedEditorOptions extends IEditorOptions {
-  selectedCategory?: string;
-  selectedStep?: string;
-  showTelemetryNotice?: boolean;
-  showWelcome?: boolean;
-  walkthroughPageTitle?: string;
+	selectedCategory?: string;
+	selectedStep?: string;
+	showTelemetryNotice?: boolean;
+	showWelcome?: boolean;
+	walkthroughPageTitle?: string;
+	showNewExperience?: boolean;
+	/** Command to execute when pressing "Go Back" instead of showing the categories slide */
+	returnToCommand?: string;
 }
 
 export class GettingStartedInput extends EditorInput {
-  static readonly ID = gettingStartedInputTypeId;
 
-  static readonly RESOURCE = URI.from({
-    scheme: Schemas.walkThrough,
-    authority: 'vscode_getting_started_page',
-  });
+	static readonly ID = gettingStartedInputTypeId;
+	static readonly RESOURCE = URI.from({ scheme: Schemas.walkThrough, authority: 'vscode_getting_started_page' });
+	private _selectedCategory: string | undefined;
+	private _selectedStep: string | undefined;
+	private _showTelemetryNotice: boolean;
+	private _showWelcome: boolean;
+	private _returnToCommand: string | undefined;
 
-  private _selectedCategory: string | undefined;
+	private _walkthroughPageTitle: string | undefined;
 
-  private _selectedStep: string | undefined;
+	override get typeId(): string {
+		return GettingStartedInput.ID;
+	}
 
-  private _showTelemetryNotice: boolean;
+	override get editorId(): string | undefined {
+		return this.typeId;
+	}
 
-  private _showWelcome: boolean;
+	override toUntyped(): IUntypedEditorInput {
+		return {
+			resource: GettingStartedInput.RESOURCE,
+			options: {
+				override: GettingStartedInput.ID,
+				pinned: false
+			}
+		};
+	}
 
-  private _walkthroughPageTitle: string | undefined;
+	get resource(): URI | undefined {
+		return GettingStartedInput.RESOURCE;
+	}
 
-  override get typeId(): string {
-    return GettingStartedInput.ID;
-  }
+	override matches(other: EditorInput | IUntypedEditorInput): boolean {
+		if (super.matches(other)) {
+			return true;
+		}
 
-  override get editorId(): string | undefined {
-    return this.typeId;
-  }
+		return other instanceof GettingStartedInput;
+	}
 
-  override toUntyped(): IUntypedEditorInput {
-    return {
-      resource: GettingStartedInput.RESOURCE,
-      options: {
-        override: GettingStartedInput.ID,
-        pinned: false,
-      },
-    };
-  }
+	constructor(
+		options: GettingStartedEditorOptions) {
+		super();
+		this._selectedCategory = options.selectedCategory;
+		this._selectedStep = options.selectedStep;
+		this._showTelemetryNotice = !!options.showTelemetryNotice;
+		this._showWelcome = options.showWelcome ?? true;
+		this._walkthroughPageTitle = options.walkthroughPageTitle;
+		this._returnToCommand = options.returnToCommand;
+	}
 
-  get resource(): URI | undefined {
-    return GettingStartedInput.RESOURCE;
-  }
+	override getName() {
+		return this.walkthroughPageTitle ? localize('walkthroughPageTitle', 'Walkthrough: {0}', this.walkthroughPageTitle) : localize('getStarted', "Welcome");
+	}
 
-  override matches(other: EditorInput | IUntypedEditorInput): boolean {
-    if (super.matches(other)) {
-      return true;
-    }
+	get selectedCategory() {
+		return this._selectedCategory;
+	}
 
-    if (other instanceof GettingStartedInput) {
-      return other.selectedCategory === this.selectedCategory;
-    }
-    return false;
-  }
+	set selectedCategory(selectedCategory: string | undefined) {
+		this._selectedCategory = selectedCategory;
+		this._onDidChangeLabel.fire();
+	}
 
-  constructor(options: GettingStartedEditorOptions) {
-    super();
-    this._selectedCategory = options.selectedCategory;
-    this._selectedStep = options.selectedStep;
-    this._showTelemetryNotice = !!options.showTelemetryNotice;
-    this._showWelcome = options.showWelcome ?? true;
-    this._walkthroughPageTitle = options.walkthroughPageTitle;
-  }
+	get selectedStep() {
+		return this._selectedStep;
+	}
 
-  override getName() {
-    return this.walkthroughPageTitle
-      ? localize('walkthroughPageTitle', 'Walkthrough: {0}', this.walkthroughPageTitle)
-      : localize('getStarted', 'Welcome');
-  }
+	set selectedStep(selectedStep: string | undefined) {
+		this._selectedStep = selectedStep;
+	}
 
-  get selectedCategory() {
-    return this._selectedCategory;
-  }
+	get showTelemetryNotice(): boolean {
+		return this._showTelemetryNotice;
+	}
 
-  set selectedCategory(selectedCategory: string | undefined) {
-    this._selectedCategory = selectedCategory;
-    this._onDidChangeLabel.fire();
-  }
+	set showTelemetryNotice(value: boolean) {
+		this._showTelemetryNotice = value;
+	}
 
-  get selectedStep() {
-    return this._selectedStep;
-  }
+	get showWelcome(): boolean {
+		return this._showWelcome;
+	}
 
-  set selectedStep(selectedStep: string | undefined) {
-    this._selectedStep = selectedStep;
-  }
+	set showWelcome(value: boolean) {
+		this._showWelcome = value;
+	}
 
-  get showTelemetryNotice(): boolean {
-    return this._showTelemetryNotice;
-  }
+	get walkthroughPageTitle(): string | undefined {
+		return this._walkthroughPageTitle;
+	}
 
-  set showTelemetryNotice(value: boolean) {
-    this._showTelemetryNotice = value;
-  }
+	set walkthroughPageTitle(value: string | undefined) {
+		this._walkthroughPageTitle = value;
+	}
 
-  get showWelcome(): boolean {
-    return this._showWelcome;
-  }
+	get returnToCommand(): string | undefined {
+		return this._returnToCommand;
+	}
 
-  set showWelcome(value: boolean) {
-    this._showWelcome = value;
-  }
-
-  get walkthroughPageTitle(): string | undefined {
-    return this._walkthroughPageTitle;
-  }
-
-  set walkthroughPageTitle(value: string | undefined) {
-    this._walkthroughPageTitle = value;
-  }
+	set returnToCommand(value: string | undefined) {
+		this._returnToCommand = value;
+	}
 }

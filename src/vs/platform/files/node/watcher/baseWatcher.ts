@@ -4,22 +4,8 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { watchFile, unwatchFile, Stats } from 'fs';
-import {
-  Disposable,
-  DisposableMap,
-  DisposableStore,
-  toDisposable,
-} from '../../../../base/common/lifecycle.js';
-import {
-  ILogMessage,
-  IRecursiveWatcherWithSubscribe,
-  IUniversalWatchRequest,
-  IWatchRequestWithCorrelation,
-  IWatcher,
-  IWatcherErrorEvent,
-  isWatchRequestWithCorrelation,
-  requestFilterToString,
-} from '../../common/watcher.js';
+import { Disposable, DisposableMap, DisposableStore, toDisposable } from '../../../../base/common/lifecycle.js';
+import { ILogMessage, IRecursiveWatcherWithSubscribe, IUniversalWatchRequest, IWatchRequestWithCorrelation, IWatcher, IWatcherErrorEvent, isWatchRequestWithCorrelation, requestFilterToString } from '../../common/watcher.js';
 import { Emitter, Event } from '../../../../base/common/event.js';
 import { FileChangeType, IFileChange } from '../../common/files.js';
 import { URI } from '../../../../base/common/uri.js';
@@ -28,326 +14,262 @@ import { hash } from '../../../../base/common/hash.js';
 import { onUnexpectedError } from '../../../../base/common/errors.js';
 
 interface ISuspendedWatchRequest {
-  readonly id: number;
-  readonly correlationId: number | undefined;
-  readonly path: string;
+	readonly id: number;
+	readonly correlationId: number | undefined;
+	readonly path: string;
 }
 
 export abstract class BaseWatcher extends Disposable implements IWatcher {
-  protected readonly _onDidChangeFile = this._register(new Emitter<IFileChange[]>());
 
-  readonly onDidChangeFile = this._onDidChangeFile.event;
+	protected readonly _onDidChangeFile = this._register(new Emitter<IFileChange[]>());
+	readonly onDidChangeFile = this._onDidChangeFile.event;
 
-  protected readonly _onDidLogMessage = this._register(new Emitter<ILogMessage>());
+	protected readonly _onDidLogMessage = this._register(new Emitter<ILogMessage>());
+	readonly onDidLogMessage = this._onDidLogMessage.event;
 
-  readonly onDidLogMessage = this._onDidLogMessage.event;
+	protected readonly _onDidWatchFail = this._register(new Emitter<IUniversalWatchRequest>());
+	private readonly onDidWatchFail = this._onDidWatchFail.event;
 
-  protected readonly _onDidWatchFail = this._register(new Emitter<IUniversalWatchRequest>());
+	private readonly correlatedWatchRequests = new Map<number /* request ID */, IWatchRequestWithCorrelation>();
+	private readonly nonCorrelatedWatchRequests = new Map<number /* request ID */, IUniversalWatchRequest>();
 
-  private readonly onDidWatchFail = this._onDidWatchFail.event;
+	private readonly suspendedWatchRequests = this._register(new DisposableMap<number /* request ID */>());
+	private readonly suspendedWatchRequestsWithPolling = new Set<number /* request ID */>();
 
-  private readonly correlatedWatchRequests = new Map<
-    number /* request ID */,
-    IWatchRequestWithCorrelation
-  >();
+	private readonly updateWatchersDelayer = this._register(new ThrottledDelayer<void>(this.getUpdateWatchersDelay()));
 
-  private readonly nonCorrelatedWatchRequests = new Map<
-    number /* request ID */,
-    IUniversalWatchRequest
-  >();
+	protected readonly suspendedWatchRequestPollingInterval: number = 5007; // node.js default
 
-  private readonly suspendedWatchRequests = this._register(
-    new DisposableMap<number /* request ID */>(),
-  );
+	private joinWatch = new DeferredPromise<void>();
 
-  private readonly suspendedWatchRequestsWithPolling = new Set<number /* request ID */>();
+	constructor() {
+		super();
 
-  private readonly updateWatchersDelayer = this._register(
-    new ThrottledDelayer<void>(this.getUpdateWatchersDelay()),
-  );
+		this._register(this.onDidWatchFail(request => this.suspendWatchRequest({
+			id: this.computeId(request),
+			correlationId: this.isCorrelated(request) ? request.correlationId : undefined,
+			path: request.path
+		})));
+	}
 
-  protected readonly suspendedWatchRequestPollingInterval: number = 5007; // node.js default
+	protected isCorrelated(request: IUniversalWatchRequest): request is IWatchRequestWithCorrelation {
+		return isWatchRequestWithCorrelation(request);
+	}
 
-  private joinWatch = new DeferredPromise<void>();
+	private computeId(request: IUniversalWatchRequest): number {
+		if (this.isCorrelated(request)) {
+			return request.correlationId;
+		} else {
+			// Requests without correlation do not carry any unique identifier, so we have to
+			// come up with one based on the options of the request. This matches what the
+			// file service does (vs/platform/files/common/fileService.ts#L1178).
+			return hash(request);
+		}
+	}
 
-  constructor() {
-    super();
+	async watch(requests: IUniversalWatchRequest[]): Promise<void> {
+		if (!this.joinWatch.isSettled) {
+			this.joinWatch.complete();
+		}
+		this.joinWatch = new DeferredPromise<void>();
 
-    this._register(
-      this.onDidWatchFail((request) =>
-        this.suspendWatchRequest({
-          id: this.computeId(request),
-          correlationId: this.isCorrelated(request) ? request.correlationId : undefined,
-          path: request.path,
-        }),
-      ),
-    );
-  }
+		try {
+			this.correlatedWatchRequests.clear();
+			this.nonCorrelatedWatchRequests.clear();
 
-  protected isCorrelated(request: IUniversalWatchRequest): request is IWatchRequestWithCorrelation {
-    return isWatchRequestWithCorrelation(request);
-  }
+			// Figure out correlated vs. non-correlated requests
+			for (const request of requests) {
+				if (this.isCorrelated(request)) {
+					this.correlatedWatchRequests.set(request.correlationId, request);
+				} else {
+					this.nonCorrelatedWatchRequests.set(this.computeId(request), request);
+				}
+			}
 
-  private computeId(request: IUniversalWatchRequest): number {
-    if (this.isCorrelated(request)) {
-      return request.correlationId;
-    }
-    // Requests without correlation do not carry any unique identifier, so we have to
-    // come up with one based on the options of the request. This matches what the
-    // file service does (vs/platform/files/common/fileService.ts#L1178).
-    return hash(request);
-  }
+			// Remove all suspended watch requests that are no longer watched
+			for (const [id] of this.suspendedWatchRequests) {
+				if (!this.nonCorrelatedWatchRequests.has(id) && !this.correlatedWatchRequests.has(id)) {
+					this.suspendedWatchRequests.deleteAndDispose(id);
+					this.suspendedWatchRequestsWithPolling.delete(id);
+				}
+			}
 
-  async watch(requests: IUniversalWatchRequest[]): Promise<void> {
-    if (!this.joinWatch.isSettled) {
-      this.joinWatch.complete();
-    }
-    this.joinWatch = new DeferredPromise<void>();
+			return await this.updateWatchers(false /* not delayed */);
+		} finally {
+			this.joinWatch.complete();
+		}
+	}
 
-    try {
-      this.correlatedWatchRequests.clear();
-      this.nonCorrelatedWatchRequests.clear();
+	private updateWatchers(delayed: boolean): Promise<void> {
+		const nonSuspendedRequests: IUniversalWatchRequest[] = [];
+		for (const [id, request] of [...this.nonCorrelatedWatchRequests, ...this.correlatedWatchRequests]) {
+			if (!this.suspendedWatchRequests.has(id)) {
+				nonSuspendedRequests.push(request);
+			}
+		}
 
-      // Figure out correlated vs. non-correlated requests
-      for (const request of requests) {
-        if (this.isCorrelated(request)) {
-          this.correlatedWatchRequests.set(request.correlationId, request);
-        } else {
-          this.nonCorrelatedWatchRequests.set(this.computeId(request), request);
-        }
-      }
+		return this.updateWatchersDelayer.trigger(() => this.doWatch(nonSuspendedRequests), delayed ? this.getUpdateWatchersDelay() : 0).catch(error => onUnexpectedError(error));
+	}
 
-      // Remove all suspended watch requests that are no longer watched
-      for (const [id] of this.suspendedWatchRequests) {
-        if (!this.nonCorrelatedWatchRequests.has(id) && !this.correlatedWatchRequests.has(id)) {
-          this.suspendedWatchRequests.deleteAndDispose(id);
-          this.suspendedWatchRequestsWithPolling.delete(id);
-        }
-      }
+	protected getUpdateWatchersDelay(): number {
+		return 800;
+	}
 
-      return await this.updateWatchers(false /* not delayed */);
-    } finally {
-      this.joinWatch.complete();
-    }
-  }
+	isSuspended(request: IUniversalWatchRequest): 'polling' | boolean {
+		const id = this.computeId(request);
+		return this.suspendedWatchRequestsWithPolling.has(id) ? 'polling' : this.suspendedWatchRequests.has(id);
+	}
 
-  private updateWatchers(delayed: boolean): Promise<void> {
-    const nonSuspendedRequests: IUniversalWatchRequest[] = [];
-    for (const [id, request] of [
-      ...this.nonCorrelatedWatchRequests,
-      ...this.correlatedWatchRequests,
-    ]) {
-      if (!this.suspendedWatchRequests.has(id)) {
-        nonSuspendedRequests.push(request);
-      }
-    }
+	private async suspendWatchRequest(request: ISuspendedWatchRequest): Promise<void> {
+		if (this.suspendedWatchRequests.has(request.id)) {
+			return; // already suspended
+		}
 
-    return this.updateWatchersDelayer
-      .trigger(
-        () => this.doWatch(nonSuspendedRequests),
-        delayed ? this.getUpdateWatchersDelay() : 0,
-      )
-      .catch((error) => onUnexpectedError(error));
-  }
+		const disposables = new DisposableStore();
+		this.suspendedWatchRequests.set(request.id, disposables);
 
-  protected getUpdateWatchersDelay(): number {
-    return 800;
-  }
+		// It is possible that a watch request fails right during watch()
+		// phase while other requests succeed. To increase the chance of
+		// reusing another watcher for suspend/resume tracking, we await
+		// all watch requests having processed.
 
-  isSuspended(request: IUniversalWatchRequest): 'polling' | boolean {
-    const id = this.computeId(request);
-    return this.suspendedWatchRequestsWithPolling.has(id)
-      ? 'polling'
-      : this.suspendedWatchRequests.has(id);
-  }
+		await this.joinWatch.p;
 
-  private async suspendWatchRequest(request: ISuspendedWatchRequest): Promise<void> {
-    if (this.suspendedWatchRequests.has(request.id)) {
-      return; // already suspended
-    }
+		if (disposables.isDisposed) {
+			return;
+		}
 
-    const disposables = new DisposableStore();
-    this.suspendedWatchRequests.set(request.id, disposables);
+		this.monitorSuspendedWatchRequest(request, disposables);
 
-    // It is possible that a watch request fails right during watch()
-    // phase while other requests succeed. To increase the chance of
-    // reusing another watcher for suspend/resume tracking, we await
-    // all watch requests having processed.
+		this.updateWatchers(true /* delay this call as we might accumulate many failing watch requests on startup */);
+	}
 
-    await this.joinWatch.p;
+	private resumeWatchRequest(request: ISuspendedWatchRequest): void {
+		this.suspendedWatchRequests.deleteAndDispose(request.id);
+		this.suspendedWatchRequestsWithPolling.delete(request.id);
 
-    if (disposables.isDisposed) {
-      return;
-    }
+		this.updateWatchers(false);
+	}
 
-    this.monitorSuspendedWatchRequest(request, disposables);
+	private monitorSuspendedWatchRequest(request: ISuspendedWatchRequest, disposables: DisposableStore): void {
+		if (this.doMonitorWithExistingWatcher(request, disposables)) {
+			this.trace(`reusing an existing recursive watcher to monitor ${request.path}`);
+			this.suspendedWatchRequestsWithPolling.delete(request.id);
+		} else {
+			this.doMonitorWithNodeJS(request, disposables);
+			this.suspendedWatchRequestsWithPolling.add(request.id);
+		}
+	}
 
-    this.updateWatchers(
-      true /* delay this call as we might accumulate many failing watch requests on startup */,
-    );
-  }
+	private doMonitorWithExistingWatcher(request: ISuspendedWatchRequest, disposables: DisposableStore): boolean {
+		const subscription = this.recursiveWatcher?.subscribe(request.path, (error, change) => {
+			if (disposables.isDisposed) {
+				return; // return early if already disposed
+			}
 
-  private resumeWatchRequest(request: ISuspendedWatchRequest): void {
-    this.suspendedWatchRequests.deleteAndDispose(request.id);
-    this.suspendedWatchRequestsWithPolling.delete(request.id);
+			if (error) {
+				this.monitorSuspendedWatchRequest(request, disposables);
+			} else if (change?.type === FileChangeType.ADDED) {
+				this.onMonitoredPathAdded(request);
+			}
+		});
 
-    this.updateWatchers(false);
-  }
+		if (subscription) {
+			disposables.add(subscription);
 
-  private monitorSuspendedWatchRequest(
-    request: ISuspendedWatchRequest,
-    disposables: DisposableStore,
-  ): void {
-    if (this.doMonitorWithExistingWatcher(request, disposables)) {
-      this.trace(`reusing an existing recursive watcher to monitor ${request.path}`);
-      this.suspendedWatchRequestsWithPolling.delete(request.id);
-    } else {
-      this.doMonitorWithNodeJS(request, disposables);
-      this.suspendedWatchRequestsWithPolling.add(request.id);
-    }
-  }
+			return true;
+		}
 
-  private doMonitorWithExistingWatcher(
-    request: ISuspendedWatchRequest,
-    disposables: DisposableStore,
-  ): boolean {
-    const subscription = this.recursiveWatcher?.subscribe(request.path, (error, change) => {
-      if (disposables.isDisposed) {
-        return; // return early if already disposed
-      }
+		return false;
+	}
 
-      if (error) {
-        this.monitorSuspendedWatchRequest(request, disposables);
-      } else if (change?.type === FileChangeType.ADDED) {
-        this.onMonitoredPathAdded(request);
-      }
-    });
+	private doMonitorWithNodeJS(request: ISuspendedWatchRequest, disposables: DisposableStore): void {
+		let pathNotFound = false;
 
-    if (subscription) {
-      disposables.add(subscription);
+		const watchFileCallback: (curr: Stats, prev: Stats) => void = (curr, prev) => {
+			if (disposables.isDisposed) {
+				return; // return early if already disposed
+			}
 
-      return true;
-    }
+			const currentPathNotFound = this.isPathNotFound(curr);
+			const previousPathNotFound = this.isPathNotFound(prev);
+			const oldPathNotFound = pathNotFound;
+			pathNotFound = currentPathNotFound;
 
-    return false;
-  }
+			// Watch path created: resume watching request
+			if (!currentPathNotFound && (previousPathNotFound || oldPathNotFound)) {
+				this.onMonitoredPathAdded(request);
+			}
+		};
 
-  private doMonitorWithNodeJS(request: ISuspendedWatchRequest, disposables: DisposableStore): void {
-    let pathNotFound = false;
+		this.trace(`starting fs.watchFile() on ${request.path} (correlationId: ${request.correlationId})`);
+		try {
+			watchFile(request.path, { persistent: false, interval: this.suspendedWatchRequestPollingInterval }, watchFileCallback);
+		} catch (error) {
+			this.warn(`fs.watchFile() failed with error ${error} on path ${request.path} (correlationId: ${request.correlationId})`);
+		}
 
-    const watchFileCallback: (curr: Stats, prev: Stats) => void = (curr, prev) => {
-      if (disposables.isDisposed) {
-        return; // return early if already disposed
-      }
+		disposables.add(toDisposable(() => {
+			this.trace(`stopping fs.watchFile() on ${request.path} (correlationId: ${request.correlationId})`);
 
-      const currentPathNotFound = this.isPathNotFound(curr);
-      const previousPathNotFound = this.isPathNotFound(prev);
-      const oldPathNotFound = pathNotFound;
-      pathNotFound = currentPathNotFound;
+			try {
+				unwatchFile(request.path, watchFileCallback);
+			} catch (error) {
+				this.warn(`fs.unwatchFile() failed with error ${error} on path ${request.path} (correlationId: ${request.correlationId})`);
+			}
+		}));
+	}
 
-      // Watch path created: resume watching request
-      if (!currentPathNotFound && (previousPathNotFound || oldPathNotFound)) {
-        this.onMonitoredPathAdded(request);
-      }
-    };
+	private onMonitoredPathAdded(request: ISuspendedWatchRequest): void {
+		this.trace(`detected ${request.path} exists again, resuming watcher (correlationId: ${request.correlationId})`);
 
-    this.trace(
-      `starting fs.watchFile() on ${request.path} (correlationId: ${request.correlationId})`,
-    );
-    try {
-      watchFile(
-        request.path,
-        { persistent: false, interval: this.suspendedWatchRequestPollingInterval },
-        watchFileCallback,
-      );
-    } catch (error) {
-      this.warn(
-        `fs.watchFile() failed with error ${error} on path ${request.path} (correlationId: ${request.correlationId})`,
-      );
-    }
+		// Emit as event
+		const event: IFileChange = { resource: URI.file(request.path), type: FileChangeType.ADDED, cId: request.correlationId };
+		this._onDidChangeFile.fire([event]);
+		this.traceEvent(event, request);
 
-    disposables.add(
-      toDisposable(() => {
-        this.trace(
-          `stopping fs.watchFile() on ${request.path} (correlationId: ${request.correlationId})`,
-        );
+		// Resume watching
+		this.resumeWatchRequest(request);
+	}
 
-        try {
-          unwatchFile(request.path, watchFileCallback);
-        } catch (error) {
-          this.warn(
-            `fs.unwatchFile() failed with error ${error} on path ${request.path} (correlationId: ${request.correlationId})`,
-          );
-        }
-      }),
-    );
-  }
+	private isPathNotFound(stats: Stats): boolean {
+		return stats.ctimeMs === 0 && stats.ino === 0;
+	}
 
-  private onMonitoredPathAdded(request: ISuspendedWatchRequest): void {
-    this.trace(
-      `detected ${request.path} exists again, resuming watcher (correlationId: ${request.correlationId})`,
-    );
+	async stop(): Promise<void> {
+		this.suspendedWatchRequests.clearAndDisposeAll();
+		this.suspendedWatchRequestsWithPolling.clear();
+	}
 
-    // Emit as event
-    const event: IFileChange = {
-      resource: URI.file(request.path),
-      type: FileChangeType.ADDED,
-      cId: request.correlationId,
-    };
-    this._onDidChangeFile.fire([event]);
-    this.traceEvent(event, request);
+	protected traceEvent(event: IFileChange, request: IUniversalWatchRequest | ISuspendedWatchRequest): void {
+		if (this.verboseLogging) {
+			const traceMsg = ` >> normalized ${event.type === FileChangeType.ADDED ? '[ADDED]' : event.type === FileChangeType.DELETED ? '[DELETED]' : '[CHANGED]'} ${event.resource.fsPath}`;
+			this.traceWithCorrelation(traceMsg, request);
+		}
+	}
 
-    // Resume watching
-    this.resumeWatchRequest(request);
-  }
+	protected traceWithCorrelation(message: string, request: IUniversalWatchRequest | ISuspendedWatchRequest): void {
+		if (this.verboseLogging) {
+			this.trace(`${message}${typeof request.correlationId === 'number' ? ` <${request.correlationId}> ` : ``}`);
+		}
+	}
 
-  private isPathNotFound(stats: Stats): boolean {
-    return stats.ctimeMs === 0 && stats.ino === 0;
-  }
+	protected requestToString(request: IUniversalWatchRequest): string {
+		return `${request.path} (excludes: ${request.excludes.length > 0 ? request.excludes : '<none>'}, includes: ${request.includes && request.includes.length > 0 ? JSON.stringify(request.includes) : '<all>'}, filter: ${requestFilterToString(request.filter)}, correlationId: ${typeof request.correlationId === 'number' ? request.correlationId : '<none>'})`;
+	}
 
-  async stop(): Promise<void> {
-    this.suspendedWatchRequests.clearAndDisposeAll();
-    this.suspendedWatchRequestsWithPolling.clear();
-  }
+	protected abstract doWatch(requests: IUniversalWatchRequest[]): Promise<void>;
 
-  protected traceEvent(
-    event: IFileChange,
-    request: IUniversalWatchRequest | ISuspendedWatchRequest,
-  ): void {
-    if (this.verboseLogging) {
-      const traceMsg = ` >> normalized ${event.type === FileChangeType.ADDED ? '[ADDED]' : event.type === FileChangeType.DELETED ? '[DELETED]' : '[CHANGED]'} ${event.resource.fsPath}`;
-      this.traceWithCorrelation(traceMsg, request);
-    }
-  }
+	protected abstract readonly recursiveWatcher: IRecursiveWatcherWithSubscribe | undefined;
 
-  protected traceWithCorrelation(
-    message: string,
-    request: IUniversalWatchRequest | ISuspendedWatchRequest,
-  ): void {
-    if (this.verboseLogging) {
-      this.trace(
-        `${message}${typeof request.correlationId === 'number' ? ` <${request.correlationId}> ` : ``}`,
-      );
-    }
-  }
+	protected abstract trace(message: string): void;
+	protected abstract warn(message: string): void;
 
-  protected requestToString(request: IUniversalWatchRequest): string {
-    return `${request.path} (excludes: ${request.excludes.length > 0 ? request.excludes : '<none>'}, includes: ${request.includes && request.includes.length > 0 ? JSON.stringify(request.includes) : '<all>'}, filter: ${requestFilterToString(request.filter)}, correlationId: ${typeof request.correlationId === 'number' ? request.correlationId : '<none>'})`;
-  }
+	abstract onDidError: Event<IWatcherErrorEvent>;
 
-  protected abstract doWatch(requests: IUniversalWatchRequest[]): Promise<void>;
+	protected verboseLogging = false;
 
-  protected abstract readonly recursiveWatcher: IRecursiveWatcherWithSubscribe | undefined;
-
-  protected abstract trace(message: string): void;
-
-  protected abstract warn(message: string): void;
-
-  abstract onDidError: Event<IWatcherErrorEvent>;
-
-  protected verboseLogging = false;
-
-  async setVerboseLogging(enabled: boolean): Promise<void> {
-    this.verboseLogging = enabled;
-  }
+	async setVerboseLogging(enabled: boolean): Promise<void> {
+		this.verboseLogging = enabled;
+	}
 }

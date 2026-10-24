@@ -5,10 +5,8 @@
 
 import { IWorkbenchContribution } from '../../../common/contributions.js';
 import { IExtensionService } from '../../../services/extensions/common/extensions.js';
-import {
-  IProgressService,
-  ProgressLocation,
-} from '../../../../platform/progress/common/progress.js';
+import { IProgressService, ProgressLocation } from '../../../../platform/progress/common/progress.js';
+import { NotificationTelemetryId } from '../../../../platform/notification/common/notificationTelemetry.js';
 import { localize } from '../../../../nls.js';
 import { IDisposable } from '../../../../base/common/lifecycle.js';
 import { DeferredPromise, timeout } from '../../../../base/common/async.js';
@@ -16,41 +14,44 @@ import { ILogService } from '../../../../platform/log/common/log.js';
 import { CancellationToken } from '../../../../base/common/cancellation.js';
 
 export class ExtensionActivationProgress implements IWorkbenchContribution {
-  private readonly _listener: IDisposable;
 
-  constructor(
-    @IExtensionService extensionService: IExtensionService,
-    @IProgressService progressService: IProgressService,
-    @ILogService logService: ILogService,
-  ) {
-    const options = {
-      location: ProgressLocation.Window,
-      title: localize('activation', 'Activating Extensions...'),
-    };
+	private readonly _listener: IDisposable;
 
-    let deferred: DeferredPromise<any> | undefined;
-    let count = 0;
+	constructor(
+		@IExtensionService extensionService: IExtensionService,
+		@IProgressService progressService: IProgressService,
+		@ILogService logService: ILogService,
+	) {
 
-    this._listener = extensionService.onWillActivateByEvent((e) => {
-      logService.trace('onWillActivateByEvent: ', e.event);
+		const options = {
+			location: ProgressLocation.Window,
+			telemetry: NotificationTelemetryId.ExtensionsActivation,
+			title: localize('activation', "Activating Extensions...")
+		};
 
-      if (!deferred) {
-        deferred = new DeferredPromise();
-        progressService.withProgress(options, (_) => deferred!.p);
-      }
+		let deferred: DeferredPromise<any> | undefined;
+		let count = 0;
 
-      count++;
+		this._listener = extensionService.onWillActivateByEvent(e => {
+			logService.trace('onWillActivateByEvent: ', e.event);
 
-      Promise.race([e.activation, timeout(5000, CancellationToken.None)]).finally(() => {
-        if (--count === 0) {
-          deferred!.complete(undefined);
-          deferred = undefined;
-        }
-      });
-    });
-  }
+			if (!deferred) {
+				deferred = new DeferredPromise();
+				progressService.withProgress(options, _ => deferred!.p);
+			}
 
-  dispose(): void {
-    this._listener.dispose();
-  }
+			count++;
+
+			Promise.race([e.activation, timeout(5000, CancellationToken.None)]).finally(() => {
+				if (--count === 0) {
+					deferred!.complete(undefined);
+					deferred = undefined;
+				}
+			});
+		});
+	}
+
+	dispose(): void {
+		this._listener.dispose();
+	}
 }

@@ -5,17 +5,14 @@
 
 import { localize } from '../../../../nls.js';
 import { URI } from '../../../../base/common/uri.js';
-import { assertIsDefined } from '../../../../base/common/types.js';
+import { assertReturnsDefined } from '../../../../base/common/types.js';
 import { ITextEditorPane } from '../../../common/editor.js';
 import { applyTextEditorOptions } from '../../../common/editor/editorOptions.js';
 import { IContextKeyService } from '../../../../platform/contextkey/common/contextkey.js';
 import { ITextEditorOptions } from '../../../../platform/editor/common/editor.js';
 import { isEqual } from '../../../../base/common/resources.js';
 import { IEditorOptions as ICodeEditorOptions } from '../../../../editor/common/config/editorOptions.js';
-import {
-  CodeEditorWidget,
-  ICodeEditorWidgetOptions,
-} from '../../../../editor/browser/widget/codeEditor/codeEditorWidget.js';
+import { CodeEditorWidget, ICodeEditorWidgetOptions } from '../../../../editor/browser/widget/codeEditor/codeEditorWidget.js';
 import { IEditorViewState, ScrollType } from '../../../../editor/common/editorCommon.js';
 import { ICodeEditor } from '../../../../editor/browser/editorBrowser.js';
 import { AbstractTextEditor } from './textEditor.js';
@@ -24,102 +21,93 @@ import { Dimension } from '../../../../base/browser/dom.js';
 /**
  * A text editor using the code editor widget.
  */
-export abstract class AbstractTextCodeEditor<T extends IEditorViewState>
-  extends AbstractTextEditor<T>
-  implements ITextEditorPane
-{
-  protected editorControl: ICodeEditor | undefined = undefined;
+export abstract class AbstractTextCodeEditor<T extends IEditorViewState> extends AbstractTextEditor<T> implements ITextEditorPane {
 
-  override get scopedContextKeyService(): IContextKeyService | undefined {
-    return this.editorControl?.invokeWithinContext((accessor) => accessor.get(IContextKeyService));
-  }
+	protected editorControl: ICodeEditor | undefined = undefined;
 
-  override getTitle(): string {
-    if (this.input) {
-      return this.input.getName();
-    }
+	override get scopedContextKeyService(): IContextKeyService | undefined {
+		return this.editorControl?.invokeWithinContext(accessor => accessor.get(IContextKeyService));
+	}
 
-    return localize('textEditor', 'Text Editor');
-  }
+	override getTitle(): string {
+		if (this.input) {
+			return this.input.getName();
+		}
 
-  protected createEditorControl(parent: HTMLElement, initialOptions: ICodeEditorOptions): void {
-    this.editorControl = this._register(
-      this.instantiationService.createInstance(
-        CodeEditorWidget,
-        parent,
-        initialOptions,
-        this.getCodeEditorWidgetOptions(),
-      ),
-    );
-  }
+		return localize('textEditor', "Text Editor");
+	}
 
-  protected getCodeEditorWidgetOptions(): ICodeEditorWidgetOptions {
-    return Object.create(null);
-  }
+	protected createEditorControl(parent: HTMLElement, initialOptions: ICodeEditorOptions): void {
+		this.editorControl = this._register(this.instantiationService.createInstance(CodeEditorWidget, parent, initialOptions, this.getCodeEditorWidgetOptions()));
+	}
 
-  protected updateEditorControlOptions(options: ICodeEditorOptions): void {
-    this.editorControl?.updateOptions(options);
-  }
+	protected getCodeEditorWidgetOptions(): ICodeEditorWidgetOptions {
+		return Object.create(null);
+	}
 
-  protected getMainControl(): ICodeEditor | undefined {
-    return this.editorControl;
-  }
+	protected updateEditorControlOptions(options: ICodeEditorOptions): void {
+		this.editorControl?.updateOptions(options);
+	}
 
-  override getControl(): ICodeEditor | undefined {
-    return this.editorControl;
-  }
+	protected getMainControl(): ICodeEditor | undefined {
+		return this.editorControl;
+	}
 
-  protected override computeEditorViewState(resource: URI): T | undefined {
-    if (!this.editorControl) {
-      return undefined;
-    }
+	override getControl(): ICodeEditor | undefined {
+		return this.editorControl;
+	}
 
-    const model = this.editorControl.getModel();
-    if (!model) {
-      return undefined; // view state always needs a model
-    }
+	protected override computeEditorViewState(resource: URI): T | undefined {
+		if (!this.editorControl) {
+			return undefined;
+		}
 
-    const modelUri = model.uri;
-    if (!modelUri) {
-      return undefined; // model URI is needed to make sure we save the view state correctly
-    }
+		const model = this.editorControl.getModel();
+		if (!model) {
+			return undefined; // view state always needs a model
+		}
 
-    if (!isEqual(modelUri, resource)) {
-      return undefined; // prevent saving view state for a model that is not the expected one
-    }
+		const modelUri = model.uri;
+		if (!modelUri) {
+			return undefined; // model URI is needed to make sure we save the view state correctly
+		}
 
-    return (this.editorControl.saveViewState() as unknown as T) ?? undefined;
-  }
+		if (!isEqual(modelUri, resource)) {
+			return undefined; // prevent saving view state for a model that is not the expected one
+		}
 
-  override setOptions(options: ITextEditorOptions | undefined): void {
-    super.setOptions(options);
+		return this.editorControl.saveViewState() as unknown as T ?? undefined;
+	}
 
-    if (options) {
-      applyTextEditorOptions(options, assertIsDefined(this.editorControl), ScrollType.Smooth);
-    }
-  }
+	override setOptions(options: ITextEditorOptions | undefined): void {
+		super.setOptions(options);
 
-  override focus(): void {
-    super.focus();
+		if (options) {
+			applyTextEditorOptions(options, assertReturnsDefined(this.editorControl), ScrollType.Smooth);
+		}
+	}
 
-    this.editorControl?.focus();
-  }
+	override focus(): void {
+		super.focus();
 
-  override hasFocus(): boolean {
-    return this.editorControl?.hasTextFocus() || super.hasFocus();
-  }
+		this.editorControl?.focus();
+	}
 
-  protected override setEditorVisible(visible: boolean): void {
-    super.setEditorVisible(visible);
+	override hasFocus(): boolean {
+		return this.editorControl?.hasTextFocus() || super.hasFocus();
+	}
 
-    if (visible) {
-      this.editorControl?.onVisible();
-    } else {
-      this.editorControl?.onHide();
-    }
-  }
+	protected override setEditorVisible(visible: boolean): void {
+		super.setEditorVisible(visible);
 
-  override layout(dimension: Dimension): void {
-    this.editorControl?.layout(dimension);
-  }
+		if (visible) {
+			this.editorControl?.onVisible();
+		} else {
+			this.editorControl?.onHide();
+		}
+	}
+
+	override layout(dimension: Dimension): void {
+		this.editorControl?.layout(dimension);
+	}
 }

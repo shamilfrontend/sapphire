@@ -3,335 +3,341 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import {
-  IMarkerService,
-  IMarker,
-  MarkerSeverity,
-  MarkerTag,
-} from '../../../platform/markers/common/markers.js';
+import { IMarkerService, IMarker, MarkerSeverity, MarkerTag } from '../../../platform/markers/common/markers.js';
 import { Disposable, IDisposable, toDisposable } from '../../../base/common/lifecycle.js';
 import { URI } from '../../../base/common/uri.js';
-import {
-  IModelDeltaDecoration,
-  ITextModel,
-  IModelDecorationOptions,
-  TrackedRangeStickiness,
-  OverviewRulerLane,
-  IModelDecoration,
-  MinimapPosition,
-  IModelDecorationMinimapOptions,
-} from '../model.js';
+import { IModelDeltaDecoration, ITextModel, IModelDecorationOptions, TrackedRangeStickiness, OverviewRulerLane, IModelDecoration, MinimapPosition, IModelDecorationMinimapOptions } from '../model.js';
 import { ClassName } from '../model/intervalTree.js';
 import { themeColorFromId } from '../../../platform/theme/common/themeService.js';
 import { ThemeColor } from '../../../base/common/themables.js';
-import {
-  overviewRulerWarning,
-  overviewRulerInfo,
-  overviewRulerError,
-} from '../core/editorColorRegistry.js';
+import { overviewRulerWarning, overviewRulerInfo, overviewRulerError } from '../core/editorColorRegistry.js';
 import { IModelService } from './model.js';
 import { Range } from '../core/range.js';
-import { IMarkerDecorationsService } from './markerDecorations.js';
+import { IMarkerLimit, IMarkerDecorationsService } from './markerDecorations.js';
 import { Schemas } from '../../../base/common/network.js';
 import { Emitter, Event } from '../../../base/common/event.js';
-import {
-  minimapInfo,
-  minimapWarning,
-  minimapError,
-} from '../../../platform/theme/common/colorRegistry.js';
+import { minimapInfo, minimapWarning, minimapError } from '../../../platform/theme/common/colorRegistry.js';
 import { BidirectionalMap, ResourceMap } from '../../../base/common/map.js';
 import { diffSets } from '../../../base/common/collections.js';
 import { Iterable } from '../../../base/common/iterator.js';
 
 export class MarkerDecorationsService extends Disposable implements IMarkerDecorationsService {
-  declare readonly _serviceBrand: undefined;
 
-  private readonly _onDidChangeMarker = this._register(new Emitter<ITextModel>());
+	declare readonly _serviceBrand: undefined;
 
-  readonly onDidChangeMarker: Event<ITextModel> = this._onDidChangeMarker.event;
+	private readonly _onDidChangeMarker = this._register(new Emitter<ITextModel>());
+	readonly onDidChangeMarker: Event<ITextModel> = this._onDidChangeMarker.event;
 
-  private readonly _suppressedRanges = new ResourceMap<Set<Range>>();
+	private readonly _onDidChangeMarkerLimit = this._register(new Emitter<ITextModel>());
+	readonly onDidChangeMarkerLimit: Event<ITextModel> = this._onDidChangeMarkerLimit.event;
 
-  private readonly _markerDecorations = new ResourceMap<MarkerDecorations>();
+	private readonly _suppressedRanges = new ResourceMap<Set<Range>>();
 
-  constructor(
-    @IModelService modelService: IModelService,
-    @IMarkerService private readonly _markerService: IMarkerService,
-  ) {
-    super();
-    modelService.getModels().forEach((model) => this._onModelAdded(model));
-    this._register(modelService.onModelAdded(this._onModelAdded, this));
-    this._register(modelService.onModelRemoved(this._onModelRemoved, this));
-    this._register(this._markerService.onMarkerChanged(this._handleMarkerChange, this));
-  }
+	private readonly _markerDecorations = new ResourceMap<MarkerDecorations>();
 
-  override dispose() {
-    super.dispose();
-    this._markerDecorations.forEach((value) => value.dispose());
-    this._markerDecorations.clear();
-  }
+	constructor(
+		@IModelService modelService: IModelService,
+		@IMarkerService private readonly _markerService: IMarkerService
+	) {
+		super();
+		modelService.getModels().forEach(model => this._onModelAdded(model));
+		this._register(modelService.onModelAdded(this._onModelAdded, this));
+		this._register(modelService.onModelRemoved(this._onModelRemoved, this));
+		this._register(this._markerService.onMarkerChanged(this._handleMarkerChange, this));
+	}
 
-  getMarker(uri: URI, decoration: IModelDecoration): IMarker | null {
-    const markerDecorations = this._markerDecorations.get(uri);
-    return markerDecorations ? markerDecorations.getMarker(decoration) || null : null;
-  }
+	override dispose() {
+		super.dispose();
+		this._markerDecorations.forEach(value => value.dispose());
+		this._markerDecorations.clear();
+	}
 
-  getLiveMarkers(uri: URI): [Range, IMarker][] {
-    const markerDecorations = this._markerDecorations.get(uri);
-    return markerDecorations ? markerDecorations.getMarkers() : [];
-  }
+	getMarker(uri: URI, decoration: IModelDecoration): IMarker | null {
+		const markerDecorations = this._markerDecorations.get(uri);
+		return markerDecorations ? (markerDecorations.getMarker(decoration) || null) : null;
+	}
 
-  addMarkerSuppression(uri: URI, range: Range): IDisposable {
-    let suppressedRanges = this._suppressedRanges.get(uri);
-    if (!suppressedRanges) {
-      suppressedRanges = new Set<Range>();
-      this._suppressedRanges.set(uri, suppressedRanges);
-    }
-    suppressedRanges.add(range);
-    this._handleMarkerChange([uri]);
+	getLiveMarkers(uri: URI): [Range, IMarker][] {
+		const markerDecorations = this._markerDecorations.get(uri);
+		return markerDecorations ? markerDecorations.getMarkers() : [];
+	}
 
-    return toDisposable(() => {
-      const suppressedRanges = this._suppressedRanges.get(uri);
-      if (suppressedRanges) {
-        suppressedRanges.delete(range);
-        if (suppressedRanges.size === 0) {
-          this._suppressedRanges.delete(uri);
-        }
-        this._handleMarkerChange([uri]);
-      }
-    });
-  }
+	getMarkerLimits(uri: URI): IMarkerLimit | undefined {
+		return this._markerDecorations.get(uri)?.markerLimit;
+	}
 
-  private _handleMarkerChange(changedResources: readonly URI[]): void {
-    changedResources.forEach((resource) => {
-      const markerDecorations = this._markerDecorations.get(resource);
-      if (markerDecorations) {
-        this._updateDecorations(markerDecorations);
-      }
-    });
-  }
+	addMarkerSuppression(uri: URI, range: Range): IDisposable {
 
-  private _onModelAdded(model: ITextModel): void {
-    const markerDecorations = new MarkerDecorations(model);
-    this._markerDecorations.set(model.uri, markerDecorations);
-    this._updateDecorations(markerDecorations);
-  }
+		let suppressedRanges = this._suppressedRanges.get(uri);
+		if (!suppressedRanges) {
+			suppressedRanges = new Set<Range>();
+			this._suppressedRanges.set(uri, suppressedRanges);
+		}
+		suppressedRanges.add(range);
+		this._handleMarkerChange([uri]);
 
-  private _onModelRemoved(model: ITextModel): void {
-    const markerDecorations = this._markerDecorations.get(model.uri);
-    if (markerDecorations) {
-      markerDecorations.dispose();
-      this._markerDecorations.delete(model.uri);
-    }
+		return toDisposable(() => {
+			const suppressedRanges = this._suppressedRanges.get(uri);
+			if (suppressedRanges) {
+				suppressedRanges.delete(range);
+				if (suppressedRanges.size === 0) {
+					this._suppressedRanges.delete(uri);
+				}
+				this._handleMarkerChange([uri]);
+			}
+		});
+	}
 
-    // clean up markers for internal, transient models
-    if (
-      model.uri.scheme === Schemas.inMemory ||
-      model.uri.scheme === Schemas.internal ||
-      model.uri.scheme === Schemas.vscode
-    ) {
-      this._markerService
-        ?.read({ resource: model.uri })
-        .map((marker) => marker.owner)
-        .forEach((owner) => this._markerService.remove(owner, [model.uri]));
-    }
-  }
+	private _handleMarkerChange(changedResources: readonly URI[]): void {
+		changedResources.forEach((resource) => {
+			const markerDecorations = this._markerDecorations.get(resource);
+			if (markerDecorations) {
+				this._updateDecorations(markerDecorations);
+			}
+		});
+	}
 
-  private _updateDecorations(markerDecorations: MarkerDecorations): void {
-    // Limit to the first 500 errors/warnings
-    let markers = this._markerService.read({ resource: markerDecorations.model.uri, take: 500 });
+	private _onModelAdded(model: ITextModel): void {
+		const markerDecorations = new MarkerDecorations(model);
+		this._markerDecorations.set(model.uri, markerDecorations);
+		this._updateDecorations(markerDecorations);
+	}
 
-    // filter markers from suppressed ranges
-    const suppressedRanges = this._suppressedRanges.get(markerDecorations.model.uri);
-    if (suppressedRanges) {
-      markers = markers.filter(
-        (marker) =>
-          !Iterable.some(suppressedRanges, (candidate) =>
-            Range.areIntersectingOrTouching(candidate, marker),
-          ),
-      );
-    }
+	private _onModelRemoved(model: ITextModel): void {
+		const markerDecorations = this._markerDecorations.get(model.uri);
+		if (markerDecorations) {
+			markerDecorations.dispose();
+			this._markerDecorations.delete(model.uri);
+		}
 
-    if (markerDecorations.update(markers)) {
-      this._onDidChangeMarker.fire(markerDecorations.model);
-    }
-  }
+		// clean up markers for internal, transient models
+		if (model.uri.scheme === Schemas.inMemory
+			|| model.uri.scheme === Schemas.internal
+			|| model.uri.scheme === Schemas.vscode) {
+			this._markerService?.read({ resource: model.uri }).map(marker => marker.owner).forEach(owner => this._markerService.remove(owner, [model.uri]));
+		}
+	}
+
+	private _updateDecorations(markerDecorations: MarkerDecorations): void {
+		let markers = this._markerService.read({ resource: markerDecorations.model.uri, take: MarkerDecorations.MAX_MARKER_DECORATIONS_LIMIT + 1 });
+		const isMarkerLimitExceeded = markers.length > MarkerDecorations.MAX_MARKER_DECORATIONS_LIMIT;
+		if (isMarkerLimitExceeded) {
+			markers = markers.slice(0, MarkerDecorations.MAX_MARKER_DECORATIONS_LIMIT);
+		}
+
+		// filter markers from suppressed ranges
+		const suppressedRanges = this._suppressedRanges.get(markerDecorations.model.uri);
+		if (suppressedRanges) {
+			markers = markers.filter(marker => {
+				return !Iterable.some(suppressedRanges, candidate => Range.areIntersectingOrTouching(candidate, marker));
+			});
+		}
+
+		if (markerDecorations.update(markers)) {
+			this._onDidChangeMarker.fire(markerDecorations.model);
+		}
+		const isMarkersSourceTruncated = this._markerService.isSourceTruncated(markerDecorations.model.uri);
+		if (markerDecorations.updateMarkerLimit(isMarkersSourceTruncated, isMarkerLimitExceeded)) {
+			this._onDidChangeMarkerLimit.fire(markerDecorations.model);
+		}
+	}
 }
 
 class MarkerDecorations extends Disposable {
-  private readonly _map = new BidirectionalMap<IMarker, /* decoration id */ string>();
 
-  constructor(readonly model: ITextModel) {
-    super();
-    this._register(
-      toDisposable(() => {
-        this.model.deltaDecorations([...this._map.values()], []);
-        this._map.clear();
-      }),
-    );
-  }
+	public static readonly MAX_MARKER_DECORATIONS_LIMIT = 5000;
 
-  public update(markers: IMarker[]): boolean {
-    // We use the fact that marker instances are not recreated when different owners
-    // update. So we can compare references to find out what changed since the last update.
+	private readonly _map = new BidirectionalMap<IMarker, /*decoration id*/string>();
 
-    const { added, removed } = diffSets(new Set(this._map.keys()), new Set(markers));
+	private _isMarkerLimitExceeded: boolean = false;
+	private _isMarkersSourceTruncated: boolean = false;
 
-    if (added.length === 0 && removed.length === 0) {
-      return false;
-    }
+	/**
+	 * Return the current diagnostic limit state.
+	 */
+	public get markerLimit(): IMarkerLimit {
+		return {
+			isMarkersSourceTruncated: this._isMarkersSourceTruncated,
+			isMarkersTruncated: this._isMarkerLimitExceeded ? MarkerDecorations.MAX_MARKER_DECORATIONS_LIMIT : undefined
+		};
+	}
 
-    const oldIds: string[] = removed.map((marker) => this._map.get(marker)!);
-    const newDecorations: IModelDeltaDecoration[] = added.map((marker) => ({
-      range: this._createDecorationRange(this.model, marker),
-      options: this._createDecorationOption(marker),
-    }));
+	constructor(
+		readonly model: ITextModel
+	) {
+		super();
+		this._register(toDisposable(() => {
+			this.model.deltaDecorations([...this._map.values()], []);
+			this._map.clear();
+		}));
+	}
 
-    const ids = this.model.deltaDecorations(oldIds, newDecorations);
-    for (const removedMarker of removed) {
-      this._map.delete(removedMarker);
-    }
-    for (let index = 0; index < ids.length; index++) {
-      this._map.set(added[index], ids[index]);
-    }
-    return true;
-  }
+	public update(markers: IMarker[]): boolean {
 
-  getMarker(decoration: IModelDecoration): IMarker | undefined {
-    return this._map.getKey(decoration.id);
-  }
+		// We use the fact that marker instances are not recreated when different owners
+		// update. So we can compare references to find out what changed since the last update.
 
-  getMarkers(): [Range, IMarker][] {
-    const res: [Range, IMarker][] = [];
-    this._map.forEach((id, marker) => {
-      const range = this.model.getDecorationRange(id);
-      if (range) {
-        res.push([range, marker]);
-      }
-    });
-    return res;
-  }
+		const { added, removed } = diffSets(new Set(this._map.keys()), new Set(markers));
 
-  private _createDecorationRange(model: ITextModel, rawMarker: IMarker): Range {
-    let ret = Range.lift(rawMarker);
+		if (added.length === 0 && removed.length === 0) {
+			return false;
+		}
 
-    if (
-      rawMarker.severity === MarkerSeverity.Hint &&
-      !this._hasMarkerTag(rawMarker, MarkerTag.Unnecessary) &&
-      !this._hasMarkerTag(rawMarker, MarkerTag.Deprecated)
-    ) {
-      // * never render hints on multiple lines
-      // * make enough space for three dots
-      ret = ret.setEndPosition(ret.startLineNumber, ret.startColumn + 2);
-    }
+		const oldIds: string[] = removed.map(marker => this._map.get(marker)!);
+		const newDecorations: IModelDeltaDecoration[] = added.map(marker => {
+			return {
+				range: this._createDecorationRange(this.model, marker),
+				options: this._createDecorationOption(marker)
+			};
+		});
 
-    ret = model.validateRange(ret);
+		const ids = this.model.deltaDecorations(oldIds, newDecorations);
+		for (const removedMarker of removed) {
+			this._map.delete(removedMarker);
+		}
+		for (let index = 0; index < ids.length; index++) {
+			this._map.set(added[index], ids[index]);
+		}
+		return true;
+	}
 
-    if (ret.isEmpty()) {
-      const maxColumn =
-        model.getLineLastNonWhitespaceColumn(ret.startLineNumber) ||
-        model.getLineMaxColumn(ret.startLineNumber);
+	public updateMarkerLimit(isMarkersSourceTruncated: boolean, isMarkerLimitExceeded: boolean): boolean {
+		if (this._isMarkersSourceTruncated === isMarkersSourceTruncated && this._isMarkerLimitExceeded === isMarkerLimitExceeded) {
+			return false;
+		}
+		this._isMarkersSourceTruncated = isMarkersSourceTruncated;
+		this._isMarkerLimitExceeded = isMarkerLimitExceeded;
+		return true;
+	}
 
-      if (maxColumn === 1 || ret.endColumn >= maxColumn) {
-        // empty line or behind eol
-        // keep the range as is, it will be rendered 1ch wide
-        return ret;
-      }
+	getMarker(decoration: IModelDecoration): IMarker | undefined {
+		return this._map.getKey(decoration.id);
+	}
 
-      const word = model.getWordAtPosition(ret.getStartPosition());
-      if (word) {
-        ret = new Range(ret.startLineNumber, word.startColumn, ret.endLineNumber, word.endColumn);
-      }
-    } else if (
-      rawMarker.endColumn === Number.MAX_VALUE &&
-      rawMarker.startColumn === 1 &&
-      ret.startLineNumber === ret.endLineNumber
-    ) {
-      const minColumn = model.getLineFirstNonWhitespaceColumn(rawMarker.startLineNumber);
-      if (minColumn < ret.endColumn) {
-        ret = new Range(ret.startLineNumber, minColumn, ret.endLineNumber, ret.endColumn);
-        rawMarker.startColumn = minColumn;
-      }
-    }
-    return ret;
-  }
+	getMarkers(): [Range, IMarker][] {
+		const res: [Range, IMarker][] = [];
+		this._map.forEach((id, marker) => {
+			const range = this.model.getDecorationRange(id);
+			if (range) {
+				res.push([range, marker]);
+			}
+		});
+		return res;
+	}
 
-  private _createDecorationOption(marker: IMarker): IModelDecorationOptions {
-    let className: string | undefined;
-    let color: ThemeColor | undefined;
-    let zIndex: number;
-    let inlineClassName: string | undefined;
-    let minimap: IModelDecorationMinimapOptions | undefined;
+	private _createDecorationRange(model: ITextModel, rawMarker: IMarker): Range {
 
-    switch (marker.severity) {
-      case MarkerSeverity.Hint:
-        if (this._hasMarkerTag(marker, MarkerTag.Deprecated)) {
-          className = undefined;
-        } else if (this._hasMarkerTag(marker, MarkerTag.Unnecessary)) {
-          className = ClassName.EditorUnnecessaryDecoration;
-        } else {
-          className = ClassName.EditorHintDecoration;
-        }
-        zIndex = 0;
-        break;
-      case MarkerSeverity.Info:
-        className = ClassName.EditorInfoDecoration;
-        color = themeColorFromId(overviewRulerInfo);
-        zIndex = 10;
-        minimap = {
-          color: themeColorFromId(minimapInfo),
-          position: MinimapPosition.Inline,
-        };
-        break;
-      case MarkerSeverity.Warning:
-        className = ClassName.EditorWarningDecoration;
-        color = themeColorFromId(overviewRulerWarning);
-        zIndex = 20;
-        minimap = {
-          color: themeColorFromId(minimapWarning),
-          position: MinimapPosition.Inline,
-        };
-        break;
-      case MarkerSeverity.Error:
-      default:
-        className = ClassName.EditorErrorDecoration;
-        color = themeColorFromId(overviewRulerError);
-        zIndex = 30;
-        minimap = {
-          color: themeColorFromId(minimapError),
-          position: MinimapPosition.Inline,
-        };
-        break;
-    }
+		let ret = Range.lift(rawMarker);
 
-    if (marker.tags) {
-      if (marker.tags.indexOf(MarkerTag.Unnecessary) !== -1) {
-        inlineClassName = ClassName.EditorUnnecessaryInlineDecoration;
-      }
-      if (marker.tags.indexOf(MarkerTag.Deprecated) !== -1) {
-        inlineClassName = ClassName.EditorDeprecatedInlineDecoration;
-      }
-    }
+		if (rawMarker.severity === MarkerSeverity.Hint && !this._hasMarkerTag(rawMarker, MarkerTag.Unnecessary) && !this._hasMarkerTag(rawMarker, MarkerTag.Deprecated)) {
+			// * never render hints on multiple lines
+			// * make enough space for three dots
+			ret = ret.setEndPosition(ret.startLineNumber, ret.startColumn + 2);
+		}
 
-    return {
-      description: 'marker-decoration',
-      stickiness: TrackedRangeStickiness.NeverGrowsWhenTypingAtEdges,
-      className,
-      showIfCollapsed: true,
-      overviewRuler: {
-        color,
-        position: OverviewRulerLane.Right,
-      },
-      minimap,
-      zIndex,
-      inlineClassName,
-    };
-  }
+		ret = model.validateRange(ret);
 
-  private _hasMarkerTag(marker: IMarker, tag: MarkerTag): boolean {
-    if (marker.tags) {
-      return marker.tags.indexOf(tag) >= 0;
-    }
-    return false;
-  }
+		if (ret.isEmpty()) {
+			const maxColumn = model.getLineLastNonWhitespaceColumn(ret.startLineNumber) ||
+				model.getLineMaxColumn(ret.startLineNumber);
+
+			if (maxColumn === 1 || ret.endColumn >= maxColumn) {
+				// empty line or behind eol
+				// keep the range as is, it will be rendered 1ch wide
+				return ret;
+			}
+
+			const word = model.getWordAtPosition(ret.getStartPosition());
+			if (word) {
+				ret = new Range(ret.startLineNumber, word.startColumn, ret.endLineNumber, word.endColumn);
+			}
+		} else if (rawMarker.endColumn === Number.MAX_VALUE && rawMarker.startColumn === 1 && ret.startLineNumber === ret.endLineNumber) {
+			const minColumn = model.getLineFirstNonWhitespaceColumn(rawMarker.startLineNumber);
+			if (minColumn < ret.endColumn) {
+				ret = new Range(ret.startLineNumber, minColumn, ret.endLineNumber, ret.endColumn);
+				rawMarker.startColumn = minColumn;
+			}
+		}
+		return ret;
+	}
+
+	private _createDecorationOption(marker: IMarker): IModelDecorationOptions {
+
+		let className: string | undefined;
+		let color: ThemeColor | undefined = undefined;
+		let zIndex: number;
+		let inlineClassName: string | undefined = undefined;
+		let minimap: IModelDecorationMinimapOptions | undefined;
+
+		switch (marker.severity) {
+			case MarkerSeverity.Hint:
+				if (this._hasMarkerTag(marker, MarkerTag.Deprecated)) {
+					className = undefined;
+				} else if (this._hasMarkerTag(marker, MarkerTag.Unnecessary)) {
+					className = ClassName.EditorUnnecessaryDecoration;
+				} else {
+					className = ClassName.EditorHintDecoration;
+				}
+				zIndex = 0;
+				break;
+			case MarkerSeverity.Info:
+				className = ClassName.EditorInfoDecoration;
+				color = themeColorFromId(overviewRulerInfo);
+				zIndex = 10;
+				minimap = {
+					color: themeColorFromId(minimapInfo),
+					position: MinimapPosition.Inline
+				};
+				break;
+			case MarkerSeverity.Warning:
+				className = ClassName.EditorWarningDecoration;
+				color = themeColorFromId(overviewRulerWarning);
+				zIndex = 20;
+				minimap = {
+					color: themeColorFromId(minimapWarning),
+					position: MinimapPosition.Inline
+				};
+				break;
+			case MarkerSeverity.Error:
+			default:
+				className = ClassName.EditorErrorDecoration;
+				color = themeColorFromId(overviewRulerError);
+				zIndex = 30;
+				minimap = {
+					color: themeColorFromId(minimapError),
+					position: MinimapPosition.Inline
+				};
+				break;
+		}
+
+		if (marker.tags) {
+			if (marker.tags.indexOf(MarkerTag.Unnecessary) !== -1) {
+				inlineClassName = ClassName.EditorUnnecessaryInlineDecoration;
+			}
+			if (marker.tags.indexOf(MarkerTag.Deprecated) !== -1) {
+				inlineClassName = ClassName.EditorDeprecatedInlineDecoration;
+			}
+		}
+
+		return {
+			description: 'marker-decoration',
+			stickiness: TrackedRangeStickiness.NeverGrowsWhenTypingAtEdges,
+			className,
+			showIfCollapsed: true,
+			overviewRuler: {
+				color,
+				position: OverviewRulerLane.Right
+			},
+			minimap,
+			zIndex,
+			inlineClassName,
+		};
+	}
+
+	private _hasMarkerTag(marker: IMarker, tag: MarkerTag): boolean {
+		if (marker.tags) {
+			return marker.tags.indexOf(tag) >= 0;
+		}
+		return false;
+	}
 }

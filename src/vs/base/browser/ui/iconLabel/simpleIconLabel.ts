@@ -11,27 +11,26 @@ import { renderLabelWithIcons } from './iconLabels.js';
 import { IDisposable } from '../../../common/lifecycle.js';
 
 export class SimpleIconLabel implements IDisposable {
-  private hover?: IManagedHover;
 
-  constructor(private readonly _container: HTMLElement) {}
+	private hover?: IManagedHover;
 
-  set text(text: string) {
-    reset(this._container, ...renderLabelWithIcons(text ?? ''));
-  }
+	constructor(
+		private readonly _container: HTMLElement
+	) { }
 
-  set title(title: string) {
-    if (!this.hover && title) {
-      this.hover = getBaseLayerHoverDelegate().setupManagedHover(
-        getDefaultHoverDelegate('mouse'),
-        this._container,
-        title,
-      );
-    } else if (this.hover) {
-      this.hover.update(title);
-    }
-  }
+	set text(text: string) {
+		reset(this._container, ...renderLabelWithIcons(text ?? ''));
+	}
 
-  dispose(): void {
-    this.hover?.dispose();
-  }
+	set title(title: string) {
+		if (!this.hover && title) {
+			this.hover = getBaseLayerHoverDelegate().setupManagedHover(getDefaultHoverDelegate('mouse'), this._container, title);
+		} else if (this.hover) {
+			this.hover.update(title);
+		}
+	}
+
+	dispose(): void {
+		this.hover?.dispose();
+	}
 }

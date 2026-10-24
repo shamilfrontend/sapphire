@@ -14,149 +14,120 @@ import { IModelService } from '../../../../../editor/common/services/model.js';
 import { URI } from '../../../../../base/common/uri.js';
 import { BulkFileOperations } from '../../browser/preview/bulkEditPreview.js';
 import { Range } from '../../../../../editor/common/core/range.js';
-import {
-  ResourceFileEdit,
-  ResourceTextEdit,
-} from '../../../../../editor/browser/services/bulkEditService.js';
+import { ResourceFileEdit, ResourceTextEdit } from '../../../../../editor/browser/services/bulkEditService.js';
 import { ensureNoDisposablesAreLeakedInTestSuite } from '../../../../../base/test/common/utils.js';
 
-suite('BulkEditPreview', () => {
-  const store = ensureNoDisposablesAreLeakedInTestSuite();
+suite('BulkEditPreview', function () {
 
-  let instaService: IInstantiationService;
+	const store = ensureNoDisposablesAreLeakedInTestSuite();
 
-  setup(() => {
-    const fileService: IFileService = new (class extends mock<IFileService>() {
-      override onDidFilesChange = Event.None;
+	let instaService: IInstantiationService;
 
-      override async exists() {
-        return true;
-      }
-    })();
+	setup(function () {
 
-    const modelService: IModelService = new (class extends mock<IModelService>() {
-      override getModel() {
-        return null;
-      }
+		const fileService: IFileService = new class extends mock<IFileService>() {
+			override onDidFilesChange = Event.None;
+			override async exists() {
+				return true;
+			}
+		};
 
-      override getModels() {
-        return [];
-      }
-    })();
+		const modelService: IModelService = new class extends mock<IModelService>() {
+			override getModel() {
+				return null;
+			}
+			override getModels() {
+				return [];
+			}
+		};
 
-    instaService = new InstantiationService(
-      new ServiceCollection([IFileService, fileService], [IModelService, modelService]),
-    );
-  });
+		instaService = new InstantiationService(new ServiceCollection(
+			[IFileService, fileService],
+			[IModelService, modelService],
+		));
+	});
 
-  test('one needsConfirmation unchecks all of file', async () => {
-    const edits = [
-      new ResourceFileEdit(undefined, URI.parse('some:///uri1'), undefined, {
-        label: 'cat1',
-        needsConfirmation: true,
-      }),
-      new ResourceFileEdit(URI.parse('some:///uri1'), URI.parse('some:///uri2'), undefined, {
-        label: 'cat2',
-        needsConfirmation: false,
-      }),
-    ];
+	test('one needsConfirmation unchecks all of file', async function () {
 
-    const ops = await instaService.invokeFunction(BulkFileOperations.create, edits);
-    store.add(ops);
-    assert.strictEqual(ops.fileOperations.length, 1);
-    assert.strictEqual(ops.checked.isChecked(edits[0]), false);
-  });
+		const edits = [
+			new ResourceFileEdit(undefined, URI.parse('some:///uri1'), undefined, { label: 'cat1', needsConfirmation: true }),
+			new ResourceFileEdit(URI.parse('some:///uri1'), URI.parse('some:///uri2'), undefined, { label: 'cat2', needsConfirmation: false }),
+		];
 
-  test('has categories', async () => {
-    const edits = [
-      new ResourceFileEdit(undefined, URI.parse('some:///uri1'), undefined, {
-        label: 'uri1',
-        needsConfirmation: true,
-      }),
-      new ResourceFileEdit(undefined, URI.parse('some:///uri2'), undefined, {
-        label: 'uri2',
-        needsConfirmation: false,
-      }),
-    ];
+		const ops = await instaService.invokeFunction(BulkFileOperations.create, edits);
+		store.add(ops);
+		assert.strictEqual(ops.fileOperations.length, 1);
+		assert.strictEqual(ops.checked.isChecked(edits[0]), false);
+	});
 
-    const ops = await instaService.invokeFunction(BulkFileOperations.create, edits);
-    store.add(ops);
-    assert.strictEqual(ops.categories.length, 2);
-    assert.strictEqual(ops.categories[0].metadata.label, 'uri1'); // unconfirmed!
-    assert.strictEqual(ops.categories[1].metadata.label, 'uri2');
-  });
+	test('has categories', async function () {
 
-  test('has not categories', async () => {
-    const edits = [
-      new ResourceFileEdit(undefined, URI.parse('some:///uri1'), undefined, {
-        label: 'uri1',
-        needsConfirmation: true,
-      }),
-      new ResourceFileEdit(undefined, URI.parse('some:///uri2'), undefined, {
-        label: 'uri1',
-        needsConfirmation: false,
-      }),
-    ];
+		const edits = [
+			new ResourceFileEdit(undefined, URI.parse('some:///uri1'), undefined, { label: 'uri1', needsConfirmation: true }),
+			new ResourceFileEdit(undefined, URI.parse('some:///uri2'), undefined, { label: 'uri2', needsConfirmation: false }),
+		];
 
-    const ops = await instaService.invokeFunction(BulkFileOperations.create, edits);
-    store.add(ops);
-    assert.strictEqual(ops.categories.length, 1);
-    assert.strictEqual(ops.categories[0].metadata.label, 'uri1'); // unconfirmed!
-    assert.strictEqual(ops.categories[0].metadata.label, 'uri1');
-  });
 
-  test('category selection', async () => {
-    const edits = [
-      new ResourceFileEdit(undefined, URI.parse('some:///uri1'), undefined, {
-        label: 'C1',
-        needsConfirmation: false,
-      }),
-      new ResourceTextEdit(
-        URI.parse('some:///uri2'),
-        { text: 'foo', range: new Range(1, 1, 1, 1) },
-        undefined,
-        { label: 'C2', needsConfirmation: false },
-      ),
-    ];
+		const ops = await instaService.invokeFunction(BulkFileOperations.create, edits);
+		store.add(ops);
+		assert.strictEqual(ops.categories.length, 2);
+		assert.strictEqual(ops.categories[0].metadata.label, 'uri1'); // unconfirmed!
+		assert.strictEqual(ops.categories[1].metadata.label, 'uri2');
+	});
 
-    const ops = await instaService.invokeFunction(BulkFileOperations.create, edits);
-    store.add(ops);
+	test('has not categories', async function () {
 
-    assert.strictEqual(ops.checked.isChecked(edits[0]), true);
-    assert.strictEqual(ops.checked.isChecked(edits[1]), true);
+		const edits = [
+			new ResourceFileEdit(undefined, URI.parse('some:///uri1'), undefined, { label: 'uri1', needsConfirmation: true }),
+			new ResourceFileEdit(undefined, URI.parse('some:///uri2'), undefined, { label: 'uri1', needsConfirmation: false }),
+		];
 
-    assert.ok(edits === ops.getWorkspaceEdit());
+		const ops = await instaService.invokeFunction(BulkFileOperations.create, edits);
+		store.add(ops);
+		assert.strictEqual(ops.categories.length, 1);
+		assert.strictEqual(ops.categories[0].metadata.label, 'uri1'); // unconfirmed!
+		assert.strictEqual(ops.categories[0].metadata.label, 'uri1');
+	});
 
-    // NOT taking to create, but the invalid text edit will
-    // go through
-    ops.checked.updateChecked(edits[0], false);
-    const newEdits = ops.getWorkspaceEdit();
-    assert.ok(edits !== newEdits);
+	test('category selection', async function () {
 
-    assert.strictEqual(edits.length, 2);
-    assert.strictEqual(newEdits.length, 1);
-  });
+		const edits = [
+			new ResourceFileEdit(undefined, URI.parse('some:///uri1'), undefined, { label: 'C1', needsConfirmation: false }),
+			new ResourceTextEdit(URI.parse('some:///uri2'), { text: 'foo', range: new Range(1, 1, 1, 1) }, undefined, { label: 'C2', needsConfirmation: false }),
+		];
 
-  test('fix bad metadata', async () => {
-    // bogous edit that wants creation to be confirmed, but not it's textedit-child...
 
-    const edits = [
-      new ResourceFileEdit(undefined, URI.parse('some:///uri1'), undefined, {
-        label: 'C1',
-        needsConfirmation: true,
-      }),
-      new ResourceTextEdit(
-        URI.parse('some:///uri1'),
-        { text: 'foo', range: new Range(1, 1, 1, 1) },
-        undefined,
-        { label: 'C2', needsConfirmation: false },
-      ),
-    ];
+		const ops = await instaService.invokeFunction(BulkFileOperations.create, edits);
+		store.add(ops);
 
-    const ops = await instaService.invokeFunction(BulkFileOperations.create, edits);
-    store.add(ops);
+		assert.strictEqual(ops.checked.isChecked(edits[0]), true);
+		assert.strictEqual(ops.checked.isChecked(edits[1]), true);
 
-    assert.strictEqual(ops.checked.isChecked(edits[0]), false);
-    assert.strictEqual(ops.checked.isChecked(edits[1]), false);
-  });
+		assert.ok(edits === ops.getWorkspaceEdit());
+
+		// NOT taking to create, but the invalid text edit will
+		// go through
+		ops.checked.updateChecked(edits[0], false);
+		const newEdits = ops.getWorkspaceEdit();
+		assert.ok(edits !== newEdits);
+
+		assert.strictEqual(edits.length, 2);
+		assert.strictEqual(newEdits.length, 1);
+	});
+
+	test('fix bad metadata', async function () {
+
+		// bogous edit that wants creation to be confirmed, but not it's textedit-child...
+
+		const edits = [
+			new ResourceFileEdit(undefined, URI.parse('some:///uri1'), undefined, { label: 'C1', needsConfirmation: true }),
+			new ResourceTextEdit(URI.parse('some:///uri1'), { text: 'foo', range: new Range(1, 1, 1, 1) }, undefined, { label: 'C2', needsConfirmation: false })
+		];
+
+		const ops = await instaService.invokeFunction(BulkFileOperations.create, edits);
+		store.add(ops);
+
+		assert.strictEqual(ops.checked.isChecked(edits[0]), false);
+		assert.strictEqual(ops.checked.isChecked(edits[1]), false);
+	});
 });

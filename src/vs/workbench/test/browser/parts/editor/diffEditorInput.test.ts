@@ -7,162 +7,134 @@ import assert from 'assert';
 import { EditorInput } from '../../../../common/editor/editorInput.js';
 import { DiffEditorInput } from '../../../../common/editor/diffEditorInput.js';
 import { workbenchInstantiationService } from '../../workbenchTestServices.js';
-import {
-  EditorResourceAccessor,
-  isDiffEditorInput,
-  isResourceDiffEditorInput,
-  isResourceSideBySideEditorInput,
-  IUntypedEditorInput,
-} from '../../../../common/editor.js';
+import { EditorInputCapabilities, EditorResourceAccessor, isDiffEditorInput, isResourceDiffEditorInput, isResourceSideBySideEditorInput, IUntypedEditorInput } from '../../../../common/editor.js';
 import { URI } from '../../../../../base/common/uri.js';
 import { DisposableStore } from '../../../../../base/common/lifecycle.js';
 import { ensureNoDisposablesAreLeakedInTestSuite } from '../../../../../base/test/common/utils.js';
 
 suite('Diff editor input', () => {
-  class MyEditorInput extends EditorInput {
-    constructor(public resource: URI | undefined = undefined) {
-      super();
-    }
 
-    override get typeId(): string {
-      return 'myEditorInput';
-    }
+	class MyEditorInput extends EditorInput {
 
-    override resolve(): any {
-      return null;
-    }
+		constructor(public resource: URI | undefined = undefined, private readonly _description?: string) {
+			super();
+		}
 
-    override toUntyped() {
-      return { resource: this.resource, options: { override: this.typeId } };
-    }
+		override get typeId(): string { return 'myEditorInput'; }
+		override resolve(): any { return null; }
+		override getDescription(): string | undefined { return this._description; }
 
-    override matches(otherInput: EditorInput | IUntypedEditorInput): boolean {
-      if (super.matches(otherInput)) {
-        return true;
-      }
+		override toUntyped() {
+			return { resource: this.resource, options: { override: this.typeId } };
+		}
 
-      const resource = EditorResourceAccessor.getCanonicalUri(otherInput);
-      return resource?.toString() === this.resource?.toString();
-    }
-  }
+		override matches(otherInput: EditorInput | IUntypedEditorInput): boolean {
+			if (super.matches(otherInput)) {
+				return true;
+			}
 
-  const disposables = new DisposableStore();
+			const resource = EditorResourceAccessor.getCanonicalUri(otherInput);
+			return resource?.toString() === this.resource?.toString();
+		}
+	}
 
-  teardown(() => {
-    disposables.clear();
-  });
+	const disposables = new DisposableStore();
 
-  test('basics', () => {
-    const instantiationService = workbenchInstantiationService(undefined, disposables);
+	teardown(() => {
+		disposables.clear();
+	});
 
-    let counter = 0;
-    const input = disposables.add(new MyEditorInput());
-    disposables.add(
-      input.onWillDispose(() => {
-        assert(true);
-        counter++;
-      }),
-    );
+	test('basics', () => {
+		const instantiationService = workbenchInstantiationService(undefined, disposables);
 
-    const otherInput = disposables.add(new MyEditorInput());
-    disposables.add(
-      otherInput.onWillDispose(() => {
-        assert(true);
-        counter++;
-      }),
-    );
+		let counter = 0;
+		const input = disposables.add(new MyEditorInput());
+		disposables.add(input.onWillDispose(() => {
+			assert(true);
+			counter++;
+		}));
 
-    const diffInput = instantiationService.createInstance(
-      DiffEditorInput,
-      'name',
-      'description',
-      input,
-      otherInput,
-      undefined,
-    );
+		const otherInput = disposables.add(new MyEditorInput());
+		disposables.add(otherInput.onWillDispose(() => {
+			assert(true);
+			counter++;
+		}));
 
-    assert.ok(isDiffEditorInput(diffInput));
-    assert.ok(!isDiffEditorInput(input));
+		const diffInput = instantiationService.createInstance(DiffEditorInput, 'name', 'description', input, otherInput, undefined);
 
-    assert.strictEqual(diffInput.original, input);
-    assert.strictEqual(diffInput.modified, otherInput);
-    assert(diffInput.matches(diffInput));
-    assert(!diffInput.matches(otherInput));
+		assert.ok(isDiffEditorInput(diffInput));
+		assert.ok(!isDiffEditorInput(input));
 
-    diffInput.dispose();
-    assert.strictEqual(counter, 0);
-  });
+		assert.strictEqual(diffInput.original, input);
+		assert.strictEqual(diffInput.modified, otherInput);
+		assert(diffInput.matches(diffInput));
+		assert(!diffInput.matches(otherInput));
 
-  test('toUntyped', () => {
-    const instantiationService = workbenchInstantiationService(undefined, disposables);
+		diffInput.dispose();
+		assert.strictEqual(counter, 0);
+	});
 
-    const input = disposables.add(new MyEditorInput(URI.file('foo/bar1')));
-    const otherInput = disposables.add(new MyEditorInput(URI.file('foo/bar2')));
+	test('forces descriptions only when they distinguish identical names', () => {
+		const instantiationService = workbenchInstantiationService(undefined, disposables);
+		const hasForceDescription = (originalDescription: string | undefined, modifiedDescription: string | undefined) => {
+			const input = disposables.add(new MyEditorInput(undefined, originalDescription));
+			const otherInput = disposables.add(new MyEditorInput(undefined, modifiedDescription));
+			const diffInput = disposables.add(instantiationService.createInstance(DiffEditorInput, undefined, undefined, input, otherInput, undefined));
+			return diffInput.hasCapability(EditorInputCapabilities.ForceDescription);
+		};
 
-    const diffInput = instantiationService.createInstance(
-      DiffEditorInput,
-      'name',
-      'description',
-      input,
-      otherInput,
-      undefined,
-    );
+		assert.deepStrictEqual({
+			identical: hasForceDescription('folder', 'folder'),
+			different: hasForceDescription('folder-a', 'folder-b'),
+			missing: hasForceDescription(undefined, undefined),
+		}, {
+			identical: false,
+			different: true,
+			missing: false,
+		});
+	});
 
-    const untypedDiffInput = diffInput.toUntyped();
-    assert.ok(isResourceDiffEditorInput(untypedDiffInput));
-    assert.ok(!isResourceSideBySideEditorInput(untypedDiffInput));
-    assert.ok(diffInput.matches(untypedDiffInput));
-  });
+	test('toUntyped', () => {
+		const instantiationService = workbenchInstantiationService(undefined, disposables);
 
-  test('disposes when input inside disposes', () => {
-    const instantiationService = workbenchInstantiationService(undefined, disposables);
+		const input = disposables.add(new MyEditorInput(URI.file('foo/bar1')));
+		const otherInput = disposables.add(new MyEditorInput(URI.file('foo/bar2')));
 
-    let counter = 0;
-    let input = disposables.add(new MyEditorInput());
-    let otherInput = disposables.add(new MyEditorInput());
+		const diffInput = instantiationService.createInstance(DiffEditorInput, 'name', 'description', input, otherInput, undefined);
 
-    const diffInput = disposables.add(
-      instantiationService.createInstance(
-        DiffEditorInput,
-        'name',
-        'description',
-        input,
-        otherInput,
-        undefined,
-      ),
-    );
-    disposables.add(
-      diffInput.onWillDispose(() => {
-        counter++;
-        assert(true);
-      }),
-    );
+		const untypedDiffInput = diffInput.toUntyped();
+		assert.ok(isResourceDiffEditorInput(untypedDiffInput));
+		assert.ok(!isResourceSideBySideEditorInput(untypedDiffInput));
+		assert.ok(diffInput.matches(untypedDiffInput));
+	});
 
-    input.dispose();
+	test('disposes when input inside disposes', function () {
+		const instantiationService = workbenchInstantiationService(undefined, disposables);
 
-    input = disposables.add(new MyEditorInput());
-    otherInput = disposables.add(new MyEditorInput());
+		let counter = 0;
+		let input = disposables.add(new MyEditorInput());
+		let otherInput = disposables.add(new MyEditorInput());
 
-    const diffInput2 = disposables.add(
-      instantiationService.createInstance(
-        DiffEditorInput,
-        'name',
-        'description',
-        input,
-        otherInput,
-        undefined,
-      ),
-    );
-    disposables.add(
-      diffInput2.onWillDispose(() => {
-        counter++;
-        assert(true);
-      }),
-    );
+		const diffInput = disposables.add(instantiationService.createInstance(DiffEditorInput, 'name', 'description', input, otherInput, undefined));
+		disposables.add(diffInput.onWillDispose(() => {
+			counter++;
+			assert(true);
+		}));
 
-    otherInput.dispose();
-    assert.strictEqual(counter, 2);
-  });
+		input.dispose();
 
-  ensureNoDisposablesAreLeakedInTestSuite();
+		input = disposables.add(new MyEditorInput());
+		otherInput = disposables.add(new MyEditorInput());
+
+		const diffInput2 = disposables.add(instantiationService.createInstance(DiffEditorInput, 'name', 'description', input, otherInput, undefined));
+		disposables.add(diffInput2.onWillDispose(() => {
+			counter++;
+			assert(true);
+		}));
+
+		otherInput.dispose();
+		assert.strictEqual(counter, 2);
+	});
+
+	ensureNoDisposablesAreLeakedInTestSuite();
 });

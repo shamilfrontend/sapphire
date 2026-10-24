@@ -5,460 +5,493 @@
 
 import { BrowserFeatures } from '../../canIUse.js';
 import * as DOM from '../../dom.js';
+import { createStyleSheet } from '../../domStylesheets.js';
 import { StandardMouseEvent } from '../../mouseEvent.js';
-import {
-  Disposable,
-  DisposableStore,
-  IDisposable,
-  toDisposable,
-} from '../../../common/lifecycle.js';
+import { Disposable, DisposableStore, IDisposable, toDisposable } from '../../../common/lifecycle.js';
+import { AnchorAlignment, AnchorAxisAlignment, AnchorPosition, IRect, layout2d } from '../../../common/layout.js';
 import * as platform from '../../../common/platform.js';
-import { Range } from '../../../common/range.js';
 import { OmitOptional } from '../../../common/types.js';
 import './contextview.css';
 
+export { AnchorAlignment, AnchorAxisAlignment, AnchorPosition } from '../../../common/layout.js';
+
 export const enum ContextViewDOMPosition {
-  ABSOLUTE = 1,
-  FIXED,
-  FIXED_SHADOW,
+	ABSOLUTE = 1,
+	FIXED,
+	FIXED_SHADOW
 }
 
 export interface IAnchor {
-  x: number;
-  y: number;
-  width?: number;
-  height?: number;
+	x: number;
+	y: number;
+	width?: number;
+	height?: number;
 }
 
 export function isAnchor(obj: unknown): obj is IAnchor | OmitOptional<IAnchor> {
-  const anchor = obj as IAnchor | OmitOptional<IAnchor> | undefined;
+	const anchor = obj as IAnchor | OmitOptional<IAnchor> | undefined;
 
-  return !!anchor && typeof anchor.x === 'number' && typeof anchor.y === 'number';
-}
-
-export const enum AnchorAlignment {
-  LEFT,
-  RIGHT,
-}
-
-export const enum AnchorPosition {
-  BELOW,
-  ABOVE,
-}
-
-export const enum AnchorAxisAlignment {
-  VERTICAL,
-  HORIZONTAL,
+	return !!anchor && typeof anchor.x === 'number' && typeof anchor.y === 'number';
 }
 
 export interface IDelegate {
-  /**
-   * The anchor where to position the context view.
-   * Use a `HTMLElement` to position the view at the element,
-   * a `StandardMouseEvent` to position it at the mouse position
-   * or an `IAnchor` to position it at a specific location.
-   */
-  getAnchor(): HTMLElement | StandardMouseEvent | IAnchor;
-  render(container: HTMLElement): IDisposable | null;
-  focus?(): void;
-  layout?(): void;
-  anchorAlignment?: AnchorAlignment; // default: left
-  anchorPosition?: AnchorPosition; // default: below
-  anchorAxisAlignment?: AnchorAxisAlignment; // default: vertical
-  canRelayout?: boolean; // default: true
-  onDOMEvent?(e: Event, activeElement: HTMLElement): void;
-  onHide?(data?: unknown): void;
+	/**
+	 * The anchor where to position the context view.
+	 * Use a `HTMLElement` to position the view at the element,
+	 * a `StandardMouseEvent` to position it at the mouse position
+	 * or an `IAnchor` to position it at a specific location.
+	 */
+	getAnchor(): HTMLElement | StandardMouseEvent | IAnchor;
+	render(container: HTMLElement): IDisposable | null;
+	focus?(): void;
+	layout?(): void;
+	anchorAlignment?: AnchorAlignment; // default: left
+	anchorPosition?: AnchorPosition; // default: below
+	anchorAxisAlignment?: AnchorAxisAlignment; // default: vertical
+	canRelayout?: boolean; // default: true
+	onDOMEvent?(e: Event, activeElement: HTMLElement): void;
+	onHide?(data?: unknown): void;
+	closeAnimation?: IContextViewCloseAnimation;
 
-  /**
-   * context views with higher layers are rendered higher in z-index order
-   */
-  layer?: number; // Default: 0
+	/**
+	 * context views with higher layers are rendered higher in z-index order
+	 */
+	layer?: number; // Default: 0
+}
+
+export interface IContextViewCloseAnimation {
+	readonly className: string;
+	readonly duration: number;
+	/** Requirements must match one ancestor; a nested array accepts any listed class. */
+	readonly requiredAncestorClasses?: readonly (string | readonly string[])[];
+}
+
+export function hasRequiredAncestorClasses(element: HTMLElement, classNames: IContextViewCloseAnimation['requiredAncestorClasses']): boolean {
+	if (!classNames?.length) {
+		return true;
+	}
+
+	for (let candidate: HTMLElement | null = element; candidate;) {
+		const current: HTMLElement = candidate;
+		if (classNames.every(requirement => typeof requirement === 'string'
+			? current.classList.contains(requirement)
+			: requirement.some(className => current.classList.contains(className)))) {
+			return true;
+		}
+
+		if (current.parentElement) {
+			candidate = current.parentElement;
+		} else {
+			const root = current.getRootNode();
+			candidate = root instanceof ShadowRoot && DOM.isHTMLElement(root.host) ? root.host : null;
+		}
+	}
+
+	return false;
+}
+
+export const CONTEXT_VIEW_MENU_MOTION_CLASS = 'context-view-menu-motion';
+export const CONTEXT_VIEW_MENU_MOTION_CLOSING_CLASS = 'context-view-menu-motion-closing';
+export const CONTEXT_VIEW_MENU_MOTION_CLOSE_ANIMATION_DURATION = 150;
+export const CONTEXT_VIEW_MENU_MOTION_ANCESTOR_CLASSES = [['modern-ui', 'modern-ui-frosted-glass'], 'monaco-enable-motion'] as const;
+export const CONTEXT_VIEW_CLOSE_ANIMATION_DURATION_VARIABLE = '--vscode-context-view-close-animation-duration';
+export const CONTEXT_VIEW_MENU_MOTION_SHADOW_VARIABLE = '--vscode-context-view-menu-motion-shadow';
+/** Inherited while an opacity animation isolates descendant menu backdrops. */
+export const CONTEXT_VIEW_MENU_MOTION_BACKDROP_OPACITY_VARIABLE = '--vscode-context-view-menu-motion-backdrop-opacity';
+const CONTEXT_VIEW_MENU_MOTION_CLOSE_START_OPACITY_VARIABLE = '--vscode-context-view-menu-motion-close-start-opacity';
+export const CONTEXT_VIEW_MENU_MOTION_CLOSE_START_TRANSFORM_VARIABLE = '--vscode-context-view-menu-motion-close-start-transform';
+
+export const CONTEXT_VIEW_MENU_MOTION_OPEN_DURATION_MS = 250;
+export const CONTEXT_VIEW_MENU_MOTION_EASING = 'cubic-bezier(0.22, 1, 0.36, 1)';
+
+export const contextViewMenuCloseAnimation: IContextViewCloseAnimation = {
+	className: CONTEXT_VIEW_MENU_MOTION_CLOSING_CLASS,
+	duration: CONTEXT_VIEW_MENU_MOTION_CLOSE_ANIMATION_DURATION,
+	requiredAncestorClasses: CONTEXT_VIEW_MENU_MOTION_ANCESTOR_CLASSES,
+};
+
+function getContextViewMenuMotionCss(enabledSelectorPrefix: string): string {
+	return /* css */ `
+	${enabledSelectorPrefix} .context-view.${CONTEXT_VIEW_MENU_MOTION_CLASS} {
+		animation: none;
+		box-shadow: none;
+		overflow: visible;
+	}
+
+	${enabledSelectorPrefix} .context-view.${CONTEXT_VIEW_MENU_MOTION_CLASS} > .monaco-scrollable-element {
+		animation: context-view-menu-motion-open ${CONTEXT_VIEW_MENU_MOTION_OPEN_DURATION_MS}ms ${CONTEXT_VIEW_MENU_MOTION_EASING} backwards;
+		box-shadow: var(${CONTEXT_VIEW_MENU_MOTION_SHADOW_VARIABLE});
+		transform-origin: top left;
+		will-change: opacity;
+	}
+
+	${enabledSelectorPrefix} .context-view.${CONTEXT_VIEW_MENU_MOTION_CLASS}.right > .monaco-scrollable-element {
+		transform-origin: top right;
+	}
+
+	${enabledSelectorPrefix} .context-view.${CONTEXT_VIEW_MENU_MOTION_CLASS}.top > .monaco-scrollable-element {
+		transform-origin: bottom left;
+	}
+
+	${enabledSelectorPrefix} .context-view.${CONTEXT_VIEW_MENU_MOTION_CLASS}.top.right > .monaco-scrollable-element {
+		transform-origin: bottom right;
+	}
+
+	${enabledSelectorPrefix} .context-view.${CONTEXT_VIEW_MENU_MOTION_CLASS}.${CONTEXT_VIEW_MENU_MOTION_CLOSING_CLASS} > .monaco-scrollable-element {
+		animation: context-view-menu-motion-close var(${CONTEXT_VIEW_CLOSE_ANIMATION_DURATION_VARIABLE}) ${CONTEXT_VIEW_MENU_MOTION_EASING} both;
+		pointer-events: none;
+	}
+
+	@keyframes context-view-menu-motion-open {
+		from, to {
+			${CONTEXT_VIEW_MENU_MOTION_BACKDROP_OPACITY_VARIABLE}: 100%;
+		}
+
+		0% {
+			opacity: 0;
+			transform: scale(0.97);
+		}
+
+		100% {
+			opacity: 1;
+			transform: scale(1);
+		}
+	}
+
+	@keyframes context-view-menu-motion-close {
+		from, to {
+			${CONTEXT_VIEW_MENU_MOTION_BACKDROP_OPACITY_VARIABLE}: 100%;
+		}
+
+		0% {
+			opacity: var(${CONTEXT_VIEW_MENU_MOTION_CLOSE_START_OPACITY_VARIABLE}, 1);
+			transform: var(${CONTEXT_VIEW_MENU_MOTION_CLOSE_START_TRANSFORM_VARIABLE}, scale(1));
+		}
+
+		100% {
+			opacity: 0;
+			transform: scale(0.99);
+		}
+	}`;
+}
+
+let contextViewMenuMotionStyleSheet: HTMLStyleElement | undefined;
+
+function ensureContextViewMenuMotionStyleSheet(): void {
+	if (!contextViewMenuMotionStyleSheet) {
+		contextViewMenuMotionStyleSheet = createStyleSheet(undefined, style => {
+			style.textContent = getContextViewMenuMotionCss('.modern-ui.monaco-enable-motion');
+		});
+	}
 }
 
 export interface IContextViewProvider {
-  showContextView(delegate: IDelegate, container?: HTMLElement): void;
-  hideContextView(): void;
-  layout(): void;
+	showContextView(delegate: IDelegate, container?: HTMLElement): void;
+	hideContextView(): void;
+	layout(): void;
 }
 
-export interface IPosition {
-  top: number;
-  left: number;
-}
+export function getAnchorRect(anchor: HTMLElement | StandardMouseEvent | IAnchor): IRect {
+	// Get the element's position and size (to anchor the view)
+	if (DOM.isHTMLElement(anchor)) {
+		const elementPosition = DOM.getDomNodePagePosition(anchor);
 
-export interface ISize {
-  width: number;
-  height: number;
-}
+		// In areas where zoom is applied to the element or its ancestors, we need to adjust the size of the element
+		// e.g. The title bar has counter zoom behavior meaning it applies the inverse of zoom level.
+		// Window Zoom Level: 1.5, Title Bar Zoom: 1/1.5, Size Multiplier: 1.5
+		const zoom = DOM.getDomNodeZoomLevel(anchor);
 
-export interface IView extends IPosition, ISize {}
-
-export const enum LayoutAnchorPosition {
-  Before,
-  After,
-}
-
-export enum LayoutAnchorMode {
-  AVOID,
-  ALIGN,
-}
-
-export interface ILayoutAnchor {
-  offset: number;
-  size: number;
-  mode?: LayoutAnchorMode; // default: AVOID
-  position: LayoutAnchorPosition;
-}
-
-/**
- * Lays out a one dimensional view next to an anchor in a viewport.
- *
- * @returns The view offset within the viewport.
- */
-export function layout(viewportSize: number, viewSize: number, anchor: ILayoutAnchor): number {
-  const layoutAfterAnchorBoundary =
-    anchor.mode === LayoutAnchorMode.ALIGN ? anchor.offset : anchor.offset + anchor.size;
-  const layoutBeforeAnchorBoundary =
-    anchor.mode === LayoutAnchorMode.ALIGN ? anchor.offset + anchor.size : anchor.offset;
-
-  if (anchor.position === LayoutAnchorPosition.Before) {
-    if (viewSize <= viewportSize - layoutAfterAnchorBoundary) {
-      return layoutAfterAnchorBoundary; // happy case, lay it out after the anchor
-    }
-
-    if (viewSize <= layoutBeforeAnchorBoundary) {
-      return layoutBeforeAnchorBoundary - viewSize; // ok case, lay it out before the anchor
-    }
-
-    return Math.max(viewportSize - viewSize, 0); // sad case, lay it over the anchor
-  }
-  if (viewSize <= layoutBeforeAnchorBoundary) {
-    return layoutBeforeAnchorBoundary - viewSize; // happy case, lay it out before the anchor
-  }
-
-  if (viewSize <= viewportSize - layoutAfterAnchorBoundary) {
-    return layoutAfterAnchorBoundary; // ok case, lay it out after the anchor
-  }
-
-  return 0; // sad case, lay it over the anchor
+		return {
+			top: elementPosition.top * zoom,
+			left: elementPosition.left * zoom,
+			width: elementPosition.width * zoom,
+			height: elementPosition.height * zoom
+		};
+	} else if (isAnchor(anchor)) {
+		return {
+			top: anchor.y,
+			left: anchor.x,
+			width: anchor.width || 1,
+			height: anchor.height || 2
+		};
+	} else {
+		return {
+			top: anchor.posy,
+			left: anchor.posx,
+			// We are about to position the context view where the mouse
+			// cursor is. To prevent the view being exactly under the mouse
+			// when showing and thus potentially triggering an action within,
+			// we treat the mouse location like a small sized block element.
+			width: 2,
+			height: 2
+		};
+	}
 }
 
 export class ContextView extends Disposable {
-  private static readonly BUBBLE_UP_EVENTS = ['click', 'keydown', 'focus', 'blur'];
 
-  private static readonly BUBBLE_DOWN_EVENTS = ['click'];
+	private static readonly BUBBLE_UP_EVENTS = ['click', 'keydown', 'focus', 'blur'];
+	private static readonly BUBBLE_DOWN_EVENTS = ['click'];
 
-  private container: HTMLElement | null = null;
+	private container: HTMLElement | null = null;
+	private view: HTMLElement;
+	private useFixedPosition = false;
+	private useShadowDOM = false;
+	private delegate: IDelegate | null = null;
+	private toDisposeOnClean: IDisposable = Disposable.None;
+	private toDisposeOnSetContainer: IDisposable = Disposable.None;
+	private hidingContextView: { readonly disposable: IDisposable; readonly toDispose: IDisposable; readonly className: string } | undefined;
+	private shadowRoot: ShadowRoot | null = null;
+	private shadowRootHostElement: HTMLElement | null = null;
 
-  private view: HTMLElement;
+	constructor(container: HTMLElement, domPosition: ContextViewDOMPosition) {
+		super();
 
-  private useFixedPosition = false;
+		ensureContextViewMenuMotionStyleSheet();
 
-  private useShadowDOM = false;
+		this.view = DOM.$('.context-view');
+		DOM.hide(this.view);
 
-  private delegate: IDelegate | null = null;
+		this.setContainer(container, domPosition);
+		this._register(toDisposable(() => this.setContainer(null, ContextViewDOMPosition.ABSOLUTE)));
+	}
 
-  private toDisposeOnClean: IDisposable = Disposable.None;
+	setContainer(container: HTMLElement | null, domPosition: ContextViewDOMPosition): void {
+		this.useFixedPosition = domPosition !== ContextViewDOMPosition.ABSOLUTE;
+		const usedShadowDOM = this.useShadowDOM;
+		this.useShadowDOM = domPosition === ContextViewDOMPosition.FIXED_SHADOW;
 
-  private toDisposeOnSetContainer: IDisposable = Disposable.None;
+		if (container === this.container && usedShadowDOM === this.useShadowDOM) {
+			return; // container is the same and no shadow DOM usage has changed
+		}
 
-  private shadowRoot: ShadowRoot | null = null;
+		if (this.container) {
+			this.toDisposeOnSetContainer.dispose();
 
-  private shadowRootHostElement: HTMLElement | null = null;
+			this.view.remove();
+			if (this.shadowRoot) {
+				this.shadowRoot = null;
+				this.shadowRootHostElement?.remove();
+				this.shadowRootHostElement = null;
+			}
 
-  constructor(container: HTMLElement, domPosition: ContextViewDOMPosition) {
-    super();
+			this.container = null;
+		}
 
-    this.view = DOM.$('.context-view');
-    DOM.hide(this.view);
+		if (container) {
+			this.container = container;
 
-    this.setContainer(container, domPosition);
-    this._register(toDisposable(() => this.setContainer(null, ContextViewDOMPosition.ABSOLUTE)));
-  }
+			if (this.useShadowDOM) {
+				this.shadowRootHostElement = DOM.$('.shadow-root-host');
+				Object.assign(this.shadowRootHostElement.style, {
+					position: 'fixed',
+					top: '0',
+					left: '0',
+					width: '0',
+					height: '0'
+				});
+				this.container.appendChild(this.shadowRootHostElement);
+				this.shadowRoot = this.shadowRootHostElement.attachShadow({ mode: 'open' });
+				const style = document.createElement('style');
+				style.textContent = SHADOW_ROOT_CSS;
+				this.shadowRoot.appendChild(style);
+				this.shadowRoot.appendChild(this.view);
+				this.shadowRoot.appendChild(DOM.$('slot'));
+			} else {
+				this.container.appendChild(this.view);
+			}
 
-  setContainer(container: HTMLElement | null, domPosition: ContextViewDOMPosition): void {
-    this.useFixedPosition = domPosition !== ContextViewDOMPosition.ABSOLUTE;
-    const usedShadowDOM = this.useShadowDOM;
-    this.useShadowDOM = domPosition === ContextViewDOMPosition.FIXED_SHADOW;
+			const toDisposeOnSetContainer = new DisposableStore();
 
-    if (container === this.container && usedShadowDOM === this.useShadowDOM) {
-      return; // container is the same and no shadow DOM usage has changed
-    }
+			ContextView.BUBBLE_UP_EVENTS.forEach(event => {
+				toDisposeOnSetContainer.add(DOM.addStandardDisposableListener(this.container!, event, e => {
+					this.onDOMEvent(e, false);
+				}));
+			});
 
-    if (this.container) {
-      this.toDisposeOnSetContainer.dispose();
+			ContextView.BUBBLE_DOWN_EVENTS.forEach(event => {
+				toDisposeOnSetContainer.add(DOM.addStandardDisposableListener(this.container!, event, e => {
+					this.onDOMEvent(e, true);
+				}, true));
+			});
 
-      this.view.remove();
-      if (this.shadowRoot) {
-        this.shadowRoot = null;
-        this.shadowRootHostElement?.remove();
-        this.shadowRootHostElement = null;
-      }
+			this.toDisposeOnSetContainer = toDisposeOnSetContainer;
+		}
+	}
 
-      this.container = null;
-    }
+	show(delegate: IDelegate): void {
+		this.completeHideAnimation();
 
-    if (container) {
-      this.container = container;
+		if (this.isVisible()) {
+			this.hide(undefined, true);
+		}
 
-      if (this.useShadowDOM) {
-        this.shadowRootHostElement = DOM.$('.shadow-root-host');
-        this.container.appendChild(this.shadowRootHostElement);
-        this.shadowRoot = this.shadowRootHostElement.attachShadow({ mode: 'open' });
-        const style = document.createElement('style');
-        style.textContent = SHADOW_ROOT_CSS;
-        this.shadowRoot.appendChild(style);
-        this.shadowRoot.appendChild(this.view);
-        this.shadowRoot.appendChild(DOM.$('slot'));
-      } else {
-        this.container.appendChild(this.view);
-      }
+		// Show static box
+		DOM.clearNode(this.view);
+		this.view.className = 'context-view monaco-component';
+		this.view.style.top = '0px';
+		this.view.style.left = '0px';
+		const zIndex = `${2575 + (delegate.layer ?? 0)}`;
+		this.view.style.zIndex = zIndex;
+		if (this.shadowRootHostElement) {
+			this.shadowRootHostElement.style.zIndex = zIndex;
+		}
+		this.view.style.position = this.useFixedPosition ? 'fixed' : 'absolute';
+		DOM.show(this.view);
 
-      const toDisposeOnSetContainer = new DisposableStore();
+		// Render content
+		this.toDisposeOnClean = delegate.render(this.view) || Disposable.None;
 
-      ContextView.BUBBLE_UP_EVENTS.forEach((event) => {
-        toDisposeOnSetContainer.add(
-          DOM.addStandardDisposableListener(this.container!, event, (e) => {
-            this.onDOMEvent(e, false);
-          }),
-        );
-      });
+		// Set active delegate
+		this.delegate = delegate;
 
-      ContextView.BUBBLE_DOWN_EVENTS.forEach((event) => {
-        toDisposeOnSetContainer.add(
-          DOM.addStandardDisposableListener(
-            this.container!,
-            event,
-            (e) => {
-              this.onDOMEvent(e, true);
-            },
-            true,
-          ),
-        );
-      });
+		// Layout
+		this.doLayout();
 
-      this.toDisposeOnSetContainer = toDisposeOnSetContainer;
-    }
-  }
+		// Focus
+		this.delegate.focus?.();
+	}
 
-  show(delegate: IDelegate): void {
-    if (this.isVisible()) {
-      this.hide();
-    }
+	getViewElement(): HTMLElement {
+		return this.view;
+	}
 
-    // Show static box
-    DOM.clearNode(this.view);
-    this.view.className = 'context-view monaco-component';
-    this.view.style.top = '0px';
-    this.view.style.left = '0px';
-    this.view.style.zIndex = `${2575 + (delegate.layer ?? 0)}`;
-    this.view.style.position = this.useFixedPosition ? 'fixed' : 'absolute';
-    DOM.show(this.view);
+	layout(): void {
+		if (!this.isVisible()) {
+			return;
+		}
 
-    // Render content
-    this.toDisposeOnClean = delegate.render(this.view) || Disposable.None;
+		if (this.delegate!.canRelayout === false && !(platform.isIOS && BrowserFeatures.pointerEvents)) {
+			this.hide();
+			return;
+		}
 
-    // Set active delegate
-    this.delegate = delegate;
+		this.delegate?.layout?.();
 
-    // Layout
-    this.doLayout();
+		this.doLayout();
+	}
 
-    // Focus
-    this.delegate.focus?.();
-  }
+	private doLayout(): void {
+		// Check that we still have a delegate - this.delegate.layout may have hidden
+		if (!this.isVisible()) {
+			return;
+		}
 
-  getViewElement(): HTMLElement {
-    return this.view;
-  }
+		// Get anchor
+		const anchor = getAnchorRect(this.delegate!.getAnchor());
+		const containerWindow = this.container ? DOM.getWindow(this.container) : DOM.getActiveWindow();
+		const viewport = { top: containerWindow.pageYOffset, left: containerWindow.pageXOffset, width: containerWindow.innerWidth, height: containerWindow.innerHeight };
+		this.view.classList.toggle('fixed', this.useFixedPosition);
+		this.view.style.top = '0px';
+		this.view.style.left = '0px';
+		const positioningOrigin = DOM.getDomNodePagePosition(this.view);
+		const view = { width: DOM.getTotalWidth(this.view), height: DOM.getTotalHeight(this.view) };
+		const anchorPosition = this.delegate!.anchorPosition;
+		const anchorAlignment = this.delegate!.anchorAlignment;
+		const anchorAxisAlignment = this.delegate!.anchorAxisAlignment;
+		const layoutResult = layout2d(viewport, view, anchor, { anchorAlignment, anchorPosition, anchorAxisAlignment });
+		const { top, left } = layoutResult;
 
-  layout(): void {
-    if (!this.isVisible()) {
-      return;
-    }
+		this.view.classList.remove('top', 'bottom', 'left', 'right');
+		this.view.classList.add(layoutResult.anchorPosition === AnchorPosition.BELOW ? 'bottom' : 'top');
+		this.view.classList.add(layoutResult.anchorAlignment === AnchorAlignment.LEFT ? 'left' : 'right');
 
-    if (
-      this.delegate!.canRelayout === false &&
-      !(platform.isIOS && BrowserFeatures.pointerEvents)
-    ) {
-      this.hide();
-      return;
-    }
+		this.view.style.top = `${top - positioningOrigin.top}px`;
+		this.view.style.left = `${left - positioningOrigin.left}px`;
+		this.view.style.width = 'initial';
+	}
 
-    this.delegate?.layout?.();
+	hide(data?: unknown, skipAnimation = false): void {
+		if (this.hidingContextView) {
+			if (skipAnimation) {
+				this.completeHideAnimation();
+			}
+			return;
+		}
 
-    this.doLayout();
-  }
+		const delegate = this.delegate;
+		this.delegate = null;
 
-  private doLayout(): void {
-    // Check that we still have a delegate - this.delegate.layout may have hidden
-    if (!this.isVisible()) {
-      return;
-    }
+		if (!delegate) {
+			return;
+		}
 
-    // Get anchor
-    const anchor = this.delegate!.getAnchor();
+		const toDispose = this.toDisposeOnClean;
+		this.toDisposeOnClean = Disposable.None;
 
-    // Compute around
-    let around: IView;
+		delegate.onHide?.(data);
 
-    // Get the element's position and size (to anchor the view)
-    if (DOM.isHTMLElement(anchor)) {
-      const elementPosition = DOM.getDomNodePagePosition(anchor);
+		const closeAnimation = delegate.closeAnimation;
+		if (!skipAnimation && closeAnimation && closeAnimation.duration > 0 && hasRequiredAncestorClasses(this.view, closeAnimation.requiredAncestorClasses)) {
+			this.view.style.setProperty(CONTEXT_VIEW_CLOSE_ANIMATION_DURATION_VARIABLE, `${closeAnimation.duration}ms`);
+			this.prepareMenuCloseAnimation();
+			this.view.inert = true;
+			this.view.classList.add(closeAnimation.className);
+			const timeout = setTimeout(() => this.completeHideAnimation(), closeAnimation.duration);
+			this.hidingContextView = {
+				disposable: toDisposable(() => clearTimeout(timeout)),
+				toDispose,
+				className: closeAnimation.className
+			};
+			return;
+		}
 
-      // In areas where zoom is applied to the element or its ancestors, we need to adjust the size of the element
-      // e.g. The title bar has counter zoom behavior meaning it applies the inverse of zoom level.
-      // Window Zoom Level: 1.5, Title Bar Zoom: 1/1.5, Size Multiplier: 1.5
-      const zoom = DOM.getDomNodeZoomLevel(anchor);
+		toDispose.dispose();
+		DOM.hide(this.view);
+	}
 
-      around = {
-        top: elementPosition.top * zoom,
-        left: elementPosition.left * zoom,
-        width: elementPosition.width * zoom,
-        height: elementPosition.height * zoom,
-      };
-    } else if (isAnchor(anchor)) {
-      around = {
-        top: anchor.y,
-        left: anchor.x,
-        width: anchor.width || 1,
-        height: anchor.height || 2,
-      };
-    } else {
-      around = {
-        top: anchor.posy,
-        left: anchor.posx,
-        // We are about to position the context view where the mouse
-        // cursor is. To prevent the view being exactly under the mouse
-        // when showing and thus potentially triggering an action within,
-        // we treat the mouse location like a small sized block element.
-        width: 2,
-        height: 2,
-      };
-    }
+	private isVisible(): boolean {
+		return !!this.delegate;
+	}
 
-    const viewSizeWidth = DOM.getTotalWidth(this.view);
-    const viewSizeHeight = DOM.getTotalHeight(this.view);
+	private completeHideAnimation(): void {
+		const hidingContextView = this.hidingContextView;
+		if (!hidingContextView) {
+			return;
+		}
 
-    const anchorPosition = this.delegate!.anchorPosition ?? AnchorPosition.BELOW;
-    const anchorAlignment = this.delegate!.anchorAlignment ?? AnchorAlignment.LEFT;
-    const anchorAxisAlignment = this.delegate!.anchorAxisAlignment ?? AnchorAxisAlignment.VERTICAL;
+		this.hidingContextView = undefined;
+		hidingContextView.disposable.dispose();
+		this.view.classList.remove(hidingContextView.className);
+		this.view.style.removeProperty(CONTEXT_VIEW_CLOSE_ANIMATION_DURATION_VARIABLE);
+		this.view.style.removeProperty(CONTEXT_VIEW_MENU_MOTION_CLOSE_START_OPACITY_VARIABLE);
+		this.view.style.removeProperty(CONTEXT_VIEW_MENU_MOTION_CLOSE_START_TRANSFORM_VARIABLE);
+		hidingContextView.toDispose.dispose();
+		DOM.hide(this.view);
+		this.view.inert = false;
+	}
 
-    let top: number;
-    let left: number;
+	private prepareMenuCloseAnimation(): void {
+		if (!this.view.classList.contains(CONTEXT_VIEW_MENU_MOTION_CLASS)) {
+			return;
+		}
 
-    const activeWindow = DOM.getActiveWindow();
-    if (anchorAxisAlignment === AnchorAxisAlignment.VERTICAL) {
-      const verticalAnchor: ILayoutAnchor = {
-        offset: around.top - activeWindow.pageYOffset,
-        size: around.height,
-        position:
-          anchorPosition === AnchorPosition.BELOW
-            ? LayoutAnchorPosition.Before
-            : LayoutAnchorPosition.After,
-      };
-      const horizontalAnchor: ILayoutAnchor = {
-        offset: around.left,
-        size: around.width,
-        position:
-          anchorAlignment === AnchorAlignment.LEFT
-            ? LayoutAnchorPosition.Before
-            : LayoutAnchorPosition.After,
-        mode: LayoutAnchorMode.ALIGN,
-      };
+		const surface = Array.from(this.view.children).find(element => DOM.isHTMLElement(element) && element.classList.contains('monaco-scrollable-element'));
+		if (!DOM.isHTMLElement(surface)) {
+			return;
+		}
 
-      top =
-        layout(activeWindow.innerHeight, viewSizeHeight, verticalAnchor) + activeWindow.pageYOffset;
+		const computedStyle = DOM.getWindow(surface).getComputedStyle(surface);
+		this.view.style.setProperty(CONTEXT_VIEW_MENU_MOTION_CLOSE_START_OPACITY_VARIABLE, computedStyle.opacity);
+		this.view.style.setProperty(CONTEXT_VIEW_MENU_MOTION_CLOSE_START_TRANSFORM_VARIABLE, computedStyle.transform);
+	}
 
-      // if view intersects vertically with anchor,  we must avoid the anchor
-      if (
-        Range.intersects(
-          { start: top, end: top + viewSizeHeight },
-          { start: verticalAnchor.offset, end: verticalAnchor.offset + verticalAnchor.size },
-        )
-      ) {
-        horizontalAnchor.mode = LayoutAnchorMode.AVOID;
-      }
+	private onDOMEvent(e: UIEvent, onCapture: boolean): void {
+		if (this.delegate) {
+			if (this.delegate.onDOMEvent) {
+				this.delegate.onDOMEvent(e, <HTMLElement>DOM.getWindow(e).document.activeElement);
+			} else if (onCapture && !DOM.isAncestor(<HTMLElement>e.target, this.container)) {
+				this.hide();
+			}
+		}
+	}
 
-      left = layout(activeWindow.innerWidth, viewSizeWidth, horizontalAnchor);
-    } else {
-      const horizontalAnchor: ILayoutAnchor = {
-        offset: around.left,
-        size: around.width,
-        position:
-          anchorAlignment === AnchorAlignment.LEFT
-            ? LayoutAnchorPosition.Before
-            : LayoutAnchorPosition.After,
-      };
-      const verticalAnchor: ILayoutAnchor = {
-        offset: around.top,
-        size: around.height,
-        position:
-          anchorPosition === AnchorPosition.BELOW
-            ? LayoutAnchorPosition.Before
-            : LayoutAnchorPosition.After,
-        mode: LayoutAnchorMode.ALIGN,
-      };
+	override dispose(): void {
+		this.hide();
+		this.completeHideAnimation();
 
-      left = layout(activeWindow.innerWidth, viewSizeWidth, horizontalAnchor);
-
-      // if view intersects horizontally with anchor, we must avoid the anchor
-      if (
-        Range.intersects(
-          { start: left, end: left + viewSizeWidth },
-          { start: horizontalAnchor.offset, end: horizontalAnchor.offset + horizontalAnchor.size },
-        )
-      ) {
-        verticalAnchor.mode = LayoutAnchorMode.AVOID;
-      }
-
-      top =
-        layout(activeWindow.innerHeight, viewSizeHeight, verticalAnchor) + activeWindow.pageYOffset;
-    }
-
-    this.view.classList.remove('top', 'bottom', 'left', 'right');
-    this.view.classList.add(anchorPosition === AnchorPosition.BELOW ? 'bottom' : 'top');
-    this.view.classList.add(anchorAlignment === AnchorAlignment.LEFT ? 'left' : 'right');
-    this.view.classList.toggle('fixed', this.useFixedPosition);
-
-    const containerPosition = DOM.getDomNodePagePosition(this.container!);
-    this.view.style.top = `${top - (this.useFixedPosition ? DOM.getDomNodePagePosition(this.view).top : containerPosition.top)}px`;
-    this.view.style.left = `${left - (this.useFixedPosition ? DOM.getDomNodePagePosition(this.view).left : containerPosition.left)}px`;
-    this.view.style.width = 'initial';
-  }
-
-  hide(data?: unknown): void {
-    const delegate = this.delegate;
-    this.delegate = null;
-
-    if (delegate?.onHide) {
-      delegate.onHide(data);
-    }
-
-    this.toDisposeOnClean.dispose();
-
-    DOM.hide(this.view);
-  }
-
-  private isVisible(): boolean {
-    return !!this.delegate;
-  }
-
-  private onDOMEvent(e: UIEvent, onCapture: boolean): void {
-    if (this.delegate) {
-      if (this.delegate.onDOMEvent) {
-        this.delegate.onDOMEvent(e, <HTMLElement>DOM.getWindow(e).document.activeElement);
-      } else if (onCapture && !DOM.isAncestor(<HTMLElement>e.target, this.container)) {
-        this.hide();
-      }
-    }
-  }
-
-  override dispose(): void {
-    this.hide();
-
-    super.dispose();
-  }
+		super.dispose();
+	}
 }
 
 const SHADOW_ROOT_CSS = /* css */ `
@@ -500,4 +533,5 @@ const SHADOW_ROOT_CSS = /* css */ `
 	:host-context(.linux:lang(zh-Hant)) { font-family: system-ui, "Ubuntu", "Droid Sans", "Source Han Sans TC", "Source Han Sans TW", "Source Han Sans", sans-serif; }
 	:host-context(.linux:lang(ja)) { font-family: system-ui, "Ubuntu", "Droid Sans", "Source Han Sans J", "Source Han Sans JP", "Source Han Sans", sans-serif; }
 	:host-context(.linux:lang(ko)) { font-family: system-ui, "Ubuntu", "Droid Sans", "Source Han Sans K", "Source Han Sans JR", "Source Han Sans", "UnDotum", "FBaekmuk Gulim", sans-serif; }
+	${getContextViewMenuMotionCss(':host-context(.modern-ui.monaco-enable-motion)')}
 `;

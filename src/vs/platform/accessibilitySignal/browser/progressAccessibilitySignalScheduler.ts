@@ -13,29 +13,18 @@ const PROGRESS_SIGNAL_LOOP_DELAY = 5000;
  * Schedules a signal to play while progress is happening.
  */
 export class AccessibilityProgressSignalScheduler extends Disposable {
-  private _scheduler: RunOnceScheduler;
-
-  private _signalLoop: IDisposable | undefined;
-
-  constructor(
-    msDelayTime: number,
-    msLoopTime: number | undefined,
-    @IAccessibilitySignalService
-    private readonly _accessibilitySignalService: IAccessibilitySignalService,
-  ) {
-    super();
-    this._scheduler = new RunOnceScheduler(() => {
-      this._signalLoop = this._accessibilitySignalService.playSignalLoop(
-        AccessibilitySignal.progress,
-        msLoopTime ?? PROGRESS_SIGNAL_LOOP_DELAY,
-      );
-    }, msDelayTime);
-    this._scheduler.schedule();
-  }
-
-  override dispose(): void {
-    super.dispose();
-    this._signalLoop?.dispose();
-    this._scheduler.dispose();
-  }
+	private _scheduler: RunOnceScheduler;
+	private _signalLoop: IDisposable | undefined;
+	constructor(msDelayTime: number, msLoopTime: number | undefined, @IAccessibilitySignalService private readonly _accessibilitySignalService: IAccessibilitySignalService) {
+		super();
+		this._scheduler = this._register(new RunOnceScheduler(() => {
+			this._signalLoop = this._accessibilitySignalService.playSignalLoop(AccessibilitySignal.progress, msLoopTime ?? PROGRESS_SIGNAL_LOOP_DELAY);
+		}, msDelayTime));
+		this._scheduler.schedule();
+	}
+	override dispose(): void {
+		super.dispose();
+		this._signalLoop?.dispose();
+		this._scheduler.dispose();
+	}
 }

@@ -5,7 +5,7 @@
 
 import { CancellationToken, CancellationTokenSource } from '../../../base/common/cancellation.js';
 import { isCancellationError } from '../../../base/common/errors.js';
-import { DisposableStore, IDisposable } from '../../../base/common/lifecycle.js';
+import { Disposable, DisposableMap, IDisposable } from '../../../base/common/lifecycle.js';
 import { isNative } from '../../../base/common/platform.js';
 import { URI, UriComponents } from '../../../base/common/uri.js';
 import { localize } from '../../../nls.js';
@@ -14,460 +14,315 @@ import { IFileService } from '../../../platform/files/common/files.js';
 import { IInstantiationService } from '../../../platform/instantiation/common/instantiation.js';
 import { ILabelService } from '../../../platform/label/common/label.js';
 import { INotificationService } from '../../../platform/notification/common/notification.js';
-import {
-  AuthInfo,
-  Credentials,
-  IRequestService,
-} from '../../../platform/request/common/request.js';
-import {
-  WorkspaceTrustRequestOptions,
-  IWorkspaceTrustManagementService,
-  IWorkspaceTrustRequestService,
-} from '../../../platform/workspace/common/workspaceTrust.js';
-import {
-  IWorkspace,
-  IWorkspaceContextService,
-  WorkbenchState,
-  isUntitledWorkspace,
-  WorkspaceFolder,
-} from '../../../platform/workspace/common/workspace.js';
-import {
-  extHostNamedCustomer,
-  IExtHostContext,
-} from '../../services/extensions/common/extHostCustomers.js';
+import { AuthInfo, Credentials, IRequestService } from '../../../platform/request/common/request.js';
+import { WorkspaceTrustRequestOptions, IWorkspaceTrustManagementService, IWorkspaceTrustRequestService, ResourceTrustRequestOptions } from '../../../platform/workspace/common/workspaceTrust.js';
+import { IWorkspace, IWorkspaceContextService, isUntitledWorkspace, WorkspaceFolder } from '../../../platform/workspace/common/workspace.js';
+import { extHostNamedCustomer, IExtHostContext } from '../../services/extensions/common/extHostCustomers.js';
 import { checkGlobFileExists } from '../../services/extensions/common/workspaceContains.js';
-import {
-  IFileQueryBuilderOptions,
-  ITextQueryBuilderOptions,
-  QueryBuilder,
-} from '../../services/search/common/queryBuilder.js';
+import { IFileQueryBuilderOptions, ITextQueryBuilderOptions, QueryBuilder } from '../../services/search/common/queryBuilder.js';
 import { IEditorService, ISaveEditorsResult } from '../../services/editor/common/editorService.js';
-import {
-  IFileMatch,
-  IPatternInfo,
-  ISearchProgressItem,
-  ISearchService,
-} from '../../services/search/common/search.js';
+import { IFileMatch, IPatternInfo, ISearchProgressItem, ISearchService } from '../../services/search/common/search.js';
 import { IWorkspaceEditingService } from '../../services/workspaces/common/workspaceEditing.js';
-import {
-  ExtHostContext,
-  ExtHostWorkspaceShape,
-  ITextSearchComplete,
-  IWorkspaceData,
-  MainContext,
-  MainThreadWorkspaceShape,
-} from '../common/extHost.protocol.js';
+import { ExtHostContext, ExtHostWorkspaceShape, ITextSearchComplete, IWorkspaceData, MainContext, MainThreadWorkspaceShape, ResourceTrustRequestOptionsDto } from '../common/extHost.protocol.js';
 import { IEditSessionIdentityService } from '../../../platform/workspace/common/editSessions.js';
 import { EditorResourceAccessor, SaveReason, SideBySideEditor } from '../../common/editor.js';
 import { coalesce } from '../../../base/common/arrays.js';
 import { ICanonicalUriService } from '../../../platform/workspace/common/canonicalUri.js';
 import { revive } from '../../../base/common/marshalling.js';
-import { bufferToStream, readableToBuffer, VSBuffer } from '../../../base/common/buffer.js';
 import { ITextFileService } from '../../services/textfile/common/textfiles.js';
-import { consumeStream } from '../../../base/common/stream.js';
 
 @extHostNamedCustomer(MainContext.MainThreadWorkspace)
-export class MainThreadWorkspace implements MainThreadWorkspaceShape {
-  private readonly _toDispose = new DisposableStore();
+export class MainThreadWorkspace extends Disposable implements MainThreadWorkspaceShape {
 
-  private readonly _activeCancelTokens: { [id: number]: CancellationTokenSource } =
-    Object.create(null);
+	private readonly _activeCancelTokens: { [id: number]: CancellationTokenSource } = Object.create(null);
+	private readonly _proxy: ExtHostWorkspaceShape;
+	private readonly _queryBuilder: QueryBuilder;
 
-  private readonly _proxy: ExtHostWorkspaceShape;
+	constructor(
+		extHostContext: IExtHostContext,
+		@ISearchService private readonly _searchService: ISearchService,
+		@IWorkspaceContextService private readonly _contextService: IWorkspaceContextService,
+		@IEditSessionIdentityService private readonly _editSessionIdentityService: IEditSessionIdentityService,
+		@ICanonicalUriService private readonly _canonicalUriService: ICanonicalUriService,
+		@IEditorService private readonly _editorService: IEditorService,
+		@IWorkspaceEditingService private readonly _workspaceEditingService: IWorkspaceEditingService,
+		@INotificationService private readonly _notificationService: INotificationService,
+		@IRequestService private readonly _requestService: IRequestService,
+		@IInstantiationService private readonly _instantiationService: IInstantiationService,
+		@ILabelService private readonly _labelService: ILabelService,
+		@IEnvironmentService private readonly _environmentService: IEnvironmentService,
+		@IFileService fileService: IFileService,
+		@IWorkspaceTrustManagementService private readonly _workspaceTrustManagementService: IWorkspaceTrustManagementService,
+		@IWorkspaceTrustRequestService private readonly _workspaceTrustRequestService: IWorkspaceTrustRequestService,
+		@ITextFileService private readonly _textFileService: ITextFileService,
+	) {
+		super();
+		this._queryBuilder = this._instantiationService.createInstance(QueryBuilder);
+		this._proxy = extHostContext.getProxy(ExtHostContext.ExtHostWorkspace);
+		const workspace = this._contextService.getWorkspace();
+		// The workspace file is provided be a unknown file system provider. It might come
+		// from the extension host. So initialize now knowing that `rootPath` is undefined.
+		if (workspace.configuration && !isNative && !fileService.hasProvider(workspace.configuration)) {
+			this._proxy.$initializeWorkspace(this.getWorkspaceData(workspace), this.isWorkspaceTrusted());
+		} else {
+			this._contextService.getCompleteWorkspace().then(workspace => this._proxy.$initializeWorkspace(this.getWorkspaceData(workspace), this.isWorkspaceTrusted()));
+		}
+		this._register(this._contextService.onDidChangeWorkspaceFolders(this._onDidChangeWorkspace, this));
+		this._register(this._contextService.onDidChangeWorkbenchState(this._onDidChangeWorkspace, this));
+		this._register(this._workspaceTrustManagementService.onDidChangeTrust(this._onDidGrantWorkspaceTrust, this));
+		this._register(this._workspaceTrustManagementService.onDidChangeTrustedFolders(this._onDidChangeWorkspaceTrustedFolders, this));
+	}
 
-  private readonly _queryBuilder: QueryBuilder;
+	override dispose(): void {
+		super.dispose();
 
-  constructor(
-    extHostContext: IExtHostContext,
-    @ISearchService private readonly _searchService: ISearchService,
-    @IWorkspaceContextService private readonly _contextService: IWorkspaceContextService,
-    @IEditSessionIdentityService
-    private readonly _editSessionIdentityService: IEditSessionIdentityService,
-    @ICanonicalUriService private readonly _canonicalUriService: ICanonicalUriService,
-    @IEditorService private readonly _editorService: IEditorService,
-    @IWorkspaceEditingService private readonly _workspaceEditingService: IWorkspaceEditingService,
-    @INotificationService private readonly _notificationService: INotificationService,
-    @IRequestService private readonly _requestService: IRequestService,
-    @IInstantiationService private readonly _instantiationService: IInstantiationService,
-    @ILabelService private readonly _labelService: ILabelService,
-    @IEnvironmentService private readonly _environmentService: IEnvironmentService,
-    @IFileService fileService: IFileService,
-    @IWorkspaceTrustManagementService
-    private readonly _workspaceTrustManagementService: IWorkspaceTrustManagementService,
-    @IWorkspaceTrustRequestService
-    private readonly _workspaceTrustRequestService: IWorkspaceTrustRequestService,
-    @ITextFileService private readonly _textFileService: ITextFileService,
-  ) {
-    this._queryBuilder = this._instantiationService.createInstance(QueryBuilder);
-    this._proxy = extHostContext.getProxy(ExtHostContext.ExtHostWorkspace);
-    const workspace = this._contextService.getWorkspace();
-    // The workspace file is provided be a unknown file system provider. It might come
-    // from the extension host. So initialize now knowing that `rootPath` is undefined.
-    if (workspace.configuration && !isNative && !fileService.hasProvider(workspace.configuration)) {
-      this._proxy.$initializeWorkspace(this.getWorkspaceData(workspace), this.isWorkspaceTrusted());
-    } else {
-      this._contextService
-        .getCompleteWorkspace()
-        .then((workspace) =>
-          this._proxy.$initializeWorkspace(
-            this.getWorkspaceData(workspace),
-            this.isWorkspaceTrusted(),
-          ),
-        );
-    }
-    this._contextService.onDidChangeWorkspaceFolders(
-      this._onDidChangeWorkspace,
-      this,
-      this._toDispose,
-    );
-    this._contextService.onDidChangeWorkbenchState(
-      this._onDidChangeWorkspace,
-      this,
-      this._toDispose,
-    );
-    this._workspaceTrustManagementService.onDidChangeTrust(
-      this._onDidGrantWorkspaceTrust,
-      this,
-      this._toDispose,
-    );
-  }
+		for (const requestId in this._activeCancelTokens) {
+			const tokenSource = this._activeCancelTokens[requestId];
+			tokenSource.cancel();
+		}
+	}
 
-  dispose(): void {
-    this._toDispose.dispose();
+	// --- workspace ---
 
-    for (const requestId in this._activeCancelTokens) {
-      const tokenSource = this._activeCancelTokens[requestId];
-      tokenSource.cancel();
-    }
-  }
+	$updateWorkspaceFolders(extensionName: string, index: number, deleteCount: number, foldersToAdd: { uri: UriComponents; name?: string }[]): Promise<void> {
+		const workspaceFoldersToAdd = foldersToAdd.map(f => ({ uri: URI.revive(f.uri), name: f.name }));
 
-  // --- workspace ---
+		// Indicate in status message
+		this._notificationService.status(this.getStatusMessage(extensionName, workspaceFoldersToAdd.length, deleteCount), { hideAfter: 10 * 1000 /* 10s */ });
 
-  $updateWorkspaceFolders(
-    extensionName: string,
-    index: number,
-    deleteCount: number,
-    foldersToAdd: { uri: UriComponents; name?: string }[],
-  ): Promise<void> {
-    const workspaceFoldersToAdd = foldersToAdd.map((f) => ({
-      uri: URI.revive(f.uri),
-      name: f.name,
-    }));
+		return this._workspaceEditingService.updateFolders(index, deleteCount, workspaceFoldersToAdd, true);
+	}
 
-    // Indicate in status message
-    this._notificationService.status(
-      this.getStatusMessage(extensionName, workspaceFoldersToAdd.length, deleteCount),
-      { hideAfter: 10 * 1000 /* 10s */ },
-    );
+	private getStatusMessage(extensionName: string, addCount: number, removeCount: number): string {
+		let message: string;
 
-    return this._workspaceEditingService.updateFolders(
-      index,
-      deleteCount,
-      workspaceFoldersToAdd,
-      true,
-    );
-  }
+		const wantsToAdd = addCount > 0;
+		const wantsToDelete = removeCount > 0;
 
-  private getStatusMessage(extensionName: string, addCount: number, removeCount: number): string {
-    let message: string;
+		// Add Folders
+		if (wantsToAdd && !wantsToDelete) {
+			if (addCount === 1) {
+				message = localize('folderStatusMessageAddSingleFolder', "Extension '{0}' added 1 folder to the workspace", extensionName);
+			} else {
+				message = localize('folderStatusMessageAddMultipleFolders', "Extension '{0}' added {1} folders to the workspace", extensionName, addCount);
+			}
+		}
 
-    const wantsToAdd = addCount > 0;
-    const wantsToDelete = removeCount > 0;
+		// Delete Folders
+		else if (wantsToDelete && !wantsToAdd) {
+			if (removeCount === 1) {
+				message = localize('folderStatusMessageRemoveSingleFolder', "Extension '{0}' removed 1 folder from the workspace", extensionName);
+			} else {
+				message = localize('folderStatusMessageRemoveMultipleFolders', "Extension '{0}' removed {1} folders from the workspace", extensionName, removeCount);
+			}
+		}
 
-    // Add Folders
-    if (wantsToAdd && !wantsToDelete) {
-      if (addCount === 1) {
-        message = localize(
-          'folderStatusMessageAddSingleFolder',
-          "Extension '{0}' added 1 folder to the workspace",
-          extensionName,
-        );
-      } else {
-        message = localize(
-          'folderStatusMessageAddMultipleFolders',
-          "Extension '{0}' added {1} folders to the workspace",
-          extensionName,
-          addCount,
-        );
-      }
-    }
+		// Change Folders
+		else {
+			message = localize('folderStatusChangeFolder', "Extension '{0}' changed folders of the workspace", extensionName);
+		}
 
-    // Delete Folders
-    else if (wantsToDelete && !wantsToAdd) {
-      if (removeCount === 1) {
-        message = localize(
-          'folderStatusMessageRemoveSingleFolder',
-          "Extension '{0}' removed 1 folder from the workspace",
-          extensionName,
-        );
-      } else {
-        message = localize(
-          'folderStatusMessageRemoveMultipleFolders',
-          "Extension '{0}' removed {1} folders from the workspace",
-          extensionName,
-          removeCount,
-        );
-      }
-    }
+		return message;
+	}
 
-    // Change Folders
-    else {
-      message = localize(
-        'folderStatusChangeFolder',
-        "Extension '{0}' changed folders of the workspace",
-        extensionName,
-      );
-    }
+	private _onDidChangeWorkspace(): void {
+		this._proxy.$acceptWorkspaceData(this.getWorkspaceData(this._contextService.getWorkspace()));
+	}
 
-    return message;
-  }
+	private getWorkspaceData(workspace: IWorkspace): IWorkspaceData | null {
+		if (!this._contextService.hasWorkspaceData()) {
+			return null;
+		}
+		return {
+			configuration: workspace.configuration || undefined,
+			isUntitled: workspace.configuration ? isUntitledWorkspace(workspace.configuration, this._environmentService) : false,
+			folders: workspace.folders,
+			id: workspace.id,
+			name: this._labelService.getWorkspaceLabel(workspace),
+			transient: workspace.transient,
+		};
+	}
 
-  private _onDidChangeWorkspace(): void {
-    this._proxy.$acceptWorkspaceData(this.getWorkspaceData(this._contextService.getWorkspace()));
-  }
+	// --- search ---
 
-  private getWorkspaceData(workspace: IWorkspace): IWorkspaceData | null {
-    if (this._contextService.getWorkbenchState() === WorkbenchState.EMPTY) {
-      return null;
-    }
-    return {
-      configuration: workspace.configuration || undefined,
-      isUntitled: workspace.configuration
-        ? isUntitledWorkspace(workspace.configuration, this._environmentService)
-        : false,
-      folders: workspace.folders,
-      id: workspace.id,
-      name: this._labelService.getWorkspaceLabel(workspace),
-      transient: workspace.transient,
-    };
-  }
+	$startFileSearch(_includeFolder: UriComponents | null, options: IFileQueryBuilderOptions<UriComponents>, token: CancellationToken): Promise<UriComponents[] | null> {
+		const includeFolder = URI.revive(_includeFolder);
+		const workspace = this._contextService.getWorkspace();
 
-  // --- search ---
+		const query = this._queryBuilder.file(
+			includeFolder ? [includeFolder] : workspace.folders,
+			revive(options)
+		);
 
-  $startFileSearch(
-    _includeFolder: UriComponents | null,
-    options: IFileQueryBuilderOptions<UriComponents>,
-    token: CancellationToken,
-  ): Promise<UriComponents[] | null> {
-    const includeFolder = URI.revive(_includeFolder);
-    const workspace = this._contextService.getWorkspace();
+		return this._searchService.fileSearch(query, token).then(result => {
+			return result.results.map(m => m.resource);
+		}, err => {
+			if (!isCancellationError(err)) {
+				return Promise.reject(err);
+			}
+			return null;
+		});
+	}
 
-    const query = this._queryBuilder.file(
-      includeFolder ? [includeFolder] : workspace.folders,
-      revive(options),
-    );
+	$startTextSearch(pattern: IPatternInfo, _folder: UriComponents | null, options: ITextQueryBuilderOptions<UriComponents>, requestId: number, token: CancellationToken): Promise<ITextSearchComplete | null> {
+		const folder = URI.revive(_folder);
+		const workspace = this._contextService.getWorkspace();
+		const folders = folder ? [folder] : workspace.folders.map(folder => folder.uri);
 
-    return this._searchService.fileSearch(query, token).then(
-      (result) => result.results.map((m) => m.resource),
-      (err) => {
-        if (!isCancellationError(err)) {
-          return Promise.reject(err);
-        }
-        return null;
-      },
-    );
-  }
+		const query = this._queryBuilder.text(pattern, folders, revive(options));
+		query._reason = 'startTextSearch';
 
-  $startTextSearch(
-    pattern: IPatternInfo,
-    _folder: UriComponents | null,
-    options: ITextQueryBuilderOptions<UriComponents>,
-    requestId: number,
-    token: CancellationToken,
-  ): Promise<ITextSearchComplete | null> {
-    const folder = URI.revive(_folder);
-    const workspace = this._contextService.getWorkspace();
-    const folders = folder ? [folder] : workspace.folders.map((folder) => folder.uri);
+		const onProgress = (p: ISearchProgressItem) => {
+			if ((<IFileMatch>p).results) {
+				this._proxy.$handleTextSearchResult(<IFileMatch>p, requestId);
+			}
+		};
 
-    const query = this._queryBuilder.text(pattern, folders, revive(options));
-    query._reason = 'startTextSearch';
+		const search = this._searchService.textSearch(query, token, onProgress).then(
+			result => {
+				return { limitHit: result.limitHit };
+			},
+			err => {
+				if (!isCancellationError(err)) {
+					return Promise.reject(err);
+				}
 
-    const onProgress = (p: ISearchProgressItem) => {
-      if ((<IFileMatch>p).results) {
-        this._proxy.$handleTextSearchResult(<IFileMatch>p, requestId);
-      }
-    };
+				return null;
+			});
 
-    const search = this._searchService.textSearch(query, token, onProgress).then(
-      (result) => ({ limitHit: result.limitHit }),
-      (err) => {
-        if (!isCancellationError(err)) {
-          return Promise.reject(err);
-        }
+		return search;
+	}
 
-        return null;
-      },
-    );
+	$checkExists(folders: readonly UriComponents[], includes: string[], token: CancellationToken): Promise<boolean> {
+		return this._instantiationService.invokeFunction((accessor) => checkGlobFileExists(accessor, folders, includes, token));
+	}
 
-    return search;
-  }
+	// --- save & edit resources ---
 
-  $checkExists(
-    folders: readonly UriComponents[],
-    includes: string[],
-    token: CancellationToken,
-  ): Promise<boolean> {
-    return this._instantiationService.invokeFunction((accessor) =>
-      checkGlobFileExists(accessor, folders, includes, token),
-    );
-  }
+	async $save(uriComponents: UriComponents, options: { saveAs: boolean }): Promise<UriComponents | undefined> {
+		const uri = URI.revive(uriComponents);
 
-  // --- save & edit resources ---
+		const editors = [...this._editorService.findEditors(uri, { supportSideBySide: SideBySideEditor.PRIMARY })];
+		const result = await this._editorService.save(editors, {
+			reason: SaveReason.EXPLICIT,
+			saveAs: options.saveAs,
+			force: !options.saveAs
+		});
 
-  async $save(
-    uriComponents: UriComponents,
-    options: { saveAs: boolean },
-  ): Promise<UriComponents | undefined> {
-    const uri = URI.revive(uriComponents);
+		return this._saveResultToUris(result).at(0);
+	}
 
-    const editors = [
-      ...this._editorService.findEditors(uri, { supportSideBySide: SideBySideEditor.PRIMARY }),
-    ];
-    const result = await this._editorService.save(editors, {
-      reason: SaveReason.EXPLICIT,
-      saveAs: options.saveAs,
-      force: !options.saveAs,
-    });
+	private _saveResultToUris(result: ISaveEditorsResult): URI[] {
+		if (!result.success) {
+			return [];
+		}
 
-    return this._saveResultToUris(result).at(0);
-  }
+		return coalesce(result.editors.map(editor => EditorResourceAccessor.getCanonicalUri(editor, { supportSideBySide: SideBySideEditor.PRIMARY })));
+	}
 
-  private _saveResultToUris(result: ISaveEditorsResult): URI[] {
-    if (!result.success) {
-      return [];
-    }
+	$saveAll(includeUntitled?: boolean): Promise<boolean> {
+		return this._editorService.saveAll({ includeUntitled }).then(res => res.success);
+	}
 
-    return coalesce(
-      result.editors.map((editor) =>
-        EditorResourceAccessor.getCanonicalUri(editor, {
-          supportSideBySide: SideBySideEditor.PRIMARY,
-        }),
-      ),
-    );
-  }
+	$resolveProxy(url: string): Promise<string | undefined> {
+		return this._requestService.resolveProxy(url);
+	}
 
-  $saveAll(includeUntitled?: boolean): Promise<boolean> {
-    return this._editorService.saveAll({ includeUntitled }).then((res) => res.success);
-  }
+	$lookupAuthorization(authInfo: AuthInfo): Promise<Credentials | undefined> {
+		return this._requestService.lookupAuthorization(authInfo);
+	}
 
-  $resolveProxy(url: string): Promise<string | undefined> {
-    return this._requestService.resolveProxy(url);
-  }
+	$lookupKerberosAuthorization(url: string): Promise<string | undefined> {
+		return this._requestService.lookupKerberosAuthorization(url);
+	}
 
-  $lookupAuthorization(authInfo: AuthInfo): Promise<Credentials | undefined> {
-    return this._requestService.lookupAuthorization(authInfo);
-  }
+	$loadCertificates(): Promise<string[]> {
+		return this._requestService.loadCertificates();
+	}
 
-  $lookupKerberosAuthorization(url: string): Promise<string | undefined> {
-    return this._requestService.lookupKerberosAuthorization(url);
-  }
+	// --- trust ---
 
-  $loadCertificates(): Promise<string[]> {
-    return this._requestService.loadCertificates();
-  }
+	$requestResourceTrust(optionsDto: ResourceTrustRequestOptionsDto): Promise<boolean | undefined> {
+		const options = { ...optionsDto, uri: URI.revive(optionsDto.uri) } satisfies ResourceTrustRequestOptions;
+		return this._workspaceTrustRequestService.requestResourcesTrust(options);
+	}
 
-  // --- trust ---
+	$requestWorkspaceTrust(options?: WorkspaceTrustRequestOptions): Promise<boolean | undefined> {
+		return this._workspaceTrustRequestService.requestWorkspaceTrust(options);
+	}
 
-  $requestWorkspaceTrust(options?: WorkspaceTrustRequestOptions): Promise<boolean | undefined> {
-    return this._workspaceTrustRequestService.requestWorkspaceTrust(options);
-  }
+	async $isResourceTrusted(resource: UriComponents): Promise<boolean> {
+		const uri = URI.revive(resource);
+		const trustInfo = await this._workspaceTrustManagementService.getUriTrustInfo(uri);
+		return trustInfo.trusted;
+	}
 
-  private isWorkspaceTrusted(): boolean {
-    return this._workspaceTrustManagementService.isWorkspaceTrusted();
-  }
+	private isWorkspaceTrusted(): boolean {
+		return this._workspaceTrustManagementService.isWorkspaceTrusted();
+	}
 
-  private _onDidGrantWorkspaceTrust(): void {
-    this._proxy.$onDidGrantWorkspaceTrust();
-  }
+	private _onDidGrantWorkspaceTrust(): void {
+		this._proxy.$onDidGrantWorkspaceTrust();
+	}
 
-  // --- edit sessions ---
-  private registeredEditSessionProviders = new Map<number, IDisposable>();
+	private _onDidChangeWorkspaceTrustedFolders(): void {
+		this._proxy.$onDidChangeWorkspaceTrustedFolders();
+	}
 
-  $registerEditSessionIdentityProvider(handle: number, scheme: string) {
-    const disposable = this._editSessionIdentityService.registerEditSessionIdentityProvider({
-      scheme,
-      getEditSessionIdentifier: async (
-        workspaceFolder: WorkspaceFolder,
-        token: CancellationToken,
-      ) => this._proxy.$getEditSessionIdentifier(workspaceFolder.uri, token),
-      provideEditSessionIdentityMatch: async (
-        workspaceFolder: WorkspaceFolder,
-        identity1: string,
-        identity2: string,
-        token: CancellationToken,
-      ) =>
-        this._proxy.$provideEditSessionIdentityMatch(
-          workspaceFolder.uri,
-          identity1,
-          identity2,
-          token,
-        ),
-    });
+	// --- edit sessions ---
+	private registeredEditSessionProviders = this._register(new DisposableMap<number, IDisposable>());
 
-    this.registeredEditSessionProviders.set(handle, disposable);
-    this._toDispose.add(disposable);
-  }
+	$registerEditSessionIdentityProvider(handle: number, scheme: string) {
+		const disposable = this._editSessionIdentityService.registerEditSessionIdentityProvider({
+			scheme: scheme,
+			getEditSessionIdentifier: async (workspaceFolder: WorkspaceFolder, token: CancellationToken) => {
+				return this._proxy.$getEditSessionIdentifier(workspaceFolder.uri, token);
+			},
+			provideEditSessionIdentityMatch: async (workspaceFolder: WorkspaceFolder, identity1: string, identity2: string, token: CancellationToken) => {
+				return this._proxy.$provideEditSessionIdentityMatch(workspaceFolder.uri, identity1, identity2, token);
+			}
+		});
 
-  $unregisterEditSessionIdentityProvider(handle: number) {
-    const disposable = this.registeredEditSessionProviders.get(handle);
-    disposable?.dispose();
-    this.registeredEditSessionProviders.delete(handle);
-  }
+		this.registeredEditSessionProviders.set(handle, disposable);
+	}
 
-  // --- canonical uri identities ---
-  private registeredCanonicalUriProviders = new Map<number, IDisposable>();
+	$unregisterEditSessionIdentityProvider(handle: number) {
+		this.registeredEditSessionProviders.deleteAndDispose(handle);
+	}
 
-  $registerCanonicalUriProvider(handle: number, scheme: string) {
-    const disposable = this._canonicalUriService.registerCanonicalUriProvider({
-      scheme,
-      provideCanonicalUri: async (
-        uri: UriComponents,
-        targetScheme: string,
-        token: CancellationToken,
-      ) => {
-        const result = await this._proxy.$provideCanonicalUri(uri, targetScheme, token);
-        if (result) {
-          return URI.revive(result);
-        }
-        return result;
-      },
-    });
+	// --- canonical uri identities ---
+	private registeredCanonicalUriProviders = this._register(new DisposableMap<number, IDisposable>());
 
-    this.registeredCanonicalUriProviders.set(handle, disposable);
-    this._toDispose.add(disposable);
-  }
+	$registerCanonicalUriProvider(handle: number, scheme: string) {
+		const disposable = this._canonicalUriService.registerCanonicalUriProvider({
+			scheme: scheme,
+			provideCanonicalUri: async (uri: UriComponents, targetScheme: string, token: CancellationToken) => {
+				const result = await this._proxy.$provideCanonicalUri(uri, targetScheme, token);
+				if (result) {
+					return URI.revive(result);
+				}
+				return result;
+			}
+		});
 
-  $unregisterCanonicalUriProvider(handle: number) {
-    const disposable = this.registeredCanonicalUriProviders.get(handle);
-    disposable?.dispose();
-    this.registeredCanonicalUriProviders.delete(handle);
-  }
+		this.registeredCanonicalUriProviders.set(handle, disposable);
+	}
 
-  // --- encodings
+	$unregisterCanonicalUriProvider(handle: number) {
+		this.registeredCanonicalUriProviders.deleteAndDispose(handle);
+	}
 
-  async $decode(
-    content: VSBuffer,
-    resource: UriComponents | undefined,
-    options?: { encoding: string },
-  ): Promise<string> {
-    const stream = await this._textFileService.getDecodedStream(
-      URI.revive(resource) ?? undefined,
-      bufferToStream(content),
-      { acceptTextOnly: true, encoding: options?.encoding },
-    );
-    return consumeStream(stream, (chunks) => chunks.join());
-  }
+	// --- encodings
 
-  async $encode(
-    content: string,
-    resource: UriComponents | undefined,
-    options?: { encoding: string },
-  ): Promise<VSBuffer> {
-    const res = await this._textFileService.getEncodedReadable(
-      URI.revive(resource) ?? undefined,
-      content,
-      { encoding: options?.encoding },
-    );
-    return res instanceof VSBuffer ? res : readableToBuffer(res);
-  }
+	$resolveDecoding(resource: UriComponents | undefined, options?: { encoding: string }): Promise<{ preferredEncoding: string; guessEncoding: boolean; candidateGuessEncodings: string[] }> {
+		return this._textFileService.resolveDecoding(URI.revive(resource), options);
+	}
+
+	$validateDetectedEncoding(resource: UriComponents | undefined, detectedEncoding: string, options?: { encoding?: string }): Promise<string> {
+		return this._textFileService.validateDetectedEncoding(URI.revive(resource), detectedEncoding, options);
+	}
+
+	$resolveEncoding(resource: UriComponents | undefined, options?: { encoding: string }): Promise<{ encoding: string; addBOM: boolean }> {
+		return this._textFileService.resolveEncoding(URI.revive(resource), options);
+	}
 }

@@ -4,17 +4,10 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { IContextMenuProvider } from '../../contextmenu.js';
-import {
-  $,
-  addDisposableListener,
-  append,
-  EventHelper,
-  EventType,
-  isMouseEvent,
-} from '../../dom.js';
+import { $, addDisposableListener, append, EventHelper, EventType, isMouseEvent } from '../../dom.js';
 import { StandardKeyboardEvent } from '../../keyboardEvent.js';
 import { EventType as GestureEventType, Gesture } from '../../touch.js';
-import { AnchorAlignment } from '../contextview/contextview.js';
+import { AnchorAlignment, contextViewMenuCloseAnimation, CONTEXT_VIEW_MENU_MOTION_CLASS, IContextViewCloseAnimation } from '../contextview/contextview.js';
 import type { IManagedHover } from '../hover/hover.js';
 import { getBaseLayerHoverDelegate } from '../hover/hoverDelegate2.js';
 import { getDefaultHoverDelegate } from '../hover/hoverDelegateFactory.js';
@@ -26,244 +19,242 @@ import { IDisposable } from '../../../common/lifecycle.js';
 import './dropdown.css';
 
 export interface ILabelRenderer {
-  (container: HTMLElement): IDisposable | null;
+	(container: HTMLElement): IDisposable | null;
 }
 
-interface IBaseDropdownOptions {
-  label?: string;
-  labelRenderer?: ILabelRenderer;
+export interface IBaseDropdownOptions {
+	label?: string;
+	labelRenderer?: ILabelRenderer;
+	isEnabled?: () => boolean;
 }
 
-class BaseDropdown extends ActionRunner {
-  private _element: HTMLElement;
+export class BaseDropdown extends ActionRunner {
+	private _element: HTMLElement;
+	private boxContainer?: HTMLElement;
+	private _label?: HTMLElement;
+	private contents?: HTMLElement;
 
-  private boxContainer?: HTMLElement;
+	private visible: boolean | undefined;
+	private _onDidChangeVisibility = this._register(new Emitter<boolean>());
+	readonly onDidChangeVisibility = this._onDidChangeVisibility.event;
 
-  private _label?: HTMLElement;
+	private hover: IManagedHover | undefined;
 
-  private contents?: HTMLElement;
+	constructor(container: HTMLElement, private readonly baseOptions: IBaseDropdownOptions) {
+		super();
 
-  private visible: boolean | undefined;
+		this._element = append(container, $('.monaco-dropdown'));
 
-  private _onDidChangeVisibility = this._register(new Emitter<boolean>());
+		this._label = append(this._element, $('.dropdown-label'));
 
-  readonly onDidChangeVisibility = this._onDidChangeVisibility.event;
+		let labelRenderer = baseOptions.labelRenderer;
+		if (!labelRenderer) {
+			labelRenderer = (container: HTMLElement): IDisposable | null => {
+				container.textContent = baseOptions.label || '';
 
-  private hover: IManagedHover | undefined;
+				return null;
+			};
+		}
 
-  constructor(container: HTMLElement, options: IBaseDropdownOptions) {
-    super();
+		for (const event of [EventType.CLICK, EventType.MOUSE_DOWN, GestureEventType.Tap]) {
+			this._register(addDisposableListener(this.element, event, e => EventHelper.stop(e, true))); // prevent default click behaviour to trigger
+		}
 
-    this._element = append(container, $('.monaco-dropdown'));
+		for (const event of [EventType.MOUSE_DOWN, GestureEventType.Tap]) {
+			this._register(addDisposableListener(this._label, event, e => {
+				if (baseOptions.isEnabled?.() === false) {
+					return;
+				}
 
-    this._label = append(this._element, $('.dropdown-label'));
+				if (isMouseEvent(e) && e.button !== 0) {
+					// prevent right click trigger to allow separate context menu (https://github.com/microsoft/vscode/issues/151064)
+					return;
+				}
 
-    let labelRenderer = options.labelRenderer;
-    if (!labelRenderer) {
-      labelRenderer = (container: HTMLElement): IDisposable | null => {
-        container.textContent = options.label || '';
+				if (this.visible) {
+					this.hide();
+				} else {
+					this.show();
+				}
+			}));
+		}
 
-        return null;
-      };
-    }
+		this._register(addDisposableListener(this._label, EventType.KEY_DOWN, e => {
+			const event = new StandardKeyboardEvent(e);
+			if (event.equals(KeyCode.Enter) || event.equals(KeyCode.Space)) {
+				EventHelper.stop(e, true); // https://github.com/microsoft/vscode/issues/57997
 
-    for (const event of [EventType.CLICK, EventType.MOUSE_DOWN, GestureEventType.Tap]) {
-      this._register(addDisposableListener(this.element, event, (e) => EventHelper.stop(e, true))); // prevent default click behaviour to trigger
-    }
+				if (baseOptions.isEnabled?.() === false) {
+					return;
+				}
 
-    for (const event of [EventType.MOUSE_DOWN, GestureEventType.Tap]) {
-      this._register(
-        addDisposableListener(this._label, event, (e) => {
-          if (isMouseEvent(e) && (e.detail > 1 || e.button !== 0)) {
-            // prevent right click trigger to allow separate context menu (https://github.com/microsoft/vscode/issues/151064)
-            // prevent multiple clicks to open multiple context menus (https://github.com/microsoft/vscode/issues/41363)
-            return;
-          }
+				if (this.visible) {
+					this.hide();
+				} else {
+					this.show();
+				}
+			}
+		}));
 
-          if (this.visible) {
-            this.hide();
-          } else {
-            this.show();
-          }
-        }),
-      );
-    }
+		const cleanupFn = labelRenderer(this._label);
+		if (cleanupFn) {
+			this._register(cleanupFn);
+		}
 
-    this._register(
-      addDisposableListener(this._label, EventType.KEY_DOWN, (e) => {
-        const event = new StandardKeyboardEvent(e);
-        if (event.equals(KeyCode.Enter) || event.equals(KeyCode.Space)) {
-          EventHelper.stop(e, true); // https://github.com/microsoft/vscode/issues/57997
+		this._register(Gesture.addTarget(this._label));
+	}
 
-          if (this.visible) {
-            this.hide();
-          } else {
-            this.show();
-          }
-        }
-      }),
-    );
+	get element(): HTMLElement {
+		return this._element;
+	}
 
-    const cleanupFn = labelRenderer(this._label);
-    if (cleanupFn) {
-      this._register(cleanupFn);
-    }
+	get label() {
+		return this._label;
+	}
 
-    this._register(Gesture.addTarget(this._label));
-  }
+	set tooltip(tooltip: string) {
+		if (this._label) {
+			if (!this.hover && tooltip !== '') {
+				this.hover = this._register(getBaseLayerHoverDelegate().setupManagedHover(getDefaultHoverDelegate('mouse'), this._label, tooltip));
+			} else if (this.hover) {
+				this.hover.update(tooltip);
+			}
+		}
+	}
 
-  get element(): HTMLElement {
-    return this._element;
-  }
+	show(): void {
+		if (!this.visible && this.baseOptions.isEnabled?.() !== false) {
+			this.visible = true;
+			this._onDidChangeVisibility.fire(true);
+		}
+	}
 
-  get label() {
-    return this._label;
-  }
+	hide(): void {
+		if (this.visible) {
+			this.visible = false;
+			this._onDidChangeVisibility.fire(false);
+		}
+	}
 
-  set tooltip(tooltip: string) {
-    if (this._label) {
-      if (!this.hover && tooltip !== '') {
-        this.hover = this._register(
-          getBaseLayerHoverDelegate().setupManagedHover(
-            getDefaultHoverDelegate('mouse'),
-            this._label,
-            tooltip,
-          ),
-        );
-      } else if (this.hover) {
-        this.hover.update(tooltip);
-      }
-    }
-  }
+	isVisible(): boolean {
+		return !!this.visible;
+	}
 
-  show(): void {
-    if (!this.visible) {
-      this.visible = true;
-      this._onDidChangeVisibility.fire(true);
-    }
-  }
+	protected onEvent(_e: Event, activeElement: HTMLElement): void {
+		this.hide();
+	}
 
-  hide(): void {
-    if (this.visible) {
-      this.visible = false;
-      this._onDidChangeVisibility.fire(false);
-    }
-  }
+	override dispose(): void {
+		super.dispose();
+		this.hide();
 
-  isVisible(): boolean {
-    return !!this.visible;
-  }
+		if (this.boxContainer) {
+			this.boxContainer.remove();
+			this.boxContainer = undefined;
+		}
 
-  protected onEvent(_e: Event, activeElement: HTMLElement): void {
-    this.hide();
-  }
+		if (this.contents) {
+			this.contents.remove();
+			this.contents = undefined;
+		}
 
-  override dispose(): void {
-    super.dispose();
-    this.hide();
-
-    if (this.boxContainer) {
-      this.boxContainer.remove();
-      this.boxContainer = undefined;
-    }
-
-    if (this.contents) {
-      this.contents.remove();
-      this.contents = undefined;
-    }
-
-    if (this._label) {
-      this._label.remove();
-      this._label = undefined;
-    }
-  }
+		if (this._label) {
+			this._label.remove();
+			this._label = undefined;
+		}
+	}
 }
 
 export interface IActionProvider {
-  getActions(): readonly IAction[];
+	getActions(): readonly IAction[];
 }
 
 export function isActionProvider(obj: unknown): obj is IActionProvider {
-  const candidate = obj as IActionProvider | undefined;
+	const candidate = obj as IActionProvider | undefined;
 
-  return typeof candidate?.getActions === 'function';
+	return typeof candidate?.getActions === 'function';
 }
 
 export interface IDropdownMenuOptions extends IBaseDropdownOptions {
-  contextMenuProvider: IContextMenuProvider;
-  readonly actions?: IAction[];
-  readonly actionProvider?: IActionProvider;
-  menuClassName?: string;
-  menuAsChild?: boolean; // scope down for #99448
-  readonly skipTelemetry?: boolean;
+	contextMenuProvider: IContextMenuProvider;
+	readonly actions?: IAction[];
+	readonly actionProvider?: IActionProvider;
+	menuClassName?: string;
+	closeAnimation?: IContextViewCloseAnimation;
+	getAnchor?: () => HTMLElement;
+	menuAsChild?: boolean; // scope down for #99448
+	readonly skipTelemetry?: boolean;
 }
 
 export class DropdownMenu extends BaseDropdown {
-  private _menuOptions: IMenuOptions | undefined;
+	private _menuOptions: IMenuOptions | undefined;
+	private _actions: readonly IAction[] = [];
 
-  private _actions: readonly IAction[] = [];
+	constructor(container: HTMLElement, private readonly _options: IDropdownMenuOptions) {
+		super(container, _options);
 
-  constructor(
-    container: HTMLElement,
-    private readonly _options: IDropdownMenuOptions,
-  ) {
-    super(container, _options);
+		this.actions = _options.actions || [];
+	}
 
-    this.actions = _options.actions || [];
-  }
+	set menuOptions(options: IMenuOptions | undefined) {
+		this._menuOptions = options;
+	}
 
-  set menuOptions(options: IMenuOptions | undefined) {
-    this._menuOptions = options;
-  }
+	get menuOptions(): IMenuOptions | undefined {
+		return this._menuOptions;
+	}
 
-  get menuOptions(): IMenuOptions | undefined {
-    return this._menuOptions;
-  }
+	private get actions(): readonly IAction[] {
+		if (this._options.actionProvider) {
+			return this._options.actionProvider.getActions();
+		}
 
-  private get actions(): readonly IAction[] {
-    if (this._options.actionProvider) {
-      return this._options.actionProvider.getActions();
-    }
+		return this._actions;
+	}
 
-    return this._actions;
-  }
+	private set actions(actions: readonly IAction[]) {
+		this._actions = actions;
+	}
 
-  private set actions(actions: readonly IAction[]) {
-    this._actions = actions;
-  }
+	override show(): void {
+		if (this._options.isEnabled?.() === false) {
+			return;
+		}
 
-  override show(): void {
-    super.show();
+		super.show();
 
-    this.element.classList.add('active');
+		this.element.classList.add('active');
 
-    this._options.contextMenuProvider.showContextMenu({
-      getAnchor: () => this.element,
-      getActions: () => this.actions,
-      getActionsContext: () => (this.menuOptions ? this.menuOptions.context : null),
-      getActionViewItem: (action, options) =>
-        this.menuOptions && this.menuOptions.actionViewItemProvider
-          ? this.menuOptions.actionViewItemProvider(action, options)
-          : undefined,
-      getKeyBinding: (action) =>
-        this.menuOptions && this.menuOptions.getKeyBinding
-          ? this.menuOptions.getKeyBinding(action)
-          : undefined,
-      getMenuClassName: () => this._options.menuClassName || '',
-      onHide: () => this.onHide(),
-      actionRunner: this.menuOptions ? this.menuOptions.actionRunner : undefined,
-      anchorAlignment: this.menuOptions ? this.menuOptions.anchorAlignment : AnchorAlignment.LEFT,
-      domForShadowRoot: this._options.menuAsChild ? this.element : undefined,
-      skipTelemetry: this._options.skipTelemetry,
-    });
-  }
+		this._options.contextMenuProvider.showContextMenu({
+			getAnchor: () => this._options.getAnchor?.() ?? this.element,
+			getActions: () => this.actions,
+			getActionsContext: () => this.menuOptions ? this.menuOptions.context : null,
+			getActionViewItem: (action, options) => this.menuOptions && this.menuOptions.actionViewItemProvider ? this.menuOptions.actionViewItemProvider(action, options) : undefined,
+			getKeyBinding: action => this.menuOptions && this.menuOptions.getKeyBinding ? this.menuOptions.getKeyBinding(action) : undefined,
+			getMenuClassName: () => this.getMenuClassName(),
+			closeAnimation: this._options.closeAnimation ?? contextViewMenuCloseAnimation,
+			onHide: () => this.onHide(),
+			actionRunner: this.menuOptions ? this.menuOptions.actionRunner : undefined,
+			anchorAlignment: this.menuOptions ? this.menuOptions.anchorAlignment : AnchorAlignment.LEFT,
+			domForShadowRoot: this._options.menuAsChild ? this.element : undefined,
+			skipTelemetry: this._options.skipTelemetry
+		});
+	}
 
-  override hide(): void {
-    super.hide();
-  }
+	private getMenuClassName(): string {
+		const classNames = this._options.menuClassName?.split(/\s+/).filter(Boolean) ?? [];
+		if (!classNames.includes(CONTEXT_VIEW_MENU_MOTION_CLASS)) {
+			classNames.push(CONTEXT_VIEW_MENU_MOTION_CLASS);
+		}
+		return classNames.join(' ');
+	}
 
-  private onHide(): void {
-    this.hide();
-    this.element.classList.remove('active');
-  }
+	override hide(): void {
+		super.hide();
+	}
+
+	private onHide(): void {
+		this.hide();
+		this.element.classList.remove('active');
+	}
 }

@@ -2,7 +2,7 @@
   "name": "tunnel-forwarding",
   "displayName": "%displayName%",
   "description": "%description%",
-  "version": "1.0.0",
+  "version": "10.0.0",
   "publisher": "vscode",
   "license": "MIT",
   "engines": {
@@ -40,11 +40,11 @@
   },
   "main": "./out/extension",
   "scripts": {
-    "compile": "node ../../scripts/build/main.mjs run compile-extension:tunnel-forwarding",
-    "watch": "node ../../scripts/build/main.mjs run watch-extension:tunnel-forwarding"
+    "compile": "gulp compile-extension:tunnel-forwarding",
+    "watch": "gulp watch-extension:tunnel-forwarding"
   },
   "devDependencies": {
-    "@types/node": "20.x"
+    "@types/node": "24.x"
   },
   "prettier": {
     "printWidth": 100,

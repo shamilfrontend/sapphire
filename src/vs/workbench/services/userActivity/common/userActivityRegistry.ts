@@ -7,17 +7,17 @@ import { IInstantiationService } from '../../../../platform/instantiation/common
 import { IUserActivityService } from './userActivityService.js';
 
 class UserActivityRegistry {
-  private todo: { new (s: IUserActivityService, ...args: any[]): unknown }[] = [];
+	private todo: { new(s: IUserActivityService, ...args: unknown[]): unknown }[] = [];
 
-  public add = (ctor: { new (s: IUserActivityService, ...args: any[]): unknown }) => {
-    this.todo.push(ctor);
-  };
+	public add = (ctor: { new(s: IUserActivityService, ...args: unknown[]): unknown }) => {
+		this.todo.push(ctor);
+	};
 
-  public take(userActivityService: IUserActivityService, instantiation: IInstantiationService) {
-    this.add = (ctor) => instantiation.createInstance(ctor, userActivityService);
-    this.todo.forEach(this.add);
-    this.todo = [];
-  }
+	public take(userActivityService: IUserActivityService, instantiation: IInstantiationService) {
+		this.add = ctor => instantiation.createInstance(ctor, userActivityService);
+		this.todo.forEach(this.add);
+		this.todo = [];
+	}
 }
 
 export const userActivityRegistry = new UserActivityRegistry();

@@ -4,29 +4,22 @@
  *--------------------------------------------------------------------------------------------*/
 
 import type { IConfigurationNode } from '../../../platform/configuration/common/configurationRegistry.js';
-import {
-  TerminalAccessibilityCommandId,
-  defaultTerminalAccessibilityCommandsToSkipShell,
-} from '../terminalContrib/accessibility/common/terminal.accessibility.js';
+import { TerminalAccessibilityCommandId, defaultTerminalAccessibilityCommandsToSkipShell } from '../terminalContrib/accessibility/common/terminal.accessibility.js';
 import { terminalAccessibilityConfiguration } from '../terminalContrib/accessibility/common/terminalAccessibilityConfiguration.js';
 import { terminalAutoRepliesConfiguration } from '../terminalContrib/autoReplies/common/terminalAutoRepliesConfiguration.js';
-import { terminalInitialHintConfiguration } from '../terminalContrib/chat/common/terminalInitialHintConfiguration.js';
+import { TerminalChatCommandId, TerminalChatContextKeyStrings } from '../terminalContrib/chat/browser/terminalChat.js';
+import { terminalInitialHintConfiguration } from '../terminalContrib/inlineHint/common/terminalInitialHintConfiguration.js';
+import { terminalChatAgentToolsConfiguration, TerminalChatAgentToolsSettingId } from '../terminalContrib/chatAgentTools/common/terminalChatAgentToolsConfiguration.js';
+import { AgentSandboxSettingId } from '../../../platform/sandbox/common/settings.js';
 import { terminalCommandGuideConfiguration } from '../terminalContrib/commandGuide/common/terminalCommandGuideConfiguration.js';
 import { TerminalDeveloperCommandId } from '../terminalContrib/developer/common/terminal.developer.js';
 import { defaultTerminalFindCommandToSkipShell } from '../terminalContrib/find/common/terminal.find.js';
-import {
-  defaultTerminalHistoryCommandsToSkipShell,
-  terminalHistoryConfiguration,
-} from '../terminalContrib/history/common/terminal.history.js';
-import {
-  TerminalStickyScrollSettingId,
-  terminalStickyScrollConfiguration,
-} from '../terminalContrib/stickyScroll/common/terminalStickyScrollConfiguration.js';
+import { defaultTerminalHistoryCommandsToSkipShell, terminalHistoryConfiguration } from '../terminalContrib/history/common/terminal.history.js';
+import { terminalOscNotificationsConfiguration } from '../terminalContrib/notification/common/terminalNotificationConfiguration.js';
+import { terminalResizeDimensionsOverlayConfiguration } from '../terminalContrib/resizeDimensionsOverlay/common/terminalResizeDimensionsOverlayConfiguration.js';
+import { TerminalStickyScrollSettingId, terminalStickyScrollConfiguration } from '../terminalContrib/stickyScroll/common/terminalStickyScrollConfiguration.js';
 import { defaultTerminalSuggestCommandsToSkipShell } from '../terminalContrib/suggest/common/terminal.suggest.js';
-import {
-  TerminalSuggestSettingId,
-  terminalSuggestConfiguration,
-} from '../terminalContrib/suggest/common/terminalSuggestConfiguration.js';
+import { TerminalSuggestSettingId, terminalSuggestConfiguration } from '../terminalContrib/suggest/common/terminalSuggestConfiguration.js';
 import { terminalTypeAheadConfiguration } from '../terminalContrib/typeAhead/common/terminalTypeAheadConfiguration.js';
 import { terminalZoomConfiguration } from '../terminalContrib/zoom/common/terminal.zoom.js';
 
@@ -34,37 +27,69 @@ import { terminalZoomConfiguration } from '../terminalContrib/zoom/common/termin
 // soft layer breakers between `terminal/` and `terminalContrib/` but there are difficulties in
 // removing the dependency. These are explicitly defined here to avoid an eslint line override.
 export const enum TerminalContribCommandId {
-  A11yFocusAccessibleBuffer = TerminalAccessibilityCommandId.FocusAccessibleBuffer,
-  DeveloperRestartPtyHost = TerminalDeveloperCommandId.RestartPtyHost,
+	A11yFocusAccessibleBuffer = TerminalAccessibilityCommandId.FocusAccessibleBuffer,
+	DeveloperRestartPtyHost = TerminalDeveloperCommandId.RestartPtyHost,
+	OpenTerminalSettingsLink = TerminalChatCommandId.OpenTerminalSettingsLink,
+	DisableSessionAutoApproval = TerminalChatCommandId.DisableSessionAutoApproval,
+	FocusMostRecentChatTerminalOutput = TerminalChatCommandId.FocusMostRecentChatTerminalOutput,
+	FocusMostRecentChatTerminal = TerminalChatCommandId.FocusMostRecentChatTerminal,
+	ToggleChatTerminalOutput = TerminalChatCommandId.ToggleChatTerminalOutput,
+	FocusChatInstanceAction = TerminalChatCommandId.FocusChatInstanceAction,
+	ContinueInBackground = TerminalChatCommandId.ContinueInBackground,
 }
 
 // HACK: Export some settings from `terminalContrib/` that are depended upon elsewhere. These are
 // soft layer breakers between `terminal/` and `terminalContrib/` but there are difficulties in
 // removing the dependency. These are explicitly defined here to avoid an eslint line override.
 export const enum TerminalContribSettingId {
-  SuggestEnabled = TerminalSuggestSettingId.Enabled,
-  StickyScrollEnabled = TerminalStickyScrollSettingId.Enabled,
+	StickyScrollEnabled = TerminalStickyScrollSettingId.Enabled,
+	SuggestEnabled = TerminalSuggestSettingId.Enabled,
+	AutoApprove = TerminalChatAgentToolsSettingId.AutoApprove,
+	EnableAutoApprove = TerminalChatAgentToolsSettingId.EnableAutoApprove,
+	AutoApproveWorkspaceNpmScripts = TerminalChatAgentToolsSettingId.AutoApproveWorkspaceNpmScripts,
+	IgnoreDefaultAutoApproveRules = TerminalChatAgentToolsSettingId.IgnoreDefaultAutoApproveRules,
+	BlockDetectedFileWrites = TerminalChatAgentToolsSettingId.BlockDetectedFileWrites,
+	ShellIntegrationTimeout = TerminalChatAgentToolsSettingId.ShellIntegrationTimeout,
+	OutputLocation = TerminalChatAgentToolsSettingId.OutputLocation,
+	AgentSandboxEnabled = AgentSandboxSettingId.AgentSandboxEnabled,
+	AgentSandboxAllowNetwork = AgentSandboxSettingId.AgentSandboxAllowNetwork,
+	AgentSandboxAllowUnsandboxedCommands = AgentSandboxSettingId.AgentSandboxAllowUnsandboxedCommands,
+	AgentSandboxRetryWithAllowNetworkRequests = AgentSandboxSettingId.AgentSandboxRetryWithAllowNetworkRequests,
+	AgentSandboxLinuxFileSystem = TerminalChatAgentToolsSettingId.AgentSandboxLinuxFileSystem,
+	AgentSandboxMacFileSystem = TerminalChatAgentToolsSettingId.AgentSandboxMacFileSystem,
+}
+
+// HACK: Export some context key strings from `terminalContrib/` that are depended upon elsewhere.
+// These are soft layer breakers between `terminal/` and `terminalContrib/` but there are
+// difficulties in removing the dependency. These are explicitly defined here to avoid an eslint
+// line override.
+export const enum TerminalContribContextKeyStrings {
+	ChatHasTerminals = TerminalChatContextKeyStrings.ChatHasTerminals,
+	ChatHasHiddenTerminals = TerminalChatContextKeyStrings.ChatHasHiddenTerminals,
 }
 
 // Export configuration schemes from terminalContrib - this is an exception to the eslint rule since
 // they need to be declared at part of the rest of the terminal configuration
 export const terminalContribConfiguration: IConfigurationNode['properties'] = {
-  ...terminalAccessibilityConfiguration,
-  ...terminalAutoRepliesConfiguration,
-  ...terminalInitialHintConfiguration,
-  ...terminalCommandGuideConfiguration,
-  ...terminalHistoryConfiguration,
-  ...terminalStickyScrollConfiguration,
-  ...terminalSuggestConfiguration,
-  ...terminalTypeAheadConfiguration,
-  ...terminalZoomConfiguration,
+	...terminalAccessibilityConfiguration,
+	...terminalAutoRepliesConfiguration,
+	...terminalChatAgentToolsConfiguration,
+	...terminalInitialHintConfiguration,
+	...terminalCommandGuideConfiguration,
+	...terminalHistoryConfiguration,
+	...terminalOscNotificationsConfiguration,
+	...terminalResizeDimensionsOverlayConfiguration,
+	...terminalStickyScrollConfiguration,
+	...terminalSuggestConfiguration,
+	...terminalTypeAheadConfiguration,
+	...terminalZoomConfiguration,
 };
 
 // Export commands to skip shell from terminalContrib - this is an exception to the eslint rule
 // since they need to be included in the terminal module
 export const defaultTerminalContribCommandsToSkipShell = [
-  ...defaultTerminalAccessibilityCommandsToSkipShell,
-  ...defaultTerminalFindCommandToSkipShell,
-  ...defaultTerminalHistoryCommandsToSkipShell,
-  ...defaultTerminalSuggestCommandsToSkipShell,
+	...defaultTerminalAccessibilityCommandsToSkipShell,
+	...defaultTerminalFindCommandToSkipShell,
+	...defaultTerminalHistoryCommandsToSkipShell,
+	...defaultTerminalSuggestCommandsToSkipShell,
 ];

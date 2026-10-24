@@ -7,10 +7,7 @@ import assert from 'assert';
 import { Event } from '../../../../../base/common/event.js';
 import { URI } from '../../../../../base/common/uri.js';
 import { CancellationToken } from '../../../../../base/common/cancellation.js';
-import {
-  TestServiceAccessor,
-  workbenchInstantiationService,
-} from '../../../../test/browser/workbenchTestServices.js';
+import { TestServiceAccessor, workbenchInstantiationService } from '../../../../test/browser/workbenchTestServices.js';
 import { IInstantiationService } from '../../../../../platform/instantiation/common/instantiation.js';
 import { FileChangesEvent, FileChangeType } from '../../../../../platform/files/common/files.js';
 import { IRevertOptions, ISaveOptions } from '../../../../common/editor.js';
@@ -20,94 +17,76 @@ import { DisposableStore } from '../../../../../base/common/lifecycle.js';
 import { runWithFakedTimers } from '../../../../../base/test/common/timeTravelScheduler.js';
 import { ensureNoDisposablesAreLeakedInTestSuite } from '../../../../../base/test/common/utils.js';
 
-suite('ResourceWorkingCopy', () => {
-  class TestResourceWorkingCopy extends ResourceWorkingCopy {
-    name = 'testName';
+suite('ResourceWorkingCopy', function () {
 
-    typeId = 'testTypeId';
+	class TestResourceWorkingCopy extends ResourceWorkingCopy {
+		name = 'testName';
+		typeId = 'testTypeId';
+		capabilities = WorkingCopyCapabilities.None;
+		onDidChangeDirty = Event.None;
+		onDidChangeContent = Event.None;
+		onDidSave = Event.None;
+		isDirty(): boolean { return false; }
+		async backup(token: CancellationToken): Promise<IWorkingCopyBackup> { throw new Error('Method not implemented.'); }
+		async save(options?: ISaveOptions): Promise<boolean> { return false; }
+		async revert(options?: IRevertOptions): Promise<void> { }
 
-    capabilities = WorkingCopyCapabilities.None;
+	}
 
-    onDidChangeDirty = Event.None;
+	const disposables = new DisposableStore();
+	const resource = URI.file('test/resource');
+	let instantiationService: IInstantiationService;
+	let accessor: TestServiceAccessor;
+	let workingCopy: TestResourceWorkingCopy;
 
-    onDidChangeContent = Event.None;
+	function createWorkingCopy(uri: URI = resource) {
+		return new TestResourceWorkingCopy(uri, accessor.fileService);
+	}
 
-    onDidSave = Event.None;
+	setup(() => {
+		instantiationService = workbenchInstantiationService(undefined, disposables);
+		accessor = instantiationService.createInstance(TestServiceAccessor);
 
-    isDirty(): boolean {
-      return false;
-    }
+		workingCopy = disposables.add(createWorkingCopy());
+	});
 
-    async backup(token: CancellationToken): Promise<IWorkingCopyBackup> {
-      throw new Error('Method not implemented.');
-    }
+	teardown(() => {
+		disposables.clear();
+	});
 
-    async save(options?: ISaveOptions): Promise<boolean> {
-      return false;
-    }
+	test('orphaned tracking', async () => {
+		return runWithFakedTimers({}, async () => {
+			assert.strictEqual(workingCopy.isOrphaned(), false);
 
-    async revert(options?: IRevertOptions): Promise<void> {}
-  }
+			let onDidChangeOrphanedPromise = Event.toPromise(workingCopy.onDidChangeOrphaned);
+			accessor.fileService.notExistsSet.set(resource, true);
+			accessor.fileService.fireFileChanges(new FileChangesEvent([{ resource, type: FileChangeType.DELETED }], false));
 
-  const disposables = new DisposableStore();
-  const resource = URI.file('test/resource');
-  let instantiationService: IInstantiationService;
-  let accessor: TestServiceAccessor;
-  let workingCopy: TestResourceWorkingCopy;
+			await onDidChangeOrphanedPromise;
+			assert.strictEqual(workingCopy.isOrphaned(), true);
 
-  function createWorkingCopy(uri: URI = resource) {
-    return new TestResourceWorkingCopy(uri, accessor.fileService);
-  }
+			onDidChangeOrphanedPromise = Event.toPromise(workingCopy.onDidChangeOrphaned);
+			accessor.fileService.notExistsSet.delete(resource);
+			accessor.fileService.fireFileChanges(new FileChangesEvent([{ resource, type: FileChangeType.ADDED }], false));
 
-  setup(() => {
-    instantiationService = workbenchInstantiationService(undefined, disposables);
-    accessor = instantiationService.createInstance(TestServiceAccessor);
+			await onDidChangeOrphanedPromise;
+			assert.strictEqual(workingCopy.isOrphaned(), false);
+		});
+	});
 
-    workingCopy = disposables.add(createWorkingCopy());
-  });
+	test('dispose, isDisposed', async () => {
+		assert.strictEqual(workingCopy.isDisposed(), false);
 
-  teardown(() => {
-    disposables.clear();
-  });
+		let disposedEvent = false;
+		disposables.add(workingCopy.onWillDispose(() => {
+			disposedEvent = true;
+		}));
 
-  test('orphaned tracking', async () =>
-    runWithFakedTimers({}, async () => {
-      assert.strictEqual(workingCopy.isOrphaned(), false);
+		workingCopy.dispose();
 
-      let onDidChangeOrphanedPromise = Event.toPromise(workingCopy.onDidChangeOrphaned);
-      accessor.fileService.notExistsSet.set(resource, true);
-      accessor.fileService.fireFileChanges(
-        new FileChangesEvent([{ resource, type: FileChangeType.DELETED }], false),
-      );
+		assert.strictEqual(workingCopy.isDisposed(), true);
+		assert.strictEqual(disposedEvent, true);
+	});
 
-      await onDidChangeOrphanedPromise;
-      assert.strictEqual(workingCopy.isOrphaned(), true);
-
-      onDidChangeOrphanedPromise = Event.toPromise(workingCopy.onDidChangeOrphaned);
-      accessor.fileService.notExistsSet.delete(resource);
-      accessor.fileService.fireFileChanges(
-        new FileChangesEvent([{ resource, type: FileChangeType.ADDED }], false),
-      );
-
-      await onDidChangeOrphanedPromise;
-      assert.strictEqual(workingCopy.isOrphaned(), false);
-    }));
-
-  test('dispose, isDisposed', async () => {
-    assert.strictEqual(workingCopy.isDisposed(), false);
-
-    let disposedEvent = false;
-    disposables.add(
-      workingCopy.onWillDispose(() => {
-        disposedEvent = true;
-      }),
-    );
-
-    workingCopy.dispose();
-
-    assert.strictEqual(workingCopy.isDisposed(), true);
-    assert.strictEqual(disposedEvent, true);
-  });
-
-  ensureNoDisposablesAreLeakedInTestSuite();
+	ensureNoDisposablesAreLeakedInTestSuite();
 });

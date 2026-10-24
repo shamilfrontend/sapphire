@@ -15,27 +15,23 @@ import { IMessagePassingProtocol, IPCClient } from './ipc.js';
  */
 
 export interface MessageEvent {
-  /**
-   * For our use we only consider `Uint8Array` a valid data transfer
-   * via message ports because our protocol implementation is buffer based.
-   */
-  data: Uint8Array;
+
+	/**
+	 * For our use we only consider `Uint8Array` a valid data transfer
+	 * via message ports because our protocol implementation is buffer based.
+	 */
+	data: Uint8Array;
 }
 
 export interface MessagePort {
-  addEventListener(
-    type: 'message',
-    listener: (this: MessagePort, e: MessageEvent) => unknown,
-  ): void;
-  removeEventListener(
-    type: 'message',
-    listener: (this: MessagePort, e: MessageEvent) => unknown,
-  ): void;
 
-  postMessage(message: Uint8Array): void;
+	addEventListener(type: 'message', listener: (this: MessagePort, e: MessageEvent) => unknown): void;
+	removeEventListener(type: 'message', listener: (this: MessagePort, e: MessageEvent) => unknown): void;
 
-  start(): void;
-  close(): void;
+	postMessage(message: Uint8Array): void;
+
+	start(): void;
+	close(): void;
 }
 
 /**
@@ -44,48 +40,48 @@ export interface MessagePort {
  * is a simple `onmessage` / `postMessage` pattern.
  */
 export class Protocol implements IMessagePassingProtocol {
-  readonly onMessage;
 
-  constructor(private port: MessagePort) {
-    this.onMessage = Event.fromDOMEventEmitter<VSBuffer>(
-      this.port,
-      'message',
-      (e: MessageEvent) => {
-        if (e.data) {
-          return VSBuffer.wrap(e.data);
-        }
-        return VSBuffer.alloc(0);
-      },
-    );
-    // we must call start() to ensure messages are flowing
-    port.start();
-  }
+	readonly onMessage;
 
-  send(message: VSBuffer): void {
-    this.port.postMessage(message.buffer);
-  }
+	constructor(private port: MessagePort) {
+		// A `message` event may carry no (or empty) data (e.g. during
+		// connection teardown). An empty frame is never a valid protocol
+		// message (the smallest valid frame still has a serialized header),
+		// so we must not forward it: doing so makes the channel readers
+		// deserialize an `undefined` header and crash. Filter these out at
+		// the transport boundary instead.
+		const onMessage = Event.fromDOMEventEmitter<VSBuffer>(this.port, 'message', (e: MessageEvent) => e.data ? VSBuffer.wrap(e.data) : VSBuffer.alloc(0));
+		this.onMessage = Event.filter(onMessage, data => data.byteLength > 0);
+		// we must call start() to ensure messages are flowing
+		port.start();
+	}
 
-  disconnect(): void {
-    this.port.close();
-  }
+	send(message: VSBuffer): void {
+		this.port.postMessage(message.buffer);
+	}
+
+	disconnect(): void {
+		this.port.close();
+	}
 }
 
 /**
  * An implementation of a `IPCClient` on top of MessagePort style IPC communication.
  */
 export class Client extends IPCClient implements IDisposable {
-  private protocol: Protocol;
 
-  constructor(port: MessagePort, clientId: string) {
-    const protocol = new Protocol(port);
-    super(protocol, clientId);
+	private protocol: Protocol;
 
-    this.protocol = protocol;
-  }
+	constructor(port: MessagePort, clientId: string) {
+		const protocol = new Protocol(port);
+		super(protocol, clientId);
 
-  override dispose(): void {
-    this.protocol.disconnect();
+		this.protocol = protocol;
+	}
 
-    super.dispose();
-  }
+	override dispose(): void {
+		this.protocol.disconnect();
+
+		super.dispose();
+	}
 }

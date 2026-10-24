@@ -7,50 +7,48 @@ import { MutableDisposable } from '../../../base/common/lifecycle.js';
 import { AbstractMessageLogger, DEFAULT_LOG_LEVEL, ILogger, log, LogLevel } from './log.js';
 
 interface ILog {
-  level: LogLevel;
-  message: string;
+	level: LogLevel;
+	message: string;
 }
 
 export class BufferLogger extends AbstractMessageLogger {
-  declare readonly _serviceBrand: undefined;
 
-  private buffer: ILog[] = [];
+	declare readonly _serviceBrand: undefined;
+	private buffer: ILog[] = [];
+	private _logger: ILogger | undefined = undefined;
+	private readonly _logLevelDisposable = this._register(new MutableDisposable());
 
-  private _logger: ILogger | undefined = undefined;
+	constructor(logLevel: LogLevel = DEFAULT_LOG_LEVEL) {
+		super();
+		this.setLevel(logLevel);
+	}
 
-  private readonly _logLevelDisposable = this._register(new MutableDisposable());
+	set logger(logger: ILogger) {
+		this._logger = logger;
+		this.setLevel(logger.getLevel());
+		this._logLevelDisposable.value = logger.onDidChangeLogLevel(this.setLevel, this);
 
-  constructor(logLevel: LogLevel = DEFAULT_LOG_LEVEL) {
-    super();
-    this.setLevel(logLevel);
-  }
+		for (const { level, message } of this.buffer) {
+			log(logger, level, message);
+		}
 
-  set logger(logger: ILogger) {
-    this._logger = logger;
-    this.setLevel(logger.getLevel());
-    this._logLevelDisposable.value = logger.onDidChangeLogLevel(this.setLevel, this);
+		this.buffer = [];
+	}
 
-    for (const { level, message } of this.buffer) {
-      log(logger, level, message);
-    }
+	protected log(level: LogLevel, message: string): void {
+		if (this._logger) {
+			log(this._logger, level, message);
+		} else if (this.getLevel() <= level) {
+			this.buffer.push({ level, message });
+		}
+	}
 
-    this.buffer = [];
-  }
+	override dispose(): void {
+		this._logger?.dispose();
+		super.dispose();
+	}
 
-  protected log(level: LogLevel, message: string): void {
-    if (this._logger) {
-      log(this._logger, level, message);
-    } else if (this.getLevel() <= level) {
-      this.buffer.push({ level, message });
-    }
-  }
-
-  override dispose(): void {
-    this._logger?.dispose();
-    super.dispose();
-  }
-
-  override flush(): void {
-    this._logger?.flush();
-  }
+	override flush(): void {
+		this._logger?.flush();
+	}
 }

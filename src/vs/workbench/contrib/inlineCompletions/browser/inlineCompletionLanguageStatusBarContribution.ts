@@ -3,114 +3,89 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { localize } from '../../../../nls.js';
 import { createHotClass } from '../../../../base/common/hotReloadHelpers.js';
 import { Disposable, DisposableStore } from '../../../../base/common/lifecycle.js';
-import { autorunWithStore, derived } from '../../../../base/common/observable.js';
-import { debouncedObservable } from '../../../../base/common/observableInternal/utils.js';
+import { autorunWithStore, debouncedObservable, derived, observableFromEvent } from '../../../../base/common/observable.js';
 import Severity from '../../../../base/common/severity.js';
-import { ICodeEditor } from '../../../../editor/browser/editorBrowser.js';
+import { isCodeEditor } from '../../../../editor/browser/editorBrowser.js';
 import { InlineCompletionsController } from '../../../../editor/contrib/inlineCompletions/browser/controller/inlineCompletionsController.js';
+import { localize } from '../../../../nls.js';
+import { IWorkbenchContribution } from '../../../common/contributions.js';
+import { IChatEntitlementService } from '../../../services/chat/common/chatEntitlementService.js';
+import { IEditorService } from '../../../services/editor/common/editorService.js';
 import { ILanguageStatusService } from '../../../services/languageStatus/common/languageStatusService.js';
-import { observableCodeEditor } from '../../../../editor/browser/observableCodeEditor.js';
 
-export class InlineCompletionLanguageStatusBarContribution extends Disposable {
-  public static readonly hot = createHotClass(InlineCompletionLanguageStatusBarContribution);
+export class InlineCompletionLanguageStatusBarContribution extends Disposable implements IWorkbenchContribution {
+	public static readonly hot = createHotClass(this);
 
-  public static Id = 'vs.editor.contrib.inlineCompletionLanguageStatusBarContribution';
+	public static Id = 'vs.contrib.inlineCompletionLanguageStatusBarContribution';
+	public static readonly languageStatusBarDisposables = new Set<DisposableStore>();
 
-  public static readonly languageStatusBarDisposables = new Set<DisposableStore>();
+	private _activeEditor;
+	private _state;
+	private _sentiment;
 
-  private readonly _c = InlineCompletionsController.get(this._editor);
+	constructor(
+		@ILanguageStatusService private readonly _languageStatusService: ILanguageStatusService,
+		@IEditorService private readonly _editorService: IEditorService,
+		@IChatEntitlementService private readonly _chatEntitlementService: IChatEntitlementService,
+	) {
+		super();
 
-  private readonly _state = derived(this, (reader) => {
-    const model = this._c?.model.read(reader);
-    if (!model) {
-      return undefined;
-    }
-    if (!observableCodeEditor(this._editor).isFocused.read(reader)) {
-      return undefined;
-    }
 
-    return {
-      model,
-      status: debouncedObservable(model.status, 300),
-    };
-  });
+		this._activeEditor = observableFromEvent(this, _editorService.onDidActiveEditorChange, () => this._editorService.activeTextEditorControl);
+		this._sentiment = this._chatEntitlementService.sentimentObs;
+		this._state = derived(this, reader => {
+			const editor = this._activeEditor.read(reader);
+			if (!editor || !isCodeEditor(editor)) {
+				return undefined;
+			}
 
-  constructor(
-    private readonly _editor: ICodeEditor,
-    @ILanguageStatusService private readonly _languageStatusService: ILanguageStatusService,
-  ) {
-    super();
+			const c = InlineCompletionsController.get(editor);
+			const model = c?.model.read(reader);
+			if (!model) {
+				return undefined;
+			}
 
-    this._register(
-      autorunWithStore((reader, store) => {
-        const state = this._state.read(reader);
-        if (!state) {
-          return;
-        }
+			return {
+				model,
+				status: debouncedObservable(model.status, 300),
+			};
+		});
 
-        const status = state.status.read(reader);
+		this._register(autorunWithStore((reader, store) => {
+			// Do not show the Copilot icon in the language status when AI features are disabled
+			const sentiment = this._sentiment.read(reader);
+			if (sentiment.hidden) {
+				return;
+			}
 
-        const statusMap: Record<
-          typeof status,
-          { shortLabel: string; label: string; loading: boolean }
-        > = {
-          loading: {
-            shortLabel: '',
-            label: localize('inlineSuggestionLoading', 'Loading...'),
-            loading: true,
-          },
-          ghostText: {
-            shortLabel: '$(lightbulb)',
-            label: `$(copilot) ${localize('inlineCompletionAvailable', 'Inline completion available')}`,
-            loading: false,
-          },
-          inlineEdit: {
-            shortLabel: '$(lightbulb-sparkle)',
-            label: `$(copilot) ${localize('inlineEditAvailable', 'Inline edit available')}`,
-            loading: false,
-          },
-          noSuggestion: {
-            shortLabel: '$(circle-slash)',
-            label: `$(copilot) ${localize(
-              'noInlineSuggestionAvailable',
-              'No inline suggestion available',
-            )}`,
-            loading: false,
-          },
-        };
+			const state = this._state.read(reader);
+			if (!state) {
+				return;
+			}
 
-        // Make sure previous status is cleared before the new is registered. This works, but is a bit hacky.
-        // TODO: Use a workbench contribution to get singleton behavior.
-        InlineCompletionLanguageStatusBarContribution.languageStatusBarDisposables.forEach((d) =>
-          d.clear(),
-        );
+			const status = state.status.read(reader);
 
-        InlineCompletionLanguageStatusBarContribution.languageStatusBarDisposables.add(store);
-        store.add({
-          dispose: () =>
-            InlineCompletionLanguageStatusBarContribution.languageStatusBarDisposables.delete(
-              store,
-            ),
-        });
+			const statusMap: Record<typeof status, { shortLabel: string; label: string; loading: boolean }> = {
+				loading: { shortLabel: '', label: localize('inlineSuggestionLoading', "Loading..."), loading: true, },
+				ghostText: { shortLabel: '$(lightbulb)', label: '$(copilot) ' + localize('inlineCompletionAvailable', "Inline completion available"), loading: false, },
+				inlineEdit: { shortLabel: '$(lightbulb-sparkle)', label: '$(copilot) ' + localize('inlineEditAvailable', "Inline edit available"), loading: false, },
+				noSuggestion: { shortLabel: '$(circle-slash)', label: '$(copilot) ' + localize('noInlineSuggestionAvailable', "No inline suggestion available"), loading: false, },
+			};
 
-        store.add(
-          this._languageStatusService.addStatus({
-            accessibilityInfo: undefined,
-            busy: statusMap[status].loading,
-            command: undefined,
-            detail: localize('inlineSuggestionsSmall', 'Inline suggestions'),
-            id: 'inlineSuggestions',
-            label: { value: statusMap[status].label, shortValue: statusMap[status].shortLabel },
-            name: localize('inlineSuggestions', 'Inline Suggestions'),
-            selector: { pattern: state.model.textModel.uri.fsPath },
-            severity: Severity.Info,
-            source: 'inlineSuggestions',
-          }),
-        );
-      }),
-    );
-  }
+			store.add(this._languageStatusService.addStatus({
+				accessibilityInfo: undefined,
+				busy: statusMap[status].loading,
+				command: undefined,
+				detail: localize('inlineSuggestionsSmall', "Inline suggestions"),
+				id: 'inlineSuggestions',
+				label: { value: statusMap[status].label, shortValue: statusMap[status].shortLabel },
+				name: localize('inlineSuggestions', "Inline Suggestions"),
+				selector: { pattern: state.model.textModel.uri.fsPath },
+				severity: Severity.Info,
+				source: 'inlineSuggestions',
+			}));
+		}));
+	}
 }

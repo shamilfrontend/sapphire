@@ -5,28 +5,30 @@
 
 import { createDecorator } from '../../../../platform/instantiation/common/instantiation.js';
 import { SnippetFile, Snippet } from './snippetsFile.js';
+import { URI } from '../../../../base/common/uri.js';
 
 export const ISnippetsService = createDecorator<ISnippetsService>('snippetService');
 
 export interface ISnippetGetOptions {
-  includeDisabledSnippets?: boolean;
-  includeNoPrefixSnippets?: boolean;
-  noRecencySort?: boolean;
-  fileTemplateSnippets?: boolean;
+	includeDisabledSnippets?: boolean;
+	includeNoPrefixSnippets?: boolean;
+	noRecencySort?: boolean;
+	fileTemplateSnippets?: boolean;
 }
 
 export interface ISnippetsService {
-  readonly _serviceBrand: undefined;
 
-  getSnippetFiles(): Promise<Iterable<SnippetFile>>;
+	readonly _serviceBrand: undefined;
 
-  isEnabled(snippet: Snippet): boolean;
+	getSnippetFiles(): Promise<Iterable<SnippetFile>>;
 
-  updateEnablement(snippet: Snippet, enabled: boolean): void;
+	isEnabled(snippet: Snippet): boolean;
 
-  updateUsageTimestamp(snippet: Snippet): void;
+	updateEnablement(snippet: Snippet, enabled: boolean): void;
 
-  getSnippets(languageId: string | undefined, opt?: ISnippetGetOptions): Promise<Snippet[]>;
+	updateUsageTimestamp(snippet: Snippet): void;
 
-  getSnippetsSync(languageId: string, opt?: ISnippetGetOptions): Snippet[];
+	getSnippets(languageId: string | undefined, resourceUri?: URI, opt?: ISnippetGetOptions): Promise<Snippet[]>;
+
+	getSnippetsSync(languageId: string, resourceUri?: URI, opt?: ISnippetGetOptions): Snippet[];
 }

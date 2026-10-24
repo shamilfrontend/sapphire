@@ -16,204 +16,189 @@ import { IStateReadService, IStateService } from './state.js';
 type StorageDatabase = { [key: string]: unknown };
 
 export const enum SaveStrategy {
-  IMMEDIATE,
-  DELAYED,
+	IMMEDIATE,
+	DELAYED
 }
 
 export class FileStorage extends Disposable {
-  private storage: StorageDatabase = Object.create(null);
 
-  private lastSavedStorageContents = '';
+	private storage: StorageDatabase = Object.create(null);
+	private lastSavedStorageContents = '';
 
-  private readonly flushDelayer: ThrottledDelayer<void>;
+	private readonly flushDelayer: ThrottledDelayer<void>;
 
-  private initializing: Promise<void> | undefined = undefined;
+	private initializing: Promise<void> | undefined = undefined;
+	private closing: Promise<void> | undefined = undefined;
 
-  private closing: Promise<void> | undefined = undefined;
+	constructor(
+		private readonly storagePath: URI,
+		saveStrategy: SaveStrategy,
+		private readonly logService: ILogService,
+		private readonly fileService: IFileService,
+	) {
+		super();
 
-  constructor(
-    private readonly storagePath: URI,
-    saveStrategy: SaveStrategy,
-    private readonly logService: ILogService,
-    private readonly fileService: IFileService,
-  ) {
-    super();
+		this.flushDelayer = this._register(new ThrottledDelayer<void>(saveStrategy === SaveStrategy.IMMEDIATE ? 0 : 100 /* buffer saves over a short time */));
+	}
 
-    this.flushDelayer = this._register(
-      new ThrottledDelayer<void>(
-        saveStrategy === SaveStrategy.IMMEDIATE ? 0 : 100 /* buffer saves over a short time */,
-      ),
-    );
-  }
+	init(): Promise<void> {
+		if (!this.initializing) {
+			this.initializing = this.doInit();
+		}
 
-  init(): Promise<void> {
-    if (!this.initializing) {
-      this.initializing = this.doInit();
-    }
+		return this.initializing;
+	}
 
-    return this.initializing;
-  }
+	private async doInit(): Promise<void> {
+		try {
+			this.lastSavedStorageContents = (await this.fileService.readFile(this.storagePath)).value.toString();
+			this.storage = JSON.parse(this.lastSavedStorageContents);
+		} catch (error) {
+			if ((<FileOperationError>error).fileOperationResult !== FileOperationResult.FILE_NOT_FOUND) {
+				this.logService.error(error);
+			}
+		}
+	}
 
-  private async doInit(): Promise<void> {
-    try {
-      this.lastSavedStorageContents = (
-        await this.fileService.readFile(this.storagePath)
-      ).value.toString();
-      this.storage = JSON.parse(this.lastSavedStorageContents);
-    } catch (error) {
-      if ((<FileOperationError>error).fileOperationResult !== FileOperationResult.FILE_NOT_FOUND) {
-        this.logService.error(error);
-      }
-    }
-  }
+	getItem<T>(key: string, defaultValue: T): T;
+	getItem<T>(key: string, defaultValue?: T): T | undefined;
+	getItem<T>(key: string, defaultValue?: T): T | undefined {
+		const res = this.storage[key];
+		if (isUndefinedOrNull(res)) {
+			return defaultValue;
+		}
 
-  getItem<T>(key: string, defaultValue: T): T;
+		return res as T;
+	}
 
-  getItem<T>(key: string, defaultValue?: T): T | undefined;
+	setItem(key: string, data?: object | string | number | boolean | undefined | null): void {
+		this.setItems([{ key, data }]);
+	}
 
-  getItem<T>(key: string, defaultValue?: T): T | undefined {
-    const res = this.storage[key];
-    if (isUndefinedOrNull(res)) {
-      return defaultValue;
-    }
+	setItems(items: readonly { key: string; data?: object | string | number | boolean | undefined | null }[]): void {
+		let save = false;
 
-    return res as T;
-  }
+		for (const { key, data } of items) {
 
-  setItem(key: string, data?: object | string | number | boolean | undefined | null): void {
-    this.setItems([{ key, data }]);
-  }
+			// Shortcut for data that did not change
+			if (this.storage[key] === data) {
+				continue;
+			}
 
-  setItems(
-    items: readonly { key: string; data?: object | string | number | boolean | undefined | null }[],
-  ): void {
-    let save = false;
+			// Remove items when they are undefined or null
+			if (isUndefinedOrNull(data)) {
+				if (!isUndefined(this.storage[key])) {
+					this.storage[key] = undefined;
+					save = true;
+				}
+			}
 
-    for (const { key, data } of items) {
-      // Shortcut for data that did not change
-      if (this.storage[key] === data) {
-        continue;
-      }
+			// Otherwise add an item
+			else {
+				this.storage[key] = data;
+				save = true;
+			}
+		}
 
-      // Remove items when they are undefined or null
-      if (isUndefinedOrNull(data)) {
-        if (!isUndefined(this.storage[key])) {
-          this.storage[key] = undefined;
-          save = true;
-        }
-      }
+		if (save) {
+			this.save();
+		}
+	}
 
-      // Otherwise add an item
-      else {
-        this.storage[key] = data;
-        save = true;
-      }
-    }
+	removeItem(key: string): void {
 
-    if (save) {
-      this.save();
-    }
-  }
+		// Only update if the key is actually present (not undefined)
+		if (!isUndefined(this.storage[key])) {
+			this.storage[key] = undefined;
+			this.save();
+		}
+	}
 
-  removeItem(key: string): void {
-    // Only update if the key is actually present (not undefined)
-    if (!isUndefined(this.storage[key])) {
-      this.storage[key] = undefined;
-      this.save();
-    }
-  }
+	private async save(): Promise<void> {
+		if (this.closing) {
+			return; // already about to close
+		}
 
-  private async save(): Promise<void> {
-    if (this.closing) {
-      return; // already about to close
-    }
+		return this.flushDelayer.trigger(() => this.doSave());
+	}
 
-    return this.flushDelayer.trigger(() => this.doSave());
-  }
+	private async doSave(): Promise<void> {
+		if (!this.initializing) {
+			return; // if we never initialized, we should not save our state
+		}
 
-  private async doSave(): Promise<void> {
-    if (!this.initializing) {
-      return; // if we never initialized, we should not save our state
-    }
+		// Make sure to wait for init to finish first
+		await this.initializing;
 
-    // Make sure to wait for init to finish first
-    await this.initializing;
+		// Return early if the database has not changed
+		const serializedDatabase = JSON.stringify(this.storage, null, 4);
+		if (serializedDatabase === this.lastSavedStorageContents) {
+			return;
+		}
 
-    // Return early if the database has not changed
-    const serializedDatabase = JSON.stringify(this.storage, null, 4);
-    if (serializedDatabase === this.lastSavedStorageContents) {
-      return;
-    }
+		// Write to disk
+		try {
+			await this.fileService.writeFile(this.storagePath, VSBuffer.fromString(serializedDatabase), { atomic: { postfix: '.vsctmp' } });
+			this.lastSavedStorageContents = serializedDatabase;
+		} catch (error) {
+			this.logService.error(error);
+		}
+	}
 
-    // Write to disk
-    try {
-      await this.fileService.writeFile(this.storagePath, VSBuffer.fromString(serializedDatabase), {
-        atomic: { postfix: '.vsctmp' },
-      });
-      this.lastSavedStorageContents = serializedDatabase;
-    } catch (error) {
-      this.logService.error(error);
-    }
-  }
+	async close(): Promise<void> {
+		if (!this.closing) {
+			this.closing = this.flushDelayer.trigger(() => this.doSave(), 0 /* as soon as possible */);
+		}
 
-  async close(): Promise<void> {
-    if (!this.closing) {
-      this.closing = this.flushDelayer.trigger(() => this.doSave(), 0 /* as soon as possible */);
-    }
-
-    return this.closing;
-  }
+		return this.closing;
+	}
 }
 
 export class StateReadonlyService extends Disposable implements IStateReadService {
-  declare readonly _serviceBrand: undefined;
 
-  protected readonly fileStorage: FileStorage;
+	declare readonly _serviceBrand: undefined;
 
-  constructor(
-    saveStrategy: SaveStrategy,
-    @IEnvironmentService environmentService: IEnvironmentService,
-    @ILogService logService: ILogService,
-    @IFileService fileService: IFileService,
-  ) {
-    super();
+	protected readonly fileStorage: FileStorage;
 
-    this.fileStorage = this._register(
-      new FileStorage(environmentService.stateResource, saveStrategy, logService, fileService),
-    );
-  }
+	constructor(
+		saveStrategy: SaveStrategy,
+		@IEnvironmentService environmentService: IEnvironmentService,
+		@ILogService logService: ILogService,
+		@IFileService fileService: IFileService
+	) {
+		super();
 
-  async init(): Promise<void> {
-    await this.fileStorage.init();
-  }
+		this.fileStorage = this._register(new FileStorage(environmentService.stateResource, saveStrategy, logService, fileService));
+	}
 
-  getItem<T>(key: string, defaultValue: T): T;
+	async init(): Promise<void> {
+		await this.fileStorage.init();
+	}
 
-  getItem<T>(key: string, defaultValue?: T): T | undefined;
-
-  getItem<T>(key: string, defaultValue?: T): T | undefined {
-    return this.fileStorage.getItem(key, defaultValue);
-  }
+	getItem<T>(key: string, defaultValue: T): T;
+	getItem<T>(key: string, defaultValue?: T): T | undefined;
+	getItem<T>(key: string, defaultValue?: T): T | undefined {
+		return this.fileStorage.getItem(key, defaultValue);
+	}
 }
 
 export class StateService extends StateReadonlyService implements IStateService {
-  declare readonly _serviceBrand: undefined;
 
-  setItem(key: string, data?: object | string | number | boolean | undefined | null): void {
-    this.fileStorage.setItem(key, data);
-  }
+	declare readonly _serviceBrand: undefined;
 
-  setItems(
-    items: readonly { key: string; data?: object | string | number | boolean | undefined | null }[],
-  ): void {
-    this.fileStorage.setItems(items);
-  }
+	setItem(key: string, data?: object | string | number | boolean | undefined | null): void {
+		this.fileStorage.setItem(key, data);
+	}
 
-  removeItem(key: string): void {
-    this.fileStorage.removeItem(key);
-  }
+	setItems(items: readonly { key: string; data?: object | string | number | boolean | undefined | null }[]): void {
+		this.fileStorage.setItems(items);
+	}
 
-  close(): Promise<void> {
-    return this.fileStorage.close();
-  }
+	removeItem(key: string): void {
+		this.fileStorage.removeItem(key);
+	}
+
+	close(): Promise<void> {
+		return this.fileStorage.close();
+	}
 }

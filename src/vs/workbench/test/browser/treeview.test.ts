@@ -11,57 +11,52 @@ import { ITreeItem, IViewDescriptorService, TreeItemCollapsibleState } from '../
 import { ensureNoDisposablesAreLeakedInTestSuite } from '../../../base/test/common/utils.js';
 import { ViewDescriptorService } from '../../services/views/browser/viewDescriptorService.js';
 
-suite('TreeView', () => {
-  let treeView: TreeView;
-  let largestBatchSize: number = 0;
+suite('TreeView', function () {
 
-  const disposables = ensureNoDisposablesAreLeakedInTestSuite();
+	let treeView: TreeView;
+	let largestBatchSize: number = 0;
 
-  setup(async () => {
-    largestBatchSize = 0;
-    const instantiationService: TestInstantiationService = workbenchInstantiationService(
-      undefined,
-      disposables,
-    );
-    const viewDescriptorService = disposables.add(
-      instantiationService.createInstance(ViewDescriptorService),
-    );
-    instantiationService.stub(IViewDescriptorService, viewDescriptorService);
-    treeView = disposables.add(
-      instantiationService.createInstance(TreeView, 'testTree', 'Test Title'),
-    );
-    const getChildrenOfItem = async (element?: ITreeItem): Promise<ITreeItem[] | undefined> => {
-      if (element) {
-        return undefined;
-      }
-      const rootChildren: ITreeItem[] = [];
-      for (let i = 0; i < 100; i++) {
-        rootChildren.push({
-          handle: `item_${i}`,
-          collapsibleState: TreeItemCollapsibleState.Expanded,
-        });
-      }
-      return rootChildren;
-    };
+	const disposables = ensureNoDisposablesAreLeakedInTestSuite();
 
-    treeView.dataProvider = {
-      getChildren: getChildrenOfItem,
-      getChildrenBatch: async (elements?: ITreeItem[]): Promise<ITreeItem[][] | undefined> => {
-        if (elements && elements.length > largestBatchSize) {
-          largestBatchSize = elements.length;
-        }
-        if (elements) {
-          return Array(elements.length).fill([]);
-        }
-        return [(await getChildrenOfItem()) ?? []];
-      },
-    };
-  });
+	setup(async () => {
+		largestBatchSize = 0;
+		const instantiationService: TestInstantiationService = workbenchInstantiationService(undefined, disposables);
+		const viewDescriptorService = disposables.add(instantiationService.createInstance(ViewDescriptorService));
+		instantiationService.stub(IViewDescriptorService, viewDescriptorService);
+		treeView = disposables.add(instantiationService.createInstance(TreeView, 'testTree', 'Test Title'));
+		const getChildrenOfItem = async (element?: ITreeItem): Promise<ITreeItem[] | undefined> => {
+			if (element) {
+				return undefined;
+			} else {
+				const rootChildren: ITreeItem[] = [];
+				for (let i = 0; i < 100; i++) {
+					rootChildren.push({ handle: `item_${i}`, collapsibleState: TreeItemCollapsibleState.Expanded });
+				}
+				return rootChildren;
+			}
+		};
 
-  test('children are batched', async () => {
-    assert.strictEqual(largestBatchSize, 0);
-    treeView.setVisibility(true);
-    await treeView.refresh();
-    assert.strictEqual(largestBatchSize, 100);
-  });
+		treeView.dataProvider = {
+			getChildren: getChildrenOfItem,
+			getChildrenBatch: async (elements?: ITreeItem[]): Promise<ITreeItem[][] | undefined> => {
+				if (elements && elements.length > largestBatchSize) {
+					largestBatchSize = elements.length;
+				}
+				if (elements) {
+					return Array(elements.length).fill([]);
+				} else {
+					return [(await getChildrenOfItem()) ?? []];
+				}
+			}
+		};
+	});
+
+	test('children are batched', async () => {
+		assert.strictEqual(largestBatchSize, 0);
+		treeView.setVisibility(true);
+		await treeView.refresh();
+		assert.strictEqual(largestBatchSize, 100);
+	});
+
+
 });

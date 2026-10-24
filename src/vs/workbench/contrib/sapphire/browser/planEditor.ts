@@ -24,7 +24,7 @@ import { ITelemetryService } from '../../../../platform/telemetry/common/telemet
 import { IThemeService } from '../../../../platform/theme/common/themeService.js';
 import { IFileService } from '../../../../platform/files/common/files.js';
 import { ILabelService } from '../../../../platform/label/common/label.js';
-import { assertIsDefined } from '../../../../base/common/types.js';
+import { assertReturnsDefined } from '../../../../base/common/types.js';
 import { ICodeEditorViewState, ScrollType } from '../../../../editor/common/editorCommon.js';
 import { ITextResourceConfigurationService } from '../../../../editor/common/services/textResourceConfiguration.js';
 import {
@@ -361,7 +361,7 @@ class PlanEditorPane extends AbstractTextCodeEditor<IPlanEditorViewState> {
       return;
     }
 
-    const control = assertIsDefined(this.editorControl);
+    const control = assertReturnsDefined(this.editorControl);
     const textEditorModel = resolvedModel.textEditorModel;
     control.setModel(textEditorModel);
 

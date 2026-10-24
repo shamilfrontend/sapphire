@@ -3,401 +3,357 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import {
-  window,
-  workspace,
-  Uri,
-  Disposable,
-  Event,
-  EventEmitter,
-  FileDecoration,
-  FileDecorationProvider,
-  ThemeColor,
-  l10n,
-  SourceControlHistoryItemRef,
-} from 'vscode';
+import { window, workspace, Uri, Disposable, Event, EventEmitter, FileDecoration, FileDecorationProvider, ThemeColor, l10n, SourceControlHistoryItemRef } from 'vscode';
 import * as path from 'path';
 import { Repository, GitResourceGroup } from './repository';
 import { Model } from './model';
 import { debounce } from './decorators';
-import {
-  filterEvent,
-  dispose,
-  anyEvent,
-  fireEvent,
-  PromiseSource,
-  combinedDisposable,
-  runAndSubscribeEvent,
-} from './util';
-import { Change, GitErrorCodes, Status } from './api/git';
+import { filterEvent, dispose, anyEvent, PromiseSource, combinedDisposable, runAndSubscribeEvent } from './util';
+import type { Change } from './api/git';
+import { GitErrorCodes, Status } from './api/git.constants';
 
-function equalSourceControlHistoryItemRefs(
-  ref1?: SourceControlHistoryItemRef,
-  ref2?: SourceControlHistoryItemRef,
-): boolean {
-  if (ref1 === ref2) {
-    return true;
-  }
+function equalSourceControlHistoryItemRefs(ref1?: SourceControlHistoryItemRef, ref2?: SourceControlHistoryItemRef): boolean {
+	if (ref1 === ref2) {
+		return true;
+	}
 
-  return ref1?.id === ref2?.id && ref1?.name === ref2?.name && ref1?.revision === ref2?.revision;
+	return ref1?.id === ref2?.id &&
+		ref1?.name === ref2?.name &&
+		ref1?.revision === ref2?.revision;
 }
 
-class GitIgnoreDecorationProvider implements FileDecorationProvider {
-  private static Decoration: FileDecoration = {
-    color: new ThemeColor('gitDecoration.ignoredResourceForeground'),
-  };
+export class GitIgnoreDecorationProvider implements FileDecorationProvider {
 
-  readonly onDidChangeFileDecorations: Event<Uri[]>;
+	private static Decoration: FileDecoration = { color: new ThemeColor('gitDecoration.ignoredResourceForeground') };
 
-  private queue = new Map<
-    string,
-    { repository: Repository; queue: Map<string, PromiseSource<FileDecoration | undefined>> }
-  >();
+	private readonly _onDidChangeDecorations = new EventEmitter<undefined | Uri | Uri[]>();
+	readonly onDidChangeFileDecorations: Event<undefined | Uri | Uri[]> = this._onDidChangeDecorations.event;
 
-  private disposables: Disposable[] = [];
+	private queue = new Map<string, { repository: Repository; queue: Map<string, PromiseSource<FileDecoration | undefined>> }>();
+	private disposables: Disposable[] = [];
 
-  constructor(private model: Model) {
-    this.onDidChangeFileDecorations = fireEvent(
-      anyEvent<any>(
-        filterEvent(workspace.onDidSaveTextDocument, (e) =>
-          /\.gitignore$|\.git\/info\/exclude$/.test(e.uri.path),
-        ),
-        model.onDidOpenRepository,
-        model.onDidCloseRepository,
-      ),
-    );
+	constructor(private model: Pick<Model, 'getRepository' | 'onDidOpenRepository' | 'onDidCloseRepository'>) {
+		const onDidChangeRepository = anyEvent<unknown>(
+			filterEvent(workspace.onDidSaveTextDocument, e => /\.gitignore$|\.git\/info\/exclude$/.test(e.uri.path)),
+			model.onDidOpenRepository,
+			model.onDidCloseRepository
+		);
+		this.disposables.push(onDidChangeRepository(() => this._onDidChangeDecorations.fire(undefined)));
+		this.disposables.push(model.onDidCloseRepository(repository => this.onDidCloseRepository(repository)));
+		this.disposables.push(window.registerFileDecorationProvider(this));
+	}
 
-    this.disposables.push(window.registerFileDecorationProvider(this));
-  }
+	private onDidCloseRepository(repository: Repository): void {
+		// Drop pending checks so the debounced `git check-ignore` does not run
+		// for a closed repository, whose folder may already have been deleted.
+		const item = this.queue.get(repository.root);
 
-  async provideFileDecoration(uri: Uri): Promise<FileDecoration | undefined> {
-    const repository = this.model.getRepository(uri);
+		if (item?.repository !== repository) {
+			return;
+		}
 
-    if (!repository) {
-      return;
-    }
+		this.queue.delete(repository.root);
 
-    let queueItem = this.queue.get(repository.root);
+		for (const [, promiseSource] of item.queue) {
+			promiseSource.resolve(undefined);
+		}
+	}
 
-    if (!queueItem) {
-      queueItem = {
-        repository,
-        queue: new Map<string, PromiseSource<FileDecoration | undefined>>(),
-      };
-      this.queue.set(repository.root, queueItem);
-    }
+	async provideFileDecoration(uri: Uri): Promise<FileDecoration | undefined> {
+		const repository = this.model.getRepository(uri);
 
-    let promiseSource = queueItem.queue.get(uri.fsPath);
+		if (!repository) {
+			return;
+		}
 
-    if (!promiseSource) {
-      promiseSource = new PromiseSource();
-      queueItem!.queue.set(uri.fsPath, promiseSource);
-      this.checkIgnoreSoon();
-    }
+		let queueItem = this.queue.get(repository.root);
 
-    return await promiseSource.promise;
-  }
+		if (!queueItem) {
+			queueItem = { repository, queue: new Map<string, PromiseSource<FileDecoration | undefined>>() };
+			this.queue.set(repository.root, queueItem);
+		}
 
-  @debounce(500)
-  private checkIgnoreSoon(): void {
-    const queue = new Map(this.queue.entries());
-    this.queue.clear();
+		let promiseSource = queueItem.queue.get(uri.fsPath);
 
-    for (const [, item] of queue) {
-      const paths = [...item.queue.keys()];
+		if (!promiseSource) {
+			promiseSource = new PromiseSource();
+			queueItem!.queue.set(uri.fsPath, promiseSource);
+			this.checkIgnoreSoon();
+		}
 
-      item.repository.checkIgnore(paths).then(
-        (ignoreSet) => {
-          for (const [path, promiseSource] of item.queue.entries()) {
-            promiseSource.resolve(
-              ignoreSet.has(path) ? GitIgnoreDecorationProvider.Decoration : undefined,
-            );
-          }
-        },
-        (err) => {
-          if (err.gitErrorCode !== GitErrorCodes.IsInSubmodule) {
-            console.error(err);
-          }
+		return await promiseSource.promise;
+	}
 
-          for (const [, promiseSource] of item.queue.entries()) {
-            promiseSource.reject(err);
-          }
-        },
-      );
-    }
-  }
+	@debounce(500)
+	private checkIgnoreSoon(): void {
+		const queue = new Map(this.queue.entries());
+		this.queue.clear();
 
-  dispose(): void {
-    this.disposables.forEach((d) => d.dispose());
-    this.queue.clear();
-  }
+		for (const [, item] of queue) {
+			const paths = [...item.queue.keys()];
+
+			item.repository.checkIgnore(paths).then(ignoreSet => {
+				for (const [path, promiseSource] of item.queue.entries()) {
+					promiseSource.resolve(ignoreSet.has(path) ? GitIgnoreDecorationProvider.Decoration : undefined);
+				}
+			}, err => {
+				if (err.gitErrorCode !== GitErrorCodes.IsInSubmodule) {
+					console.error(err);
+				}
+
+				for (const [, promiseSource] of item.queue.entries()) {
+					promiseSource.reject(err);
+				}
+			});
+		}
+	}
+
+	dispose(): void {
+		this.disposables.forEach(d => d.dispose());
+		this.queue.clear();
+	}
 }
 
 class GitDecorationProvider implements FileDecorationProvider {
-  private static SubmoduleDecorationData: FileDecoration = {
-    tooltip: 'Submodule',
-    badge: 'S',
-    color: new ThemeColor('gitDecoration.submoduleResourceForeground'),
-  };
 
-  private readonly _onDidChangeDecorations = new EventEmitter<Uri[]>();
+	private static SubmoduleDecorationData: FileDecoration = {
+		tooltip: 'Submodule',
+		badge: 'S',
+		color: new ThemeColor('gitDecoration.submoduleResourceForeground')
+	};
 
-  readonly onDidChangeFileDecorations: Event<Uri[]> = this._onDidChangeDecorations.event;
+	private readonly _onDidChangeDecorations = new EventEmitter<Uri[]>();
+	readonly onDidChangeFileDecorations: Event<Uri[]> = this._onDidChangeDecorations.event;
 
-  private disposables: Disposable[] = [];
+	private disposables: Disposable[] = [];
+	private decorations = new Map<string, FileDecoration>();
 
-  private decorations = new Map<string, FileDecoration>();
+	constructor(private repository: Repository) {
+		this.disposables.push(
+			window.registerFileDecorationProvider(this),
+			runAndSubscribeEvent(repository.onDidRunGitStatus, () => this.onDidRunGitStatus())
+		);
+	}
 
-  constructor(private repository: Repository) {
-    this.disposables.push(
-      window.registerFileDecorationProvider(this),
-      runAndSubscribeEvent(repository.onDidRunGitStatus, () => this.onDidRunGitStatus()),
-    );
-  }
+	private onDidRunGitStatus(): void {
+		const newDecorations = new Map<string, FileDecoration>();
 
-  private onDidRunGitStatus(): void {
-    const newDecorations = new Map<string, FileDecoration>();
+		this.collectDecorationData(this.repository.indexGroup, newDecorations);
+		this.collectDecorationData(this.repository.untrackedGroup, newDecorations);
+		this.collectDecorationData(this.repository.workingTreeGroup, newDecorations);
+		this.collectDecorationData(this.repository.mergeGroup, newDecorations);
+		this.collectSubmoduleDecorationData(newDecorations);
 
-    this.collectDecorationData(this.repository.indexGroup, newDecorations);
-    this.collectDecorationData(this.repository.untrackedGroup, newDecorations);
-    this.collectDecorationData(this.repository.workingTreeGroup, newDecorations);
-    this.collectDecorationData(this.repository.mergeGroup, newDecorations);
-    this.collectSubmoduleDecorationData(newDecorations);
+		const uris = new Set([...this.decorations.keys()].concat([...newDecorations.keys()]));
+		this.decorations = newDecorations;
+		this._onDidChangeDecorations.fire([...uris.values()].map(value => Uri.parse(value, true)));
+	}
 
-    const uris = new Set([...this.decorations.keys()].concat([...newDecorations.keys()]));
-    this.decorations = newDecorations;
-    this._onDidChangeDecorations.fire([...uris.values()].map((value) => Uri.parse(value, true)));
-  }
+	private collectDecorationData(group: GitResourceGroup, bucket: Map<string, FileDecoration>): void {
+		for (const r of group.resourceStates) {
+			const decoration = r.resourceDecoration;
 
-  private collectDecorationData(
-    group: GitResourceGroup,
-    bucket: Map<string, FileDecoration>,
-  ): void {
-    for (const r of group.resourceStates) {
-      const decoration = r.resourceDecoration;
+			if (decoration) {
+				// not deleted and has a decoration
+				bucket.set(r.original.toString(), decoration);
 
-      if (decoration) {
-        // not deleted and has a decoration
-        bucket.set(r.original.toString(), decoration);
+				if (r.type === Status.DELETED && r.rightUri) {
+					bucket.set(r.rightUri.toString(), decoration);
+				}
 
-        if (r.type === Status.DELETED && r.rightUri) {
-          bucket.set(r.rightUri.toString(), decoration);
-        }
+				if (r.type === Status.INDEX_RENAMED || r.type === Status.INTENT_TO_RENAME) {
+					bucket.set(r.resourceUri.toString(), decoration);
+				}
+			}
+		}
+	}
 
-        if (r.type === Status.INDEX_RENAMED || r.type === Status.INTENT_TO_RENAME) {
-          bucket.set(r.resourceUri.toString(), decoration);
-        }
-      }
-    }
-  }
+	private collectSubmoduleDecorationData(bucket: Map<string, FileDecoration>): void {
+		for (const submodule of this.repository.submodules) {
+			bucket.set(Uri.file(path.join(this.repository.root, submodule.path)).toString(), GitDecorationProvider.SubmoduleDecorationData);
+		}
+	}
 
-  private collectSubmoduleDecorationData(bucket: Map<string, FileDecoration>): void {
-    for (const submodule of this.repository.submodules) {
-      bucket.set(
-        Uri.file(path.join(this.repository.root, submodule.path)).toString(),
-        GitDecorationProvider.SubmoduleDecorationData,
-      );
-    }
-  }
+	provideFileDecoration(uri: Uri): FileDecoration | undefined {
+		return this.decorations.get(uri.toString());
+	}
 
-  provideFileDecoration(uri: Uri): FileDecoration | undefined {
-    return this.decorations.get(uri.toString());
-  }
-
-  dispose(): void {
-    this.disposables.forEach((d) => d.dispose());
-  }
+	dispose(): void {
+		this.disposables.forEach(d => d.dispose());
+	}
 }
 
 class GitIncomingChangesFileDecorationProvider implements FileDecorationProvider {
-  private readonly _onDidChangeDecorations = new EventEmitter<Uri[]>();
 
-  readonly onDidChangeFileDecorations: Event<Uri[]> = this._onDidChangeDecorations.event;
+	private readonly _onDidChangeDecorations = new EventEmitter<Uri[]>();
+	readonly onDidChangeFileDecorations: Event<Uri[]> = this._onDidChangeDecorations.event;
 
-  private _currentHistoryItemRef: SourceControlHistoryItemRef | undefined;
+	private _currentHistoryItemRef: SourceControlHistoryItemRef | undefined;
+	private _currentHistoryItemRemoteRef: SourceControlHistoryItemRef | undefined;
 
-  private _currentHistoryItemRemoteRef: SourceControlHistoryItemRef | undefined;
+	private _decorations = new Map<string, FileDecoration>();
+	private readonly disposables: Disposable[] = [];
 
-  private _decorations = new Map<string, FileDecoration>();
+	constructor(private readonly repository: Repository) {
+		this.disposables.push(
+			window.registerFileDecorationProvider(this),
+			runAndSubscribeEvent(repository.historyProvider.onDidChangeCurrentHistoryItemRefs, () => this.onDidChangeCurrentHistoryItemRefs())
+		);
+	}
 
-  private readonly disposables: Disposable[] = [];
+	private async onDidChangeCurrentHistoryItemRefs(): Promise<void> {
+		const historyProvider = this.repository.historyProvider;
+		const currentHistoryItemRef = historyProvider.currentHistoryItemRef;
+		const currentHistoryItemRemoteRef = historyProvider.currentHistoryItemRemoteRef;
 
-  constructor(private readonly repository: Repository) {
-    this.disposables.push(
-      window.registerFileDecorationProvider(this),
-      runAndSubscribeEvent(repository.historyProvider.onDidChangeCurrentHistoryItemRefs, () =>
-        this.onDidChangeCurrentHistoryItemRefs(),
-      ),
-    );
-  }
+		if (equalSourceControlHistoryItemRefs(this._currentHistoryItemRef, currentHistoryItemRef) &&
+			equalSourceControlHistoryItemRefs(this._currentHistoryItemRemoteRef, currentHistoryItemRemoteRef)) {
+			return;
+		}
 
-  private async onDidChangeCurrentHistoryItemRefs(): Promise<void> {
-    const historyProvider = this.repository.historyProvider;
-    const currentHistoryItemRef = historyProvider.currentHistoryItemRef;
-    const currentHistoryItemRemoteRef = historyProvider.currentHistoryItemRemoteRef;
+		const decorations = new Map<string, FileDecoration>();
+		await this.collectIncomingChangesFileDecorations(decorations);
+		const uris = new Set([...this._decorations.keys()].concat([...decorations.keys()]));
 
-    if (
-      equalSourceControlHistoryItemRefs(this._currentHistoryItemRef, currentHistoryItemRef) &&
-      equalSourceControlHistoryItemRefs(
-        this._currentHistoryItemRemoteRef,
-        currentHistoryItemRemoteRef,
-      )
-    ) {
-      return;
-    }
+		this._decorations = decorations;
+		this._currentHistoryItemRef = currentHistoryItemRef;
+		this._currentHistoryItemRemoteRef = currentHistoryItemRemoteRef;
 
-    const decorations = new Map<string, FileDecoration>();
-    await this.collectIncomingChangesFileDecorations(decorations);
-    const uris = new Set([...this._decorations.keys()].concat([...decorations.keys()]));
+		this._onDidChangeDecorations.fire([...uris.values()].map(value => Uri.parse(value, true)));
+	}
 
-    this._decorations = decorations;
-    this._currentHistoryItemRef = currentHistoryItemRef;
-    this._currentHistoryItemRemoteRef = currentHistoryItemRemoteRef;
+	private async collectIncomingChangesFileDecorations(bucket: Map<string, FileDecoration>): Promise<void> {
+		for (const change of await this.getIncomingChanges()) {
+			switch (change.status) {
+				case Status.INDEX_ADDED:
+					bucket.set(change.uri.toString(), {
+						badge: '↓A',
+						tooltip: l10n.t('Incoming Changes (added)'),
+					});
+					break;
+				case Status.DELETED:
+					bucket.set(change.uri.toString(), {
+						badge: '↓D',
+						tooltip: l10n.t('Incoming Changes (deleted)'),
+					});
+					break;
+				case Status.INDEX_RENAMED:
+					bucket.set(change.originalUri.toString(), {
+						badge: '↓R',
+						tooltip: l10n.t('Incoming Changes (renamed)'),
+					});
+					break;
+				case Status.MODIFIED:
+					bucket.set(change.uri.toString(), {
+						badge: '↓M',
+						tooltip: l10n.t('Incoming Changes (modified)'),
+					});
+					break;
+				default: {
+					bucket.set(change.uri.toString(), {
+						badge: '↓~',
+						tooltip: l10n.t('Incoming Changes'),
+					});
+					break;
+				}
+			}
+		}
+	}
 
-    this._onDidChangeDecorations.fire([...uris.values()].map((value) => Uri.parse(value, true)));
-  }
+	private async getIncomingChanges(): Promise<Change[]> {
+		try {
+			const historyProvider = this.repository.historyProvider;
+			const currentHistoryItemRef = historyProvider.currentHistoryItemRef;
+			const currentHistoryItemRemoteRef = historyProvider.currentHistoryItemRemoteRef;
 
-  private async collectIncomingChangesFileDecorations(
-    bucket: Map<string, FileDecoration>,
-  ): Promise<void> {
-    for (const change of await this.getIncomingChanges()) {
-      switch (change.status) {
-        case Status.INDEX_ADDED:
-          bucket.set(change.uri.toString(), {
-            badge: '↓A',
-            tooltip: l10n.t('Incoming Changes (added)'),
-          });
-          break;
-        case Status.DELETED:
-          bucket.set(change.uri.toString(), {
-            badge: '↓D',
-            tooltip: l10n.t('Incoming Changes (deleted)'),
-          });
-          break;
-        case Status.INDEX_RENAMED:
-          bucket.set(change.originalUri.toString(), {
-            badge: '↓R',
-            tooltip: l10n.t('Incoming Changes (renamed)'),
-          });
-          break;
-        case Status.MODIFIED:
-          bucket.set(change.uri.toString(), {
-            badge: '↓M',
-            tooltip: l10n.t('Incoming Changes (modified)'),
-          });
-          break;
-        default: {
-          bucket.set(change.uri.toString(), {
-            badge: '↓~',
-            tooltip: l10n.t('Incoming Changes'),
-          });
-          break;
-        }
-      }
-    }
-  }
+			if (!currentHistoryItemRef || !currentHistoryItemRemoteRef) {
+				return [];
+			}
 
-  private async getIncomingChanges(): Promise<Change[]> {
-    try {
-      const historyProvider = this.repository.historyProvider;
-      const currentHistoryItemRef = historyProvider.currentHistoryItemRef;
-      const currentHistoryItemRemoteRef = historyProvider.currentHistoryItemRemoteRef;
+			const ancestor = await historyProvider.resolveHistoryItemRefsCommonAncestor([currentHistoryItemRef.id, currentHistoryItemRemoteRef.id]);
+			if (!ancestor) {
+				return [];
+			}
 
-      if (!currentHistoryItemRef || !currentHistoryItemRemoteRef) {
-        return [];
-      }
+			const changes = await this.repository.diffBetween(ancestor, currentHistoryItemRemoteRef.id);
+			return changes;
+		} catch (err) {
+			return [];
+		}
+	}
 
-      const ancestor = await historyProvider.resolveHistoryItemRefsCommonAncestor([
-        currentHistoryItemRef.id,
-        currentHistoryItemRemoteRef.id,
-      ]);
-      if (!ancestor) {
-        return [];
-      }
+	provideFileDecoration(uri: Uri): FileDecoration | undefined {
+		return this._decorations.get(uri.toString());
+	}
 
-      const changes = await this.repository.diffBetween(ancestor, currentHistoryItemRemoteRef.id);
-      return changes;
-    } catch (err) {
-      return [];
-    }
-  }
-
-  provideFileDecoration(uri: Uri): FileDecoration | undefined {
-    return this._decorations.get(uri.toString());
-  }
-
-  dispose(): void {
-    dispose(this.disposables);
-  }
+	dispose(): void {
+		dispose(this.disposables);
+	}
 }
 
 export class GitDecorations {
-  private enabled = false;
 
-  private disposables: Disposable[] = [];
+	private enabled = false;
+	private disposables: Disposable[] = [];
+	private modelDisposables: Disposable[] = [];
+	private providers = new Map<Repository, Disposable>();
 
-  private modelDisposables: Disposable[] = [];
+	constructor(private model: Model) {
+		this.disposables.push(new GitIgnoreDecorationProvider(model));
 
-  private providers = new Map<Repository, Disposable>();
+		const onEnablementChange = filterEvent(workspace.onDidChangeConfiguration, e => e.affectsConfiguration('git.decorations.enabled'));
+		onEnablementChange(this.update, this, this.disposables);
+		this.update();
+	}
 
-  constructor(private model: Model) {
-    this.disposables.push(new GitIgnoreDecorationProvider(model));
+	private update(): void {
+		const config = workspace.getConfiguration('git');
+		const enabled = config.get<boolean>('decorations.enabled') === true;
+		if (this.enabled === enabled) {
+			return;
+		}
 
-    const onEnablementChange = filterEvent(workspace.onDidChangeConfiguration, (e) =>
-      e.affectsConfiguration('git.decorations.enabled'),
-    );
-    onEnablementChange(this.update, this, this.disposables);
-    this.update();
-  }
+		if (enabled) {
+			this.enable();
+		} else {
+			this.disable();
+		}
 
-  private update(): void {
-    const config = workspace.getConfiguration('git');
-    const enabled = config.get<boolean>('decorations.enabled') === true;
-    if (this.enabled === enabled) {
-      return;
-    }
+		this.enabled = enabled;
+	}
 
-    if (enabled) {
-      this.enable();
-    } else {
-      this.disable();
-    }
+	private enable(): void {
+		this.model.onDidOpenRepository(this.onDidOpenRepository, this, this.modelDisposables);
+		this.model.onDidCloseRepository(this.onDidCloseRepository, this, this.modelDisposables);
+		this.model.repositories.forEach(this.onDidOpenRepository, this);
+	}
 
-    this.enabled = enabled;
-  }
+	private disable(): void {
+		this.modelDisposables = dispose(this.modelDisposables);
+		this.providers.forEach(value => value.dispose());
+		this.providers.clear();
+	}
 
-  private enable(): void {
-    this.model.onDidOpenRepository(this.onDidOpenRepository, this, this.modelDisposables);
-    this.model.onDidCloseRepository(this.onDidCloseRepository, this, this.modelDisposables);
-    this.model.repositories.forEach(this.onDidOpenRepository, this);
-  }
+	private onDidOpenRepository(repository: Repository): void {
+		const providers = combinedDisposable([
+			new GitDecorationProvider(repository),
+			new GitIncomingChangesFileDecorationProvider(repository)
+		]);
 
-  private disable(): void {
-    this.modelDisposables = dispose(this.modelDisposables);
-    this.providers.forEach((value) => value.dispose());
-    this.providers.clear();
-  }
+		this.providers.set(repository, providers);
+	}
 
-  private onDidOpenRepository(repository: Repository): void {
-    const providers = combinedDisposable([
-      new GitDecorationProvider(repository),
-      new GitIncomingChangesFileDecorationProvider(repository),
-    ]);
+	private onDidCloseRepository(repository: Repository): void {
+		const provider = this.providers.get(repository);
 
-    this.providers.set(repository, providers);
-  }
+		if (provider) {
+			provider.dispose();
+			this.providers.delete(repository);
+		}
+	}
 
-  private onDidCloseRepository(repository: Repository): void {
-    const provider = this.providers.get(repository);
-
-    if (provider) {
-      provider.dispose();
-      this.providers.delete(repository);
-    }
-  }
-
-  dispose(): void {
-    this.disable();
-    this.disposables = dispose(this.disposables);
-  }
+	dispose(): void {
+		this.disable();
+		this.disposables = dispose(this.disposables);
+	}
 }

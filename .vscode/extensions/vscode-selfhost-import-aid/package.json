@@ -20,8 +20,8 @@
   },
   "license": "MIT",
   "scripts": {
-    "compile": "node ../../../scripts/build/main.mjs run compile-extension:vscode-selfhost-import-aid",
-    "watch": "node ../../../scripts/build/main.mjs run watch-extension:vscode-selfhost-import-aid"
+    "compile": "gulp compile-extension:vscode-selfhost-import-aid",
+    "watch": "gulp watch-extension:vscode-selfhost-import-aid"
   },
   "dependencies": {
     "typescript": "5.5.4"

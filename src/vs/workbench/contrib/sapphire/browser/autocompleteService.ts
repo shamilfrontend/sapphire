@@ -374,7 +374,7 @@ class AutocompleteService extends Disposable implements IAutocompleteService {
           // console.log('item: ', items?.[0]?.insertText)
           return { items };
         },
-        freeInlineCompletions: (_completions) => {
+        disposeInlineCompletions: (_completions, _reason) => {
           // uri и позиция для freeInlineCompletions
           const activePane = this._editorService.activeEditorPane;
           if (!activePane) return;

@@ -11,35 +11,33 @@ import { Categories } from '../../../../platform/action/common/actionCommonCateg
 import { ServicesAccessor } from '../../../../platform/instantiation/common/instantiation.js';
 
 export class ToggleMinimapAction extends Action2 {
-  static readonly ID = 'editor.action.toggleMinimap';
 
-  constructor() {
-    super({
-      id: ToggleMinimapAction.ID,
-      title: {
-        ...localize2('toggleMinimap', 'Toggle Minimap'),
-        mnemonicTitle: localize(
-          { key: 'miMinimap', comment: ['&& denotes a mnemonic'] },
-          '&&Minimap',
-        ),
-      },
-      category: Categories.View,
-      f1: true,
-      toggled: ContextKeyExpr.equals('config.editor.minimap.enabled', true),
-      menu: {
-        id: MenuId.MenubarAppearanceMenu,
-        group: '4_editor',
-        order: 1,
-      },
-    });
-  }
+	static readonly ID = 'editor.action.toggleMinimap';
 
-  override async run(accessor: ServicesAccessor): Promise<void> {
-    const configurationService = accessor.get(IConfigurationService);
+	constructor() {
+		super({
+			id: ToggleMinimapAction.ID,
+			title: {
+				...localize2('toggleMinimap', "Toggle Minimap"),
+				mnemonicTitle: localize({ key: 'miMinimap', comment: ['&& denotes a mnemonic'] }, "&&Minimap"),
+			},
+			category: Categories.View,
+			f1: true,
+			toggled: ContextKeyExpr.equals('config.editor.minimap.enabled', true),
+			menu: {
+				id: MenuId.MenubarAppearanceMenu,
+				group: '4_editor',
+				order: 1
+			}
+		});
+	}
 
-    const newValue = !configurationService.getValue('editor.minimap.enabled');
-    return configurationService.updateValue('editor.minimap.enabled', newValue);
-  }
+	override async run(accessor: ServicesAccessor): Promise<void> {
+		const configurationService = accessor.get(IConfigurationService);
+
+		const newValue = !configurationService.getValue('editor.minimap.enabled');
+		return configurationService.updateValue('editor.minimap.enabled', newValue);
+	}
 }
 
 registerAction2(ToggleMinimapAction);

@@ -4,152 +4,176 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { CodeWindow } from '../../../../base/browser/window.js';
+import { CancellationToken } from '../../../../base/common/cancellation.js';
+import { IEditorOptions } from '../../../../platform/editor/common/editor.js';
 import { Schemas } from '../../../../base/common/network.js';
+import { ThemeIcon } from '../../../../base/common/themables.js';
 import { URI } from '../../../../base/common/uri.js';
 import { generateUuid } from '../../../../base/common/uuid.js';
 import { IContextKeyService } from '../../../../platform/contextkey/common/contextkey.js';
-import {
-  EditorInputCapabilities,
-  GroupIdentifier,
-  IUntypedEditorInput,
-  Verbosity,
-} from '../../../common/editor.js';
+import { isDark } from '../../../../platform/theme/common/theme.js';
+import { IThemeService } from '../../../../platform/theme/common/themeService.js';
+import { EditorInputCapabilities, GroupIdentifier, IEditorPaneSelection, IUntypedEditorInput, Verbosity } from '../../../common/editor.js';
 import { EditorInput } from '../../../common/editor/editorInput.js';
 import { IOverlayWebview } from '../../webview/browser/webview.js';
-import { WebviewIconManager, WebviewIcons } from './webviewIconManager.js';
 
 export interface WebviewInputInitInfo {
-  readonly viewType: string;
-  readonly providedId: string | undefined;
-  readonly name: string;
+	readonly viewType: string;
+	readonly providedId: string | undefined;
+	readonly name: string;
+	readonly iconPath: WebviewIconPath | undefined;
 }
 
 export class WebviewInput extends EditorInput {
-  public static typeId = 'workbench.editors.webviewInput';
 
-  public override get typeId(): string {
-    return WebviewInput.typeId;
-  }
+	public async applyOptions(_options: IEditorOptions, _token: CancellationToken): Promise<void> { }
 
-  public override get editorId(): string {
-    return this.viewType;
-  }
+	public getSelection(): IEditorPaneSelection | undefined {
+		return undefined;
+	}
 
-  public override get capabilities(): EditorInputCapabilities {
-    return (
-      EditorInputCapabilities.Readonly |
-      EditorInputCapabilities.Singleton |
-      EditorInputCapabilities.CanDropIntoEditor
-    );
-  }
+	public static typeId = 'workbench.editors.webviewInput';
 
-  private readonly _resourceId = generateUuid();
+	public override get typeId(): string {
+		return WebviewInput.typeId;
+	}
 
-  private _name: string;
+	public override get editorId(): string {
+		return this.viewType;
+	}
 
-  private _iconPath?: WebviewIcons;
+	public override get capabilities(): EditorInputCapabilities {
+		return EditorInputCapabilities.Readonly | EditorInputCapabilities.Singleton | EditorInputCapabilities.CanDropIntoEditor;
+	}
 
-  private _group?: GroupIdentifier;
+	private readonly _resourceId = generateUuid();
 
-  private _webview: IOverlayWebview;
+	private _webviewTitle: string;
+	private _iconPath?: WebviewIconPath;
+	private _group?: GroupIdentifier;
 
-  private _hasTransfered = false;
+	private _webview: IOverlayWebview;
 
-  get resource() {
-    return URI.from({
-      scheme: Schemas.webviewPanel,
-      path: `webview-panel/webview-${this._resourceId}`,
-    });
-  }
+	private _hasTransfered = false;
 
-  public readonly viewType: string;
+	get resource() {
+		return URI.from({
+			scheme: Schemas.webviewPanel,
+			path: `webview-panel/webview-${this.providerId}-${this._resourceId}`
+		});
+	}
 
-  public readonly providedId: string | undefined;
+	public readonly viewType: string;
+	public readonly providerId: string | undefined;
 
-  constructor(
-    init: WebviewInputInitInfo,
-    webview: IOverlayWebview,
-    private readonly _iconManager: WebviewIconManager,
-  ) {
-    super();
+	constructor(
+		init: WebviewInputInitInfo,
+		webview: IOverlayWebview,
+		@IThemeService private readonly _themeService: IThemeService,
+	) {
+		super();
 
-    this.viewType = init.viewType;
-    this.providedId = init.providedId;
+		this.viewType = init.viewType;
+		this.providerId = init.providedId;
 
-    this._name = init.name;
-    this._webview = webview;
-  }
+		this._webviewTitle = init.name;
+		this._iconPath = init.iconPath;
+		this._webview = webview;
 
-  override dispose() {
-    if (!this.isDisposed()) {
-      if (!this._hasTransfered) {
-        this._webview?.dispose();
-      }
-    }
-    super.dispose();
-  }
+		this._register(_themeService.onDidColorThemeChange(() => {
+			// Potentially update icon
+			this._onDidChangeLabel.fire();
+		}));
+	}
 
-  public override getName(): string {
-    return this._name;
-  }
+	override dispose() {
+		if (!this.isDisposed()) {
+			if (!this._hasTransfered) {
+				this._webview?.dispose();
+			}
+		}
+		super.dispose();
+	}
 
-  public override getTitle(_verbosity?: Verbosity): string {
-    return this.getName();
-  }
+	public override getName(): string {
+		return this._webviewTitle;
+	}
 
-  public override getDescription(): string | undefined {
-    return undefined;
-  }
+	public override getTitle(_verbosity?: Verbosity): string {
+		return this.getName();
+	}
 
-  public setName(value: string): void {
-    this._name = value;
-    this.webview.setTitle(value);
-    this._onDidChangeLabel.fire();
-  }
+	public override getDescription(): string | undefined {
+		return undefined;
+	}
 
-  public get webview(): IOverlayWebview {
-    return this._webview;
-  }
+	public setWebviewTitle(value: string): void {
+		this._webviewTitle = value;
+		this.webview.setTitle(value);
+		this._onDidChangeLabel.fire();
+	}
 
-  public get extension() {
-    return this.webview.extension;
-  }
+	public getWebviewTitle(): string | undefined {
+		return this._webviewTitle;
+	}
 
-  public get iconPath() {
-    return this._iconPath;
-  }
+	public get webview(): IOverlayWebview {
+		return this._webview;
+	}
 
-  public set iconPath(value: WebviewIcons | undefined) {
-    this._iconPath = value;
-    this._iconManager.setIcons(this._resourceId, value);
-  }
+	public get extension() {
+		return this.webview.extension;
+	}
 
-  public override matches(other: EditorInput | IUntypedEditorInput): boolean {
-    return super.matches(other) || other === this;
-  }
+	override getIcon(): URI | ThemeIcon | undefined {
+		if (!this._iconPath) {
+			return;
+		}
 
-  public get group(): GroupIdentifier | undefined {
-    return this._group;
-  }
+		if (ThemeIcon.isThemeIcon(this._iconPath)) {
+			return this._iconPath;
+		}
 
-  public updateGroup(group: GroupIdentifier): void {
-    this._group = group;
-  }
+		return isDark(this._themeService.getColorTheme().type)
+			? this._iconPath.dark
+			: (this._iconPath.light ?? this._iconPath.dark);
+	}
 
-  protected transfer(other: WebviewInput): WebviewInput | undefined {
-    if (this._hasTransfered) {
-      return undefined;
-    }
-    this._hasTransfered = true;
-    other._webview = this._webview;
-    return other;
-  }
+	public get iconPath() {
+		return this._iconPath;
+	}
 
-  public claim(
-    claimant: unknown,
-    targetWindow: CodeWindow,
-    scopedContextKeyService: IContextKeyService | undefined,
-  ): void {
-    return this._webview.claim(claimant, targetWindow, scopedContextKeyService);
-  }
+	public set iconPath(value: WebviewIconPath | undefined) {
+		this._iconPath = value;
+		this._onDidChangeLabel.fire();
+	}
+
+	public override matches(other: EditorInput | IUntypedEditorInput): boolean {
+		return super.matches(other) || other === this;
+	}
+
+	public get group(): GroupIdentifier | undefined {
+		return this._group;
+	}
+
+	public updateGroup(group: GroupIdentifier): void {
+		this._group = group;
+	}
+
+	protected transfer(other: WebviewInput): WebviewInput | undefined {
+		if (this._hasTransfered) {
+			return undefined;
+		}
+		this._hasTransfered = true;
+		other._webview = this._webview;
+		return other;
+	}
+
+	public claim(claimant: unknown, targetWindow: CodeWindow, scopedContextKeyService: IContextKeyService | undefined): void {
+		return this._webview.claim(claimant, targetWindow, scopedContextKeyService);
+	}
 }
+export type WebviewIconPath = ThemeIcon | {
+	readonly light: URI;
+	readonly dark: URI;
+};

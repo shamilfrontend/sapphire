@@ -8,186 +8,166 @@ import { CharCode } from '../../../../base/common/charCode.js';
 import { IExtHostRpcService } from '../../common/extHostRpcService.js';
 import { IExtHostContext } from '../../../services/extensions/common/extHostCustomers.js';
 import { ExtensionHostKind } from '../../../services/extensions/common/extensionHostKind.js';
-import {
-  Proxied,
-  ProxyIdentifier,
-  SerializableObjectWithBuffers,
-} from '../../../services/extensions/common/proxyIdentifier.js';
-import {
-  parseJsonAndRestoreBufferRefs,
-  stringifyJsonWithBufferRefs,
-} from '../../../services/extensions/common/rpcProtocol.js';
+import { Proxied, ProxyIdentifier, SerializableObjectWithBuffers } from '../../../services/extensions/common/proxyIdentifier.js';
+import { parseJsonAndRestoreBufferRefs, stringifyJsonWithBufferRefs } from '../../../services/extensions/common/rpcProtocol.js';
 
 export function SingleProxyRPCProtocol(thing: any): IExtHostContext & IExtHostRpcService {
-  return {
-    _serviceBrand: undefined,
-    remoteAuthority: null!,
-    getProxy<T>(): T {
-      return thing;
-    },
-    set<T, R extends T>(identifier: ProxyIdentifier<T>, value: R): R {
-      return value;
-    },
-    dispose: undefined!,
-    assertRegistered: undefined!,
-    drain: undefined!,
-    extensionHostKind: ExtensionHostKind.LocalProcess,
-  };
+	return {
+		_serviceBrand: undefined,
+		remoteAuthority: null!,
+		getProxy<T>(): T {
+			return thing;
+		},
+		set<T, R extends T>(identifier: ProxyIdentifier<T>, value: R): R {
+			return value;
+		},
+		dispose: undefined!,
+		assertRegistered: undefined!,
+		drain: undefined!,
+		extensionHostKind: ExtensionHostKind.LocalProcess
+	};
 }
 
 /** Makes a fake {@link SingleProxyRPCProtocol} on which any method can be called */
 export function AnyCallRPCProtocol<T>(useCalls?: { [K in keyof T]: T[K] }) {
-  return SingleProxyRPCProtocol(
-    new Proxy(
-      {},
-      {
-        get(_target, prop: string) {
-          if (useCalls && prop in useCalls) {
-            return (useCalls as any)[prop];
-          }
-          return () => Promise.resolve(undefined);
-        },
-      },
-    ),
-  );
+	return SingleProxyRPCProtocol(new Proxy({}, {
+		get(_target, prop: string) {
+			if (useCalls && prop in useCalls) {
+				// eslint-disable-next-line local/code-no-any-casts
+				return (useCalls as any)[prop];
+			}
+			return () => Promise.resolve(undefined);
+		}
+	}));
 }
 
 export class TestRPCProtocol implements IExtHostContext, IExtHostRpcService {
-  public _serviceBrand: undefined;
 
-  public remoteAuthority = null!;
+	public _serviceBrand: undefined;
+	public remoteAuthority = null!;
+	public extensionHostKind = ExtensionHostKind.LocalProcess;
 
-  public extensionHostKind = ExtensionHostKind.LocalProcess;
+	private _callCountValue: number = 0;
+	private _idle?: Promise<any>;
+	private _completeIdle?: Function;
 
-  private _callCountValue: number = 0;
+	private readonly _locals: { [id: string]: any };
+	private readonly _proxies: { [id: string]: any };
 
-  private _idle?: Promise<any>;
+	constructor() {
+		this._locals = Object.create(null);
+		this._proxies = Object.create(null);
+	}
 
-  private _completeIdle?: Function;
+	drain(): Promise<void> {
+		return Promise.resolve();
+	}
 
-  private readonly _locals: { [id: string]: any };
+	private get _callCount(): number {
+		return this._callCountValue;
+	}
 
-  private readonly _proxies: { [id: string]: any };
+	private set _callCount(value: number) {
+		this._callCountValue = value;
+		if (this._callCountValue === 0) {
+			this._completeIdle?.();
+			this._idle = undefined;
+		}
+	}
 
-  constructor() {
-    this._locals = Object.create(null);
-    this._proxies = Object.create(null);
-  }
+	sync(): Promise<any> {
+		return new Promise<any>((c) => {
+			setTimeout(c, 0);
+		}).then(() => {
+			if (this._callCount === 0) {
+				return undefined;
+			}
+			if (!this._idle) {
+				this._idle = new Promise<any>((c, e) => {
+					this._completeIdle = c;
+				});
+			}
+			return this._idle;
+		});
+	}
 
-  drain(): Promise<void> {
-    return Promise.resolve();
-  }
+	public getProxy<T>(identifier: ProxyIdentifier<T>): Proxied<T> {
+		if (!this._proxies[identifier.sid]) {
+			this._proxies[identifier.sid] = this._createProxy(identifier.sid);
+		}
+		return this._proxies[identifier.sid];
+	}
 
-  private get _callCount(): number {
-    return this._callCountValue;
-  }
+	private _createProxy<T>(proxyId: string): T {
+		const handler = {
+			get: (target: any, name: PropertyKey) => {
+				if (typeof name === 'string' && !target[name] && name.charCodeAt(0) === CharCode.DollarSign) {
+					target[name] = (...myArgs: any[]) => {
+						return this._remoteCall(proxyId, name, myArgs);
+					};
+				}
 
-  private set _callCount(value: number) {
-    this._callCountValue = value;
-    if (this._callCountValue === 0) {
-      this._completeIdle?.();
-      this._idle = undefined;
-    }
-  }
+				return target[name];
+			}
+		};
+		return new Proxy(Object.create(null), handler);
+	}
 
-  sync(): Promise<any> {
-    return new Promise<any>((c) => {
-      setTimeout(c, 0);
-    }).then(() => {
-      if (this._callCount === 0) {
-        return undefined;
-      }
-      if (!this._idle) {
-        this._idle = new Promise<any>((c, e) => {
-          this._completeIdle = c;
-        });
-      }
-      return this._idle;
-    });
-  }
+	public set<T, R extends T>(identifier: ProxyIdentifier<T>, value: R): R {
+		this._locals[identifier.sid] = value;
+		return value;
+	}
 
-  public getProxy<T>(identifier: ProxyIdentifier<T>): Proxied<T> {
-    if (!this._proxies[identifier.sid]) {
-      this._proxies[identifier.sid] = this._createProxy(identifier.sid);
-    }
-    return this._proxies[identifier.sid];
-  }
+	protected _remoteCall(proxyId: string, path: string, args: any[]): Promise<any> {
+		this._callCount++;
 
-  private _createProxy<T>(proxyId: string): T {
-    const handler = {
-      get: (target: any, name: PropertyKey) => {
-        if (
-          typeof name === 'string' &&
-          !target[name] &&
-          name.charCodeAt(0) === CharCode.DollarSign
-        ) {
-          target[name] = (...myArgs: any[]) => this._remoteCall(proxyId, name, myArgs);
-        }
+		return new Promise<any>((c) => {
+			setTimeout(c, 0);
+		}).then(() => {
+			const instance = this._locals[proxyId];
+			// pretend the args went over the wire... (invoke .toJSON on objects...)
+			const wireArgs = simulateWireTransfer(args);
+			let p: Promise<any>;
+			try {
+				const result = (<Function>instance[path]).apply(instance, wireArgs);
+				p = isThenable(result) ? result : Promise.resolve(result);
+			} catch (err) {
+				p = Promise.reject(err);
+			}
 
-        return target[name];
-      },
-    };
-    return new Proxy(Object.create(null), handler);
-  }
+			return p.then(result => {
+				this._callCount--;
+				// pretend the result went over the wire... (invoke .toJSON on objects...)
+				const wireResult = simulateWireTransfer(result);
+				return wireResult;
+			}, err => {
+				this._callCount--;
+				return Promise.reject(err);
+			});
+		});
+	}
 
-  public set<T, R extends T>(identifier: ProxyIdentifier<T>, value: R): R {
-    this._locals[identifier.sid] = value;
-    return value;
-  }
+	public dispose() { }
 
-  protected _remoteCall(proxyId: string, path: string, args: any[]): Promise<any> {
-    this._callCount++;
-
-    return new Promise<any>((c) => {
-      setTimeout(c, 0);
-    }).then(() => {
-      const instance = this._locals[proxyId];
-      // pretend the args went over the wire... (invoke .toJSON on objects...)
-      const wireArgs = simulateWireTransfer(args);
-      let p: Promise<any>;
-      try {
-        const result = (<Function>instance[path]).apply(instance, wireArgs);
-        p = isThenable(result) ? result : Promise.resolve(result);
-      } catch (err) {
-        p = Promise.reject(err);
-      }
-
-      return p.then(
-        (result) => {
-          this._callCount--;
-          // pretend the result went over the wire... (invoke .toJSON on objects...)
-          const wireResult = simulateWireTransfer(result);
-          return wireResult;
-        },
-        (err) => {
-          this._callCount--;
-          return Promise.reject(err);
-        },
-      );
-    });
-  }
-
-  public dispose() {
-    throw new Error('Not implemented!');
-  }
-
-  public assertRegistered(identifiers: ProxyIdentifier<any>[]): void {
-    throw new Error('Not implemented!');
-  }
+	public assertRegistered(identifiers: ProxyIdentifier<any>[]): void {
+		throw new Error('Not implemented!');
+	}
 }
 
 function simulateWireTransfer<T>(obj: T): T {
-  if (!obj) {
-    return obj;
-  }
+	if (!obj) {
+		return obj;
+	}
 
-  if (Array.isArray(obj)) {
-    return obj.map(simulateWireTransfer) as any;
-  }
+	if (Array.isArray(obj)) {
+		// eslint-disable-next-line local/code-no-any-casts
+		return obj.map(simulateWireTransfer) as any;
+	}
 
-  if (obj instanceof SerializableObjectWithBuffers) {
-    const { jsonString, referencedBuffers } = stringifyJsonWithBufferRefs(obj);
-    return parseJsonAndRestoreBufferRefs(jsonString, referencedBuffers, null);
-  }
-  return JSON.parse(JSON.stringify(obj));
+	if (obj instanceof SerializableObjectWithBuffers) {
+		const { jsonString, referencedBuffers } = stringifyJsonWithBufferRefs(obj);
+		return parseJsonAndRestoreBufferRefs(jsonString, referencedBuffers, null);
+	} else {
+		return JSON.parse(JSON.stringify(obj));
+	}
 }

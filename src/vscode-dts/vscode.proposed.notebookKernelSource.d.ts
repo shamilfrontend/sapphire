@@ -4,54 +4,43 @@
  *--------------------------------------------------------------------------------------------*/
 
 declare module 'vscode' {
-  export interface NotebookControllerDetectionTask {
-    /**
-     * Dispose and remove the detection task.
-     */
-    dispose(): void;
-  }
+	export interface NotebookControllerDetectionTask {
+		/**
+		 * Dispose and remove the detection task.
+		 */
+		dispose(): void;
+	}
 
-  export class NotebookKernelSourceAction {
-    readonly label: string;
+	export class NotebookKernelSourceAction {
+		readonly label: string;
+		readonly description?: string;
+		readonly detail?: string;
+		readonly command: string | Command;
+		readonly documentation?: Uri;
 
-    readonly description?: string;
+		constructor(label: string);
+	}
 
-    readonly detail?: string;
+	export interface NotebookKernelSourceActionProvider {
+		/**
+		 * An optional event to signal that the kernel source actions have changed.
+		 */
+		readonly onDidChangeNotebookKernelSourceActions?: Event<void>;
+		/**
+		 * Provide kernel source actions
+		 */
+		provideNotebookKernelSourceActions(token: CancellationToken): ProviderResult<NotebookKernelSourceAction[]>;
+	}
 
-    readonly command: string | Command;
+	export namespace notebooks {
+		/**
+		 * Create notebook controller detection task
+		 */
+		export function createNotebookControllerDetectionTask(notebookType: string): NotebookControllerDetectionTask;
 
-    readonly documentation?: Uri;
-
-    constructor(label: string);
-  }
-
-  export interface NotebookKernelSourceActionProvider {
-    /**
-     * An optional event to signal that the kernel source actions have changed.
-     */
-    onDidChangeNotebookKernelSourceActions?: Event<void>;
-    /**
-     * Provide kernel source actions
-     */
-    provideNotebookKernelSourceActions(
-      token: CancellationToken,
-    ): ProviderResult<NotebookKernelSourceAction[]>;
-  }
-
-  export namespace notebooks {
-    /**
-     * Create notebook controller detection task
-     */
-    export function createNotebookControllerDetectionTask(
-      notebookType: string,
-    ): NotebookControllerDetectionTask;
-
-    /**
-     * Register a notebook kernel source action provider
-     */
-    export function registerKernelSourceActionProvider(
-      notebookType: string,
-      provider: NotebookKernelSourceActionProvider,
-    ): Disposable;
-  }
+		/**
+		 * Register a notebook kernel source action provider
+		 */
+		export function registerKernelSourceActionProvider(notebookType: string, provider: NotebookKernelSourceActionProvider): Disposable;
+	}
 }

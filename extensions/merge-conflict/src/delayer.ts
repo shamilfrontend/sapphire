@@ -4,82 +4,76 @@
  *--------------------------------------------------------------------------------------------*/
 
 export interface ITask<T> {
-  (): T;
+	(): T;
 }
 
 export class Delayer<T> {
-  public defaultDelay: number;
 
-  private timeout: any; // Timer
+	public defaultDelay: number;
+	private timeout: any; // Timer
+	private completionPromise: Promise<T> | null;
+	private onSuccess: ((value: T | PromiseLike<T> | undefined) => void) | null;
+	private task: ITask<T> | null;
 
-  private completionPromise: Promise<T> | null;
+	constructor(defaultDelay: number) {
+		this.defaultDelay = defaultDelay;
+		this.timeout = null;
+		this.completionPromise = null;
+		this.onSuccess = null;
+		this.task = null;
+	}
 
-  private onSuccess: ((value: T | PromiseLike<T> | undefined) => void) | null;
+	public trigger(task: ITask<T>, delay: number = this.defaultDelay): Promise<T> {
+		this.task = task;
+		if (delay >= 0) {
+			this.cancelTimeout();
+		}
 
-  private task: ITask<T> | null;
+		if (!this.completionPromise) {
+			this.completionPromise = new Promise<T | undefined>((resolve) => {
+				this.onSuccess = resolve;
+			}).then(() => {
+				this.completionPromise = null;
+				this.onSuccess = null;
+				const result = this.task!();
+				this.task = null;
+				return result;
+			});
+		}
 
-  constructor(defaultDelay: number) {
-    this.defaultDelay = defaultDelay;
-    this.timeout = null;
-    this.completionPromise = null;
-    this.onSuccess = null;
-    this.task = null;
-  }
+		if (delay >= 0 || this.timeout === null) {
+			this.timeout = setTimeout(() => {
+				this.timeout = null;
+				this.onSuccess!(undefined);
+			}, delay >= 0 ? delay : this.defaultDelay);
+		}
 
-  public trigger(task: ITask<T>, delay: number = this.defaultDelay): Promise<T> {
-    this.task = task;
-    if (delay >= 0) {
-      this.cancelTimeout();
-    }
+		return this.completionPromise;
+	}
 
-    if (!this.completionPromise) {
-      this.completionPromise = new Promise<T | undefined>((resolve) => {
-        this.onSuccess = resolve;
-      }).then(() => {
-        this.completionPromise = null;
-        this.onSuccess = null;
-        const result = this.task!();
-        this.task = null;
-        return result;
-      });
-    }
+	public forceDelivery(): Promise<T> | null {
+		if (!this.completionPromise) {
+			return null;
+		}
+		this.cancelTimeout();
+		const result = this.completionPromise;
+		this.onSuccess!(undefined);
+		return result;
+	}
 
-    if (delay >= 0 || this.timeout === null) {
-      this.timeout = setTimeout(
-        () => {
-          this.timeout = null;
-          this.onSuccess!(undefined);
-        },
-        delay >= 0 ? delay : this.defaultDelay,
-      );
-    }
+	public isTriggered(): boolean {
+		return this.timeout !== null;
+	}
 
-    return this.completionPromise;
-  }
+	public cancel(): void {
+		this.cancelTimeout();
+		this.completionPromise = null;
+	}
 
-  public forceDelivery(): Promise<T> | null {
-    if (!this.completionPromise) {
-      return null;
-    }
-    this.cancelTimeout();
-    const result = this.completionPromise;
-    this.onSuccess!(undefined);
-    return result;
-  }
-
-  public isTriggered(): boolean {
-    return this.timeout !== null;
-  }
-
-  public cancel(): void {
-    this.cancelTimeout();
-    this.completionPromise = null;
-  }
-
-  private cancelTimeout(): void {
-    if (this.timeout !== null) {
-      clearTimeout(this.timeout);
-      this.timeout = null;
-    }
-  }
+	private cancelTimeout(): void {
+		if (this.timeout !== null) {
+			clearTimeout(this.timeout);
+			this.timeout = null;
+		}
+	}
 }

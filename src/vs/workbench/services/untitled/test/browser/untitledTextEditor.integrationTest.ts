@@ -5,63 +5,55 @@
 
 import assert from 'assert';
 import { IInstantiationService } from '../../../../../platform/instantiation/common/instantiation.js';
-import {
-  workbenchInstantiationService,
-  TestServiceAccessor,
-} from '../../../../test/browser/workbenchTestServices.js';
+import { workbenchInstantiationService, TestServiceAccessor } from '../../../../test/browser/workbenchTestServices.js';
 import { UntitledTextEditorInput } from '../../common/untitledTextEditorInput.js';
 import { CancellationToken } from '../../../../../base/common/cancellation.js';
 import { DisposableStore } from '../../../../../base/common/lifecycle.js';
 import { ensureNoDisposablesAreLeakedInTestSuite } from '../../../../../base/test/common/utils.js';
 
 suite('Untitled text editors', () => {
-  const disposables = new DisposableStore();
 
-  let instantiationService: IInstantiationService;
-  let accessor: TestServiceAccessor;
+	const disposables = new DisposableStore();
 
-  setup(() => {
-    instantiationService = workbenchInstantiationService(undefined, disposables);
-    accessor = instantiationService.createInstance(TestServiceAccessor);
-    disposables.add(accessor.untitledTextEditorService);
-  });
+	let instantiationService: IInstantiationService;
+	let accessor: TestServiceAccessor;
 
-  teardown(() => {
-    disposables.clear();
-  });
+	setup(() => {
+		instantiationService = workbenchInstantiationService(undefined, disposables);
+		accessor = instantiationService.createInstance(TestServiceAccessor);
+		disposables.add(accessor.untitledTextEditorService);
+	});
 
-  test('backup and restore (simple)', async () =>
-    testBackupAndRestore('Some very small file text content.'));
+	teardown(() => {
+		disposables.clear();
+	});
 
-  test('backup and restore (large, #121347)', async () => {
-    const largeContent = '국어한\n'.repeat(100000);
-    return testBackupAndRestore(largeContent);
-  });
+	test('backup and restore (simple)', async function () {
+		return testBackupAndRestore('Some very small file text content.');
+	});
 
-  async function testBackupAndRestore(content: string) {
-    const service = accessor.untitledTextEditorService;
-    const originalInput = disposables.add(
-      instantiationService.createInstance(UntitledTextEditorInput, service.create()),
-    );
-    const restoredInput = disposables.add(
-      instantiationService.createInstance(UntitledTextEditorInput, service.create()),
-    );
+	test('backup and restore (large, #121347)', async function () {
+		const largeContent = '국어한\n'.repeat(100000);
+		return testBackupAndRestore(largeContent);
+	});
 
-    const originalModel = disposables.add(await originalInput.resolve());
-    originalModel.textEditorModel?.setValue(content);
+	async function testBackupAndRestore(content: string) {
+		const service = accessor.untitledTextEditorService;
+		const originalInput = disposables.add(instantiationService.createInstance(UntitledTextEditorInput, service.create()));
+		const restoredInput = disposables.add(instantiationService.createInstance(UntitledTextEditorInput, service.create()));
 
-    const backup = await originalModel.backup(CancellationToken.None);
-    const modelRestoredIdentifier = {
-      typeId: originalModel.typeId,
-      resource: restoredInput.resource,
-    };
-    await accessor.workingCopyBackupService.backup(modelRestoredIdentifier, backup.content);
+		const originalModel = disposables.add(await originalInput.resolve());
+		originalModel.textEditorModel?.setValue(content);
 
-    const restoredModel = disposables.add(await restoredInput.resolve());
+		const backup = await originalModel.backup(CancellationToken.None);
+		const modelRestoredIdentifier = { typeId: originalModel.typeId, resource: restoredInput.resource };
+		await accessor.workingCopyBackupService.backup(modelRestoredIdentifier, backup.content);
 
-    assert.strictEqual(restoredModel.textEditorModel?.getValue(), content);
-    assert.strictEqual(restoredModel.isDirty(), true);
-  }
+		const restoredModel = disposables.add(await restoredInput.resolve());
 
-  ensureNoDisposablesAreLeakedInTestSuite();
+		assert.strictEqual(restoredModel.textEditorModel?.getValue(), content);
+		assert.strictEqual(restoredModel.isDirty(), true);
+	}
+
+	ensureNoDisposablesAreLeakedInTestSuite();
 });

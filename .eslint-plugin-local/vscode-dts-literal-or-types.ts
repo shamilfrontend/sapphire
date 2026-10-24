@@ -3,26 +3,27 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import * as eslint from 'eslint';
 import { TSESTree } from '@typescript-eslint/utils';
+import * as eslint from 'eslint';
 
-export = new (class ApiLiteralOrTypes implements eslint.Rule.RuleModule {
-  readonly meta: eslint.Rule.RuleMetaData = {
-    docs: { url: 'https://github.com/microsoft/vscode/wiki/Extension-API-guidelines#enums' },
-    messages: { useEnum: 'Use enums, not literal-or-types' },
-    schema: false,
-  };
+export default new class ApiLiteralOrTypes implements eslint.Rule.RuleModule {
 
-  create(context: eslint.Rule.RuleContext): eslint.Rule.RuleListener {
-    return {
-      'TSTypeAnnotation TSUnionType': (node: any) => {
-        if ((<TSESTree.TSUnionType>node).types.every((value) => value.type === 'TSLiteralType')) {
-          context.report({
-            node,
-            messageId: 'useEnum',
-          });
-        }
-      },
-    };
-  }
-})();
+	readonly meta: eslint.Rule.RuleMetaData = {
+		docs: { url: 'https://github.com/microsoft/vscode/wiki/Extension-API-guidelines#enums' },
+		messages: { useEnum: 'Use enums, not literal-or-types', },
+		schema: false,
+	};
+
+	create(context: eslint.Rule.RuleContext): eslint.Rule.RuleListener {
+		return {
+			['TSTypeAnnotation TSUnionType']: (node: TSESTree.TSUnionType) => {
+				if (node.types.every(value => value.type === 'TSLiteralType')) {
+					context.report({
+						node: node,
+						messageId: 'useEnum'
+					});
+				}
+			}
+		};
+	}
+};

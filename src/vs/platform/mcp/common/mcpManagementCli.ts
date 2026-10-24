@@ -3,64 +3,54 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { IConfigurationService } from '../../configuration/common/configuration.js';
 import { ILogger } from '../../log/common/log.js';
-import {
-  IMcpConfiguration,
-  IMcpConfigurationSSE,
-  IMcpConfigurationStdio,
-  McpConfigurationServer,
-} from './mcpPlatformTypes.js';
+import { IMcpServerConfiguration, IMcpServerVariable } from './mcpPlatformTypes.js';
+import { IMcpManagementService } from './mcpManagement.js';
 
-type ValidatedConfig = { name: string; config: IMcpConfigurationStdio | IMcpConfigurationSSE };
+type ValidatedConfig = { name: string; config: IMcpServerConfiguration; inputs?: IMcpServerVariable[] };
 
 export class McpManagementCli {
-  constructor(
-    private readonly _logger: ILogger,
-    @IConfigurationService private readonly _userConfigurationService: IConfigurationService,
-  ) {}
+	constructor(
+		private readonly _logger: ILogger,
+		@IMcpManagementService private readonly _mcpManagementService: IMcpManagementService,
+	) { }
 
-  async addMcpDefinitions(definitions: string[]) {
-    const configs = definitions.map((config) => this.validateConfiguration(config));
-    await this.updateMcpInConfig(this._userConfigurationService, configs);
-    this._logger.info(`Added MCP servers: ${configs.map((c) => c.name).join(', ')}`);
-  }
+	async addMcpDefinitions(
+		definitions: string[],
+	) {
+		const configs = definitions.map((config) => this.validateConfiguration(config));
+		await this.updateMcpInResource(configs);
+		this._logger.info(`Added MCP servers: ${configs.map(c => c.name).join(', ')}`);
+	}
 
-  private async updateMcpInConfig(service: IConfigurationService, configs: ValidatedConfig[]) {
-    const mcp = service.getValue<IMcpConfiguration>('mcp') || { servers: {} };
-    mcp.servers ??= {};
+	private async updateMcpInResource(configs: ValidatedConfig[]) {
+		await Promise.all(configs.map(({ name, config, inputs }) => this._mcpManagementService.install({ name, config, inputs })));
+	}
 
-    for (const config of configs) {
-      mcp.servers[config.name] = config.config;
-    }
+	private validateConfiguration(config: string): ValidatedConfig {
+		let parsed: IMcpServerConfiguration & { name: string; inputs?: IMcpServerVariable[] };
+		try {
+			parsed = JSON.parse(config);
+		} catch (e) {
+			throw new InvalidMcpOperationError(`Invalid JSON '${config}': ${e}`);
+		}
 
-    await service.updateValue('mcp', mcp);
-  }
+		if (!parsed.name) {
+			throw new InvalidMcpOperationError(`Missing name property in ${config}`);
+		}
 
-  private validateConfiguration(config: string): ValidatedConfig {
-    let parsed: McpConfigurationServer & { name: string };
-    try {
-      parsed = JSON.parse(config);
-    } catch (e) {
-      throw new InvalidMcpOperationError(`Invalid JSON '${config}': ${e}`);
-    }
+		if (!('command' in parsed) && !('url' in parsed)) {
+			throw new InvalidMcpOperationError(`Missing command or URL property in ${config}`);
+		}
 
-    if (!parsed.name) {
-      throw new InvalidMcpOperationError(`Missing name property in ${config}`);
-    }
-
-    if (!('command' in parsed) && !('url' in parsed)) {
-      throw new InvalidMcpOperationError(`Missing command or URL property in ${config}`);
-    }
-
-    const { name, ...rest } = parsed;
-    return { name, config: rest as IMcpConfigurationStdio | IMcpConfigurationSSE };
-  }
+		const { name, inputs, ...rest } = parsed;
+		return { name, inputs, config: rest as IMcpServerConfiguration };
+	}
 }
 
 class InvalidMcpOperationError extends Error {
-  constructor(message: string) {
-    super(message);
-    this.stack = message;
-  }
+	constructor(message: string) {
+		super(message);
+		this.stack = message;
+	}
 }

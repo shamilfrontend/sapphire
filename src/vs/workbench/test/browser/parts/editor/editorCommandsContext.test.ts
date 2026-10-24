@@ -5,256 +5,212 @@
 
 import assert from 'assert';
 import { IInstantiationService } from '../../../../../platform/instantiation/common/instantiation.js';
-import {
-  workbenchInstantiationService,
-  TestServiceAccessor,
-  registerTestEditor,
-  registerTestFileEditor,
-  registerTestResourceEditor,
-  TestFileEditorInput,
-  createEditorPart,
-  registerTestSideBySideEditor,
-  TestEditorInput,
-} from '../../workbenchTestServices.js';
+import { workbenchInstantiationService, TestServiceAccessor, registerTestEditor, registerTestFileEditor, registerTestResourceEditor, TestFileEditorInput, createEditorPart, registerTestSideBySideEditor, TestEditorInput } from '../../workbenchTestServices.js';
 import { DisposableStore } from '../../../../../base/common/lifecycle.js';
 import { ensureNoDisposablesAreLeakedInTestSuite } from '../../../../../base/test/common/utils.js';
 import { SyncDescriptor } from '../../../../../platform/instantiation/common/descriptors.js';
-import {
-  GroupDirection,
-  IEditorGroupsService,
-} from '../../../../services/editor/common/editorGroupsService.js';
+import { GroupDirection, IEditorGroupsService } from '../../../../services/editor/common/editorGroupsService.js';
 import { EditorService } from '../../../../services/editor/browser/editorService.js';
 import { IEditorService } from '../../../../services/editor/common/editorService.js';
 import { EditorInput } from '../../../../common/editor/editorInput.js';
 import { URI } from '../../../../../base/common/uri.js';
 import { resolveCommandsContext } from '../../../../browser/parts/editor/editorCommandsContext.js';
 import { IEditorCommandsContext } from '../../../../common/editor.js';
-import {
-  IListService,
-  WorkbenchListWidget,
-} from '../../../../../platform/list/browser/listService.js';
+import { IListService, WorkbenchListWidget } from '../../../../../platform/list/browser/listService.js';
 
 class TestListService implements IListService {
-  declare readonly _serviceBrand: undefined;
-
-  readonly lastFocusedList: WorkbenchListWidget | undefined = undefined;
+	declare readonly _serviceBrand: undefined;
+	readonly lastFocusedList: WorkbenchListWidget | undefined = undefined;
 }
 
 suite('Resolving Editor Commands Context', () => {
-  const disposables = new DisposableStore();
 
-  const TEST_EDITOR_ID = 'MyTestEditorForEditors';
+	const disposables = new DisposableStore();
 
-  let instantiationService: IInstantiationService;
-  let accessor: TestServiceAccessor;
+	const TEST_EDITOR_ID = 'MyTestEditorForEditors';
 
-  const testListService = new TestListService();
+	let instantiationService: IInstantiationService;
+	let accessor: TestServiceAccessor;
 
-  setup(() => {
-    instantiationService = workbenchInstantiationService(undefined, disposables);
-    accessor = instantiationService.createInstance(TestServiceAccessor);
+	const testListService = new TestListService();
 
-    disposables.add(accessor.untitledTextEditorService);
-    disposables.add(registerTestFileEditor());
-    disposables.add(registerTestSideBySideEditor());
-    disposables.add(registerTestResourceEditor());
-    disposables.add(registerTestEditor(TEST_EDITOR_ID, [new SyncDescriptor(TestFileEditorInput)]));
-  });
+	setup(() => {
+		instantiationService = workbenchInstantiationService(undefined, disposables);
+		accessor = instantiationService.createInstance(TestServiceAccessor);
 
-  teardown(() => {
-    disposables.clear();
-  });
+		disposables.add(accessor.untitledTextEditorService);
+		disposables.add(registerTestFileEditor());
+		disposables.add(registerTestSideBySideEditor());
+		disposables.add(registerTestResourceEditor());
+		disposables.add(registerTestEditor(TEST_EDITOR_ID, [new SyncDescriptor(TestFileEditorInput)]));
+	});
 
-  let index = 0;
-  function input(id = String(index++)): EditorInput {
-    return disposables.add(new TestEditorInput(URI.parse(`file://${id}`), 'testInput'));
-  }
+	teardown(() => {
+		disposables.clear();
+	});
 
-  async function createServices(): Promise<TestServiceAccessor> {
-    const instantiationService = workbenchInstantiationService(undefined, disposables);
+	let index = 0;
+	function input(id = String(index++)): EditorInput {
+		return disposables.add(new TestEditorInput(URI.parse(`file://${id}`), 'testInput'));
+	}
 
-    const part = await createEditorPart(instantiationService, disposables);
-    instantiationService.stub(IEditorGroupsService, part);
+	async function createServices(): Promise<TestServiceAccessor> {
+		const instantiationService = workbenchInstantiationService(undefined, disposables);
 
-    const editorService = disposables.add(
-      instantiationService.createInstance(EditorService, undefined),
-    );
-    instantiationService.stub(IEditorService, editorService);
+		const part = await createEditorPart(instantiationService, disposables);
+		instantiationService.stub(IEditorGroupsService, part);
 
-    return instantiationService.createInstance(TestServiceAccessor);
-  }
+		const editorService = disposables.add(instantiationService.createInstance(EditorService, undefined));
+		instantiationService.stub(IEditorService, editorService);
 
-  test('use editor group selection', async () => {
-    const accessor = await createServices();
-    const activeGroup = accessor.editorGroupService.activeGroup;
+		return instantiationService.createInstance(TestServiceAccessor);
+	}
 
-    const input1 = input();
-    const input2 = input();
-    const input3 = input();
-    activeGroup.openEditor(input1, { pinned: true });
-    activeGroup.openEditor(input2, { pinned: true });
-    activeGroup.openEditor(input3, { pinned: true });
+	test('use editor group selection', async () => {
+		const accessor = await createServices();
+		const activeGroup = accessor.editorGroupService.activeGroup;
 
-    activeGroup.setSelection(input1, [input2]);
+		const input1 = input();
+		const input2 = input();
+		const input3 = input();
+		activeGroup.openEditor(input1, { pinned: true });
+		activeGroup.openEditor(input2, { pinned: true });
+		activeGroup.openEditor(input3, { pinned: true });
 
-    // use editor commands context
-    const editorCommandContext: IEditorCommandsContext = {
-      groupId: activeGroup.id,
-      editorIndex: activeGroup.getIndexOfEditor(input1),
-      preserveFocus: true,
-    };
-    const resolvedContext1 = resolveCommandsContext(
-      [editorCommandContext],
-      accessor.editorService,
-      accessor.editorGroupService,
-      testListService,
-    );
+		activeGroup.setSelection(input1, [input2]);
 
-    assert.strictEqual(resolvedContext1.groupedEditors.length, 1);
-    assert.strictEqual(resolvedContext1.groupedEditors[0].group.id, activeGroup.id);
-    assert.strictEqual(resolvedContext1.groupedEditors[0].editors.length, 2);
-    assert.strictEqual(resolvedContext1.groupedEditors[0].editors[0], input1);
-    assert.strictEqual(resolvedContext1.groupedEditors[0].editors[1], input2);
-    assert.strictEqual(resolvedContext1.preserveFocus, true);
+		// use editor commands context
+		const editorCommandContext: IEditorCommandsContext = { groupId: activeGroup.id, editorIndex: activeGroup.getIndexOfEditor(input1), preserveFocus: true };
+		const resolvedContext1 = resolveCommandsContext([editorCommandContext], accessor.editorService, accessor.editorGroupService, testListService);
 
-    // use URI
-    const resolvedContext2 = resolveCommandsContext(
-      [input2.resource],
-      accessor.editorService,
-      accessor.editorGroupService,
-      testListService,
-    );
+		assert.strictEqual(resolvedContext1.groupedEditors.length, 1);
+		assert.strictEqual(resolvedContext1.groupedEditors[0].group.id, activeGroup.id);
+		assert.strictEqual(resolvedContext1.groupedEditors[0].editors.length, 2);
+		assert.strictEqual(resolvedContext1.groupedEditors[0].editors[0], input1);
+		assert.strictEqual(resolvedContext1.groupedEditors[0].editors[1], input2);
+		assert.strictEqual(resolvedContext1.preserveFocus, true);
 
-    assert.strictEqual(resolvedContext2.groupedEditors.length, 1);
-    assert.strictEqual(resolvedContext2.groupedEditors[0].group.id, activeGroup.id);
-    assert.strictEqual(resolvedContext2.groupedEditors[0].editors.length, 2);
-    assert.strictEqual(resolvedContext2.groupedEditors[0].editors[0], input2);
-    assert.strictEqual(resolvedContext2.groupedEditors[0].editors[1], input1);
-    assert.strictEqual(resolvedContext2.preserveFocus, false);
+		// use URI
+		const resolvedContext2 = resolveCommandsContext([input2.resource], accessor.editorService, accessor.editorGroupService, testListService);
 
-    // use URI and commandContext
-    const editor1CommandContext: IEditorCommandsContext = {
-      groupId: activeGroup.id,
-      editorIndex: activeGroup.getIndexOfEditor(input1),
-      preserveFocus: true,
-    };
-    const resolvedContext3 = resolveCommandsContext(
-      [editor1CommandContext],
-      accessor.editorService,
-      accessor.editorGroupService,
-      testListService,
-    );
+		assert.strictEqual(resolvedContext2.groupedEditors.length, 1);
+		assert.strictEqual(resolvedContext2.groupedEditors[0].group.id, activeGroup.id);
+		assert.strictEqual(resolvedContext2.groupedEditors[0].editors.length, 2);
+		assert.strictEqual(resolvedContext2.groupedEditors[0].editors[0], input2);
+		assert.strictEqual(resolvedContext2.groupedEditors[0].editors[1], input1);
+		assert.strictEqual(resolvedContext2.preserveFocus, false);
 
-    assert.strictEqual(resolvedContext3.groupedEditors.length, 1);
-    assert.strictEqual(resolvedContext3.groupedEditors[0].group.id, activeGroup.id);
-    assert.strictEqual(resolvedContext3.groupedEditors[0].editors.length, 2);
-    assert.strictEqual(resolvedContext3.groupedEditors[0].editors[0], input1);
-    assert.strictEqual(resolvedContext3.groupedEditors[0].editors[1], input2);
-    assert.strictEqual(resolvedContext3.preserveFocus, true);
-  });
+		// use URI and commandContext
+		const editor1CommandContext: IEditorCommandsContext = { groupId: activeGroup.id, editorIndex: activeGroup.getIndexOfEditor(input1), preserveFocus: true };
+		const resolvedContext3 = resolveCommandsContext([editor1CommandContext], accessor.editorService, accessor.editorGroupService, testListService);
 
-  test("don't use editor group selection", async () => {
-    const accessor = await createServices();
-    const activeGroup = accessor.editorGroupService.activeGroup;
+		assert.strictEqual(resolvedContext3.groupedEditors.length, 1);
+		assert.strictEqual(resolvedContext3.groupedEditors[0].group.id, activeGroup.id);
+		assert.strictEqual(resolvedContext3.groupedEditors[0].editors.length, 2);
+		assert.strictEqual(resolvedContext3.groupedEditors[0].editors[0], input1);
+		assert.strictEqual(resolvedContext3.groupedEditors[0].editors[1], input2);
+		assert.strictEqual(resolvedContext3.preserveFocus, true);
+	});
 
-    const input1 = input();
-    const input2 = input();
-    const input3 = input();
-    activeGroup.openEditor(input1, { pinned: true });
-    activeGroup.openEditor(input2, { pinned: true });
-    activeGroup.openEditor(input3, { pinned: true });
+	test('don\'t use editor group selection', async () => {
+		const accessor = await createServices();
+		const activeGroup = accessor.editorGroupService.activeGroup;
 
-    activeGroup.setSelection(input1, [input2]);
+		const input1 = input();
+		const input2 = input();
+		const input3 = input();
+		activeGroup.openEditor(input1, { pinned: true });
+		activeGroup.openEditor(input2, { pinned: true });
+		activeGroup.openEditor(input3, { pinned: true });
 
-    // use editor commands context
-    const editorCommandContext: IEditorCommandsContext = {
-      groupId: activeGroup.id,
-      editorIndex: activeGroup.getIndexOfEditor(input3),
-      preserveFocus: true,
-    };
-    const resolvedContext1 = resolveCommandsContext(
-      [editorCommandContext],
-      accessor.editorService,
-      accessor.editorGroupService,
-      testListService,
-    );
+		activeGroup.setSelection(input1, [input2]);
 
-    assert.strictEqual(resolvedContext1.groupedEditors.length, 1);
-    assert.strictEqual(resolvedContext1.groupedEditors[0].group.id, activeGroup.id);
-    assert.strictEqual(resolvedContext1.groupedEditors[0].editors.length, 1);
-    assert.strictEqual(resolvedContext1.groupedEditors[0].editors[0], input3);
-    assert.strictEqual(resolvedContext1.preserveFocus, true);
+		// use editor commands context
+		const editorCommandContext: IEditorCommandsContext = { groupId: activeGroup.id, editorIndex: activeGroup.getIndexOfEditor(input3), preserveFocus: true };
+		const resolvedContext1 = resolveCommandsContext([editorCommandContext], accessor.editorService, accessor.editorGroupService, testListService);
 
-    // use URI
-    const resolvedContext2 = resolveCommandsContext(
-      [input3.resource],
-      accessor.editorService,
-      accessor.editorGroupService,
-      testListService,
-    );
+		assert.strictEqual(resolvedContext1.groupedEditors.length, 1);
+		assert.strictEqual(resolvedContext1.groupedEditors[0].group.id, activeGroup.id);
+		assert.strictEqual(resolvedContext1.groupedEditors[0].editors.length, 1);
+		assert.strictEqual(resolvedContext1.groupedEditors[0].editors[0], input3);
+		assert.strictEqual(resolvedContext1.preserveFocus, true);
 
-    assert.strictEqual(resolvedContext2.groupedEditors.length, 1);
-    assert.strictEqual(resolvedContext2.groupedEditors[0].group.id, activeGroup.id);
-    assert.strictEqual(resolvedContext2.groupedEditors[0].editors.length, 1);
-    assert.strictEqual(resolvedContext2.groupedEditors[0].editors[0], input3);
-    assert.strictEqual(resolvedContext2.preserveFocus, false);
-  });
+		// use URI
+		const resolvedContext2 = resolveCommandsContext([input3.resource], accessor.editorService, accessor.editorGroupService, testListService);
 
-  test('inactive edior group command context', async () => {
-    const accessor = await createServices();
-    const editorGroupService = accessor.editorGroupService;
+		assert.strictEqual(resolvedContext2.groupedEditors.length, 1);
+		assert.strictEqual(resolvedContext2.groupedEditors[0].group.id, activeGroup.id);
+		assert.strictEqual(resolvedContext2.groupedEditors[0].editors.length, 1);
+		assert.strictEqual(resolvedContext2.groupedEditors[0].editors[0], input3);
+		assert.strictEqual(resolvedContext2.preserveFocus, false);
+	});
 
-    const group1 = editorGroupService.activeGroup;
-    const group2 = editorGroupService.addGroup(group1, GroupDirection.RIGHT);
+	test('inactive edior group command context', async () => {
+		const accessor = await createServices();
+		const editorGroupService = accessor.editorGroupService;
 
-    const input11 = input();
-    const input12 = input();
-    group1.openEditor(input11, { pinned: true });
-    group1.openEditor(input12, { pinned: true });
+		const group1 = editorGroupService.activeGroup;
+		const group2 = editorGroupService.addGroup(group1, GroupDirection.RIGHT);
 
-    const input21 = input();
-    group2.openEditor(input21, { pinned: true });
+		const input11 = input();
+		const input12 = input();
+		group1.openEditor(input11, { pinned: true });
+		group1.openEditor(input12, { pinned: true });
 
-    editorGroupService.activateGroup(group1);
-    group1.setSelection(input11, [input12]);
+		const input21 = input();
+		group2.openEditor(input21, { pinned: true });
 
-    // use editor commands context of inactive group with editor index
-    const editorCommandContext1: IEditorCommandsContext = {
-      groupId: group2.id,
-      editorIndex: group2.getIndexOfEditor(input21),
-      preserveFocus: true,
-    };
-    const resolvedContext1 = resolveCommandsContext(
-      [editorCommandContext1],
-      accessor.editorService,
-      accessor.editorGroupService,
-      testListService,
-    );
+		editorGroupService.activateGroup(group1);
+		group1.setSelection(input11, [input12]);
 
-    assert.strictEqual(resolvedContext1.groupedEditors.length, 1);
-    assert.strictEqual(resolvedContext1.groupedEditors[0].group.id, group2.id);
-    assert.strictEqual(resolvedContext1.groupedEditors[0].editors.length, 1);
-    assert.strictEqual(resolvedContext1.groupedEditors[0].editors[0], input21);
-    assert.strictEqual(resolvedContext1.preserveFocus, true);
+		// use editor commands context of inactive group with editor index
+		const editorCommandContext1: IEditorCommandsContext = { groupId: group2.id, editorIndex: group2.getIndexOfEditor(input21), preserveFocus: true };
+		const resolvedContext1 = resolveCommandsContext([editorCommandContext1], accessor.editorService, accessor.editorGroupService, testListService);
 
-    // use editor commands context of inactive group without editor index
-    const editorCommandContext2: IEditorCommandsContext = {
-      groupId: group2.id,
-      preserveFocus: true,
-    };
-    const resolvedContext2 = resolveCommandsContext(
-      [editorCommandContext2],
-      accessor.editorService,
-      accessor.editorGroupService,
-      testListService,
-    );
+		assert.strictEqual(resolvedContext1.groupedEditors.length, 1);
+		assert.strictEqual(resolvedContext1.groupedEditors[0].group.id, group2.id);
+		assert.strictEqual(resolvedContext1.groupedEditors[0].editors.length, 1);
+		assert.strictEqual(resolvedContext1.groupedEditors[0].editors[0], input21);
+		assert.strictEqual(resolvedContext1.preserveFocus, true);
 
-    assert.strictEqual(resolvedContext2.groupedEditors.length, 1);
-    assert.strictEqual(resolvedContext2.groupedEditors[0].group.id, group2.id);
-    assert.strictEqual(resolvedContext2.groupedEditors[0].editors.length, 1);
-    assert.strictEqual(resolvedContext1.groupedEditors[0].editors[0], input21);
-    assert.strictEqual(resolvedContext2.preserveFocus, true);
-  });
+		// use editor commands context of inactive group without editor index
+		const editorCommandContext2: IEditorCommandsContext = { groupId: group2.id, preserveFocus: true };
+		const resolvedContext2 = resolveCommandsContext([editorCommandContext2], accessor.editorService, accessor.editorGroupService, testListService);
 
-  ensureNoDisposablesAreLeakedInTestSuite();
+		assert.strictEqual(resolvedContext2.groupedEditors.length, 1);
+		assert.strictEqual(resolvedContext2.groupedEditors[0].group.id, group2.id);
+		assert.strictEqual(resolvedContext2.groupedEditors[0].editors.length, 1);
+		assert.strictEqual(resolvedContext1.groupedEditors[0].editors[0], input21);
+		assert.strictEqual(resolvedContext2.preserveFocus, true);
+	});
+
+	test('resolves context from right-clicked editor (not active)', async () => {
+		const accessor = await createServices();
+		const group = accessor.editorGroupService.activeGroup;
+
+		const input1 = input();
+		const input2 = input();
+		await group.openEditor(input1, { pinned: true });
+		await group.openEditor(input2, { pinned: true });
+
+		// input2 is now active (last opened), but we simulate right-click on input1
+		assert.strictEqual(group.activeEditor, input2);
+
+		const editorCommandContext: IEditorCommandsContext = {
+			groupId: group.id,
+			editorIndex: group.getIndexOfEditor(input1),
+			preserveFocus: false
+		};
+		const resolvedContext = resolveCommandsContext([editorCommandContext], accessor.editorService, accessor.editorGroupService, testListService);
+
+		// Should resolve to input1 (right-clicked editor), not input2 (active editor)
+		assert.strictEqual(resolvedContext.groupedEditors.length, 1);
+		assert.strictEqual(resolvedContext.groupedEditors[0].group.id, group.id);
+		assert.strictEqual(resolvedContext.groupedEditors[0].editors.length, 1);
+		assert.strictEqual(resolvedContext.groupedEditors[0].editors[0], input1);
+		assert.notStrictEqual(resolvedContext.groupedEditors[0].editors[0], input2);
+		assert.strictEqual(resolvedContext.preserveFocus, false);
+	});
+
+	ensureNoDisposablesAreLeakedInTestSuite();
 });

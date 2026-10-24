@@ -6,192 +6,210 @@
 import * as cp from 'child_process';
 import { EventEmitter } from 'events';
 import { StringDecoder } from 'string_decoder';
-import { AST as ReAST, RegExpParser, RegExpVisitor } from 'vscode-regexpp';
-import { rgPath } from '@vscode/ripgrep';
 import { coalesce, mapArrayOrNot } from '../../../../base/common/arrays.js';
 import { CancellationToken } from '../../../../base/common/cancellation.js';
 import { groupBy } from '../../../../base/common/collections.js';
 import { splitGlobAware } from '../../../../base/common/glob.js';
 import { createRegExp, escapeRegExpCharacters } from '../../../../base/common/strings.js';
 import { URI } from '../../../../base/common/uri.js';
+import { localize } from '../../../../nls.js';
 import { Progress } from '../../../../platform/progress/common/progress.js';
-import {
-  DEFAULT_MAX_SEARCH_RESULTS,
-  IExtendedExtensionSearchOptions,
-  ITextSearchPreviewOptions,
-  SearchError,
-  SearchErrorCode,
-  serializeSearchError,
-  TextSearchMatch,
-} from '../common/search.js';
-import {
-  Range,
-  TextSearchComplete2,
-  TextSearchContext2,
-  TextSearchMatch2,
-  TextSearchProviderOptions,
-  TextSearchQuery2,
-  TextSearchResult2,
-} from '../common/searchExtTypes.js';
-import {
-  anchorGlob,
-  IOutputChannel,
-  Maybe,
-  rangeToSearchRange,
-  searchRangeToRange,
-} from './ripgrepSearchUtils.js';
+import { DEFAULT_MAX_SEARCH_RESULTS, ITextSearchPreviewOptions, SearchError, SearchErrorCode, serializeSearchError, TextSearchMatch } from '../common/search.js';
+import { Range, TextSearchComplete2, TextSearchCompleteMessageType, TextSearchContext2, TextSearchMatch2, TextSearchProviderOptions, TextSearchQuery2, TextSearchResult2 } from '../common/searchExtTypes.js';
+import { AST as ReAST, RegExpParser, RegExpVisitor } from 'vscode-regexpp';
+import { anchorGlob, IOutputChannel, MAX_RIPGREP_SYMLINK_LOOPS, Maybe, rangeToSearchRange, RipgrepSymlinkLoopDetector, searchRangeToRange } from './ripgrepSearchUtils.js';
 import type { RipgrepTextSearchOptions } from '../common/searchExtTypesInternal.js';
 import { newToOldPreviewOptions } from '../common/searchExtConversionTypes.js';
-
-// If @vscode/ripgrep is in an .asar file, then the binary is unpacked.
-const rgDiskPath = rgPath.replace(/\bnode_modules\.asar\b/, 'node_modules.asar.unpacked');
+import { rgDiskPath } from '../../../../base/node/ripgrep.js';
 
 export class RipgrepTextSearchEngine {
-  constructor(
-    private outputChannel: IOutputChannel,
-    private readonly _numThreads?: number | undefined,
-  ) {}
 
-  provideTextSearchResults(
-    query: TextSearchQuery2,
-    options: TextSearchProviderOptions,
-    progress: Progress<TextSearchResult2>,
-    token: CancellationToken,
-  ): Promise<TextSearchComplete2> {
-    return Promise.all(
-      options.folderOptions.map((folderOption) => {
-        const extendedOptions: RipgrepTextSearchOptions = {
-          folderOptions: folderOption,
-          numThreads: this._numThreads,
-          maxResults: options.maxResults,
-          previewOptions: options.previewOptions,
-          maxFileSize: options.maxFileSize,
-          surroundingContext: options.surroundingContext,
-        };
-        return this.provideTextSearchResultsWithRgOptions(query, extendedOptions, progress, token);
-      }),
-    ).then((e) => {
-      const complete: TextSearchComplete2 = {
-        // todo: get this to actually check
-        limitHit: e.some((complete) => !!complete && complete.limitHit),
-      };
-      return complete;
-    });
-  }
+	constructor(private outputChannel: IOutputChannel, private readonly _numThreads?: number | undefined) { }
 
-  provideTextSearchResultsWithRgOptions(
-    query: TextSearchQuery2,
-    options: RipgrepTextSearchOptions,
-    progress: Progress<TextSearchResult2>,
-    token: CancellationToken,
-  ): Promise<TextSearchComplete2> {
-    this.outputChannel.appendLine(
-      `provideTextSearchResults ${query.pattern}, ${JSON.stringify({
-        ...options,
-        ...{
-          folder: options.folderOptions.folder.toString(),
-        },
-      })}`,
-    );
+	provideTextSearchResults(query: TextSearchQuery2, options: TextSearchProviderOptions, progress: Progress<TextSearchResult2>, token: CancellationToken): Promise<TextSearchComplete2> {
+		return Promise.all(options.folderOptions.map(folderOption => {
+			const extendedOptions: RipgrepTextSearchOptions = {
+				folderOptions: folderOption,
+				numThreads: this._numThreads,
+				maxResults: options.maxResults,
+				previewOptions: options.previewOptions,
+				maxFileSize: options.maxFileSize,
+				surroundingContext: options.surroundingContext
+			};
+			return this.provideTextSearchResultsWithRgOptions(query, extendedOptions, progress, token);
+		})).then((e => {
+			const complete: TextSearchComplete2 = {
+				// todo: get this to actually check
+				limitHit: e.some(complete => !!complete && complete.limitHit)
+			};
+			const messages = e.flatMap(complete => complete?.message ?? []);
+			if (messages.length) {
+				complete.message = messages;
+			}
+			return complete;
+		}));
+	}
 
-    return new Promise((resolve, reject) => {
-      token.onCancellationRequested(() => cancel());
+	async provideTextSearchResultsWithRgOptions(query: TextSearchQuery2, options: RipgrepTextSearchOptions, progress: Progress<TextSearchResult2>, token: CancellationToken): Promise<TextSearchComplete2> {
+		this.outputChannel.appendLine(`provideTextSearchResults ${query.pattern}, ${JSON.stringify({
+			...options,
+			...{
+				folder: options.folderOptions.folder.toString()
+			}
+		})}`);
 
-      const extendedOptions: RipgrepTextSearchOptions = {
-        ...options,
-        numThreads: this._numThreads,
-      };
-      const rgArgs = getRgArgs(query, extendedOptions);
+		if (!query.pattern) {
+			return { limitHit: false };
+		}
 
-      const cwd = options.folderOptions.folder.fsPath;
+		const resolvedRgDiskPath = await rgDiskPath();
 
-      const escapedArgs = rgArgs.map((arg) => (arg.match(/^-/) ? arg : `'${arg}'`)).join(' ');
-      this.outputChannel.appendLine(`${rgDiskPath} ${escapedArgs}\n - cwd: ${cwd}`);
+		return new Promise((resolve, reject) => {
+			token.onCancellationRequested(() => cancel());
 
-      let rgProc: Maybe<cp.ChildProcess> = cp.spawn(rgDiskPath, rgArgs, { cwd });
-      rgProc.on('error', (e) => {
-        console.error(e);
-        this.outputChannel.appendLine(`Error: ${e && e.message}`);
-        reject(
-          serializeSearchError(new SearchError(e && e.message, SearchErrorCode.rgProcessError)),
-        );
-      });
+			const extendedOptions: RipgrepTextSearchOptions = {
+				...options,
+				numThreads: this._numThreads
+			};
+			const rgArgs = getRgArgs(query, extendedOptions);
 
-      let gotResult = false;
-      const ripgrepParser = new RipgrepParser(
-        options.maxResults ?? DEFAULT_MAX_SEARCH_RESULTS,
-        options.folderOptions.folder,
-        newToOldPreviewOptions(options.previewOptions),
-      );
-      ripgrepParser.on('result', (match: TextSearchResult2) => {
-        gotResult = true;
-        dataWithoutResult = '';
-        progress.report(match);
-      });
+			const cwd = options.folderOptions.folder.fsPath;
 
-      let isDone = false;
-      const cancel = () => {
-        isDone = true;
+			const escapedArgs = rgArgs
+				.map(arg => arg.match(/^-/) ? arg : `'${arg}'`)
+				.join(' ');
+			this.outputChannel.appendLine(`${resolvedRgDiskPath} ${escapedArgs}\n - cwd: ${cwd}`);
 
-        rgProc?.kill();
+			let rgProc: Maybe<cp.ChildProcess> = cp.spawn(resolvedRgDiskPath, rgArgs, { cwd });
+			rgProc.on('error', e => {
+				console.error(e);
+				this.outputChannel.appendLine('Error: ' + (e && e.message));
+				reject(serializeSearchError(new SearchError(e && e.message, SearchErrorCode.rgProcessError)));
+			});
 
-        ripgrepParser?.cancel();
-      };
+			let gotResult = false;
+			const ripgrepParser = new RipgrepParser(options.maxResults ?? DEFAULT_MAX_SEARCH_RESULTS, options.folderOptions.folder, newToOldPreviewOptions(options.previewOptions));
 
-      let limitHit = false;
-      ripgrepParser.on('hitLimit', () => {
-        limitHit = true;
-        cancel();
-      });
+			// When ripgrep reports too many symbolic link loops, search the folder again without following
+			// symbolic links and skip the results that were already reported
+			const symlinkLoopDetector = options.folderOptions.followSymlinks ? new RipgrepSymlinkLoopDetector() : undefined;
+			const reportedPaths: string[] = [];
+			let isRetrying = false;
 
-      let dataWithoutResult = '';
-      rgProc.stdout!.on('data', (data) => {
-        ripgrepParser.handleData(data);
-        if (!gotResult) {
-          dataWithoutResult += data;
-        }
-      });
+			ripgrepParser.on('result', (match: TextSearchResult2) => {
+				gotResult = true;
+				dataWithoutResult = '';
+				if (symlinkLoopDetector) {
+					reportedPaths.push(match.uri.path);
+				}
+				progress.report(match);
+			});
 
-      let gotData = false;
-      rgProc.stdout!.once('data', () => (gotData = true));
+			let isDone = false;
+			const cancel = () => {
+				isDone = true;
 
-      let stderr = '';
-      rgProc.stderr!.on('data', (data) => {
-        const message = data.toString();
-        this.outputChannel.appendLine(message);
+				rgProc?.kill();
 
-        if (stderr.length + message.length < 1e6) {
-          stderr += message;
-        }
-      });
+				ripgrepParser?.cancel();
+			};
 
-      rgProc.on('close', () => {
-        this.outputChannel.appendLine(gotData ? 'Got data from stdout' : 'No data from stdout');
-        this.outputChannel.appendLine(
-          gotResult ? 'Got result from parser' : 'No result from parser',
-        );
-        if (dataWithoutResult) {
-          this.outputChannel.appendLine(`Got data without result: ${dataWithoutResult}`);
-        }
+			let limitHit = false;
+			ripgrepParser.on('hitLimit', () => {
+				limitHit = true;
+				cancel();
+			});
 
-        this.outputChannel.appendLine('');
+			let dataWithoutResult = '';
+			rgProc.stdout!.on('data', data => {
+				ripgrepParser.handleData(data);
+				if (!gotResult) {
+					dataWithoutResult += data;
+				}
+			});
 
-        if (isDone) {
-          resolve({ limitHit });
-        } else {
-          // Trigger last result
-          ripgrepParser.flush();
-          rgProc = null;
-          let searchError: Maybe<SearchError>;
-          if (stderr && !gotData && (searchError = rgErrorMsgForDisplay(stderr))) {
-            reject(serializeSearchError(new SearchError(searchError.message, searchError.code)));
-          } else {
-            resolve({ limitHit });
-          }
-        }
-      });
-    });
-  }
+			let gotData = false;
+			rgProc.stdout!.once('data', () => gotData = true);
+
+			let stderr = '';
+			rgProc.stderr!.on('data', data => {
+				const message = data.toString();
+				this.outputChannel.appendLine(message);
+
+				if (stderr.length + message.length < 1e6) {
+					stderr += message;
+				}
+
+				if (!isDone && symlinkLoopDetector?.handleStderr(message)) {
+					isRetrying = true;
+					cancel();
+				}
+			});
+
+			rgProc.on('close', () => {
+				this.outputChannel.appendLine(gotData ? 'Got data from stdout' : 'No data from stdout');
+				this.outputChannel.appendLine(gotResult ? 'Got result from parser' : 'No result from parser');
+				if (dataWithoutResult) {
+					this.outputChannel.appendLine(`Got data without result: ${dataWithoutResult}`);
+				}
+
+				this.outputChannel.appendLine('');
+
+				if (isRetrying && !token.isCancellationRequested) {
+					resolve(this.searchAgainWithoutFollowingSymlinks(query, options, progress, token, reportedPaths));
+				} else if (isDone) {
+					resolve({ limitHit });
+				} else {
+					// Trigger last result
+					ripgrepParser.flush();
+					rgProc = null;
+					let searchError: Maybe<SearchError>;
+					if (stderr && !gotData && (searchError = rgErrorMsgForDisplay(stderr))) {
+						reject(serializeSearchError(new SearchError(searchError.message, searchError.code)));
+					} else {
+						resolve({ limitHit });
+					}
+				}
+			});
+		});
+	}
+
+	private async searchAgainWithoutFollowingSymlinks(query: TextSearchQuery2, options: RipgrepTextSearchOptions, progress: Progress<TextSearchResult2>, token: CancellationToken, reportedPaths: readonly string[]): Promise<TextSearchComplete2> {
+		const folder = options.folderOptions.folder;
+		this.outputChannel.appendLine(`ripgrep reported more than ${MAX_RIPGREP_SYMLINK_LOOPS} symbolic link loops, searching ${folder.fsPath} again without following symbolic links`);
+
+		// ripgrep reports the results of a file in the same order every time, so skip as many results of each
+		// file as were already reported. This also covers a file whose results were only partially reported.
+		const resultsToSkip = new Map<string, number>();
+		for (const path of reportedPaths) {
+			resultsToSkip.set(path, (resultsToSkip.get(path) ?? 0) + 1);
+		}
+
+		const complete = await this.provideTextSearchResultsWithRgOptions(
+			query,
+			{ ...options, folderOptions: { ...options.folderOptions, followSymlinks: false } },
+			new Progress<TextSearchResult2>(result => {
+				const toSkip = resultsToSkip.get(result.uri.path);
+				if (toSkip) {
+					resultsToSkip.set(result.uri.path, toSkip - 1);
+				} else {
+					progress.report(result);
+				}
+			}),
+			token
+		);
+
+		return {
+			...complete,
+			message: [
+				...complete.message ?? [],
+				{
+					type: TextSearchCompleteMessageType.Warning,
+					text: localize('symlinkLoops', "Symbolic links in '{0}' were not followed because they form too many loops, so results may be incomplete. Exclude the folders that contain the loops or turn off the '{1}' setting to avoid this.", folder.fsPath, 'search.followSymlinks')
+				}
+			]
+		};
+	}
 }
 
 /**
@@ -201,435 +219,423 @@ export class RipgrepTextSearchEngine {
  * "failed" when a fatal error was produced.
  */
 function rgErrorMsgForDisplay(msg: string): Maybe<SearchError> {
-  const lines = msg.split('\n');
-  const firstLine = lines[0].trim();
+	const lines = msg.split('\n');
+	const firstLine = lines[0].trim();
 
-  if (lines.some((l) => l.startsWith('regex parse error'))) {
-    return new SearchError(buildRegexParseError(lines), SearchErrorCode.regexParseError);
-  }
+	if (lines.some(l => l.startsWith('regex parse error'))) {
+		return new SearchError(buildRegexParseError(lines), SearchErrorCode.regexParseError);
+	}
 
-  const match = firstLine.match(/grep config error: unknown encoding: (.*)/);
-  if (match) {
-    return new SearchError(`Unknown encoding: ${match[1]}`, SearchErrorCode.unknownEncoding);
-  }
+	const match = firstLine.match(/grep config error: unknown encoding: (.*)/);
+	if (match) {
+		return new SearchError(`Unknown encoding: ${match[1]}`, SearchErrorCode.unknownEncoding);
+	}
 
-  if (firstLine.startsWith('error parsing glob')) {
-    // Uppercase first letter
-    return new SearchError(
-      firstLine.charAt(0).toUpperCase() + firstLine.substr(1),
-      SearchErrorCode.globParseError,
-    );
-  }
+	if (firstLine.startsWith('error parsing glob')) {
+		// Uppercase first letter
+		return new SearchError(firstLine.charAt(0).toUpperCase() + firstLine.substr(1), SearchErrorCode.globParseError);
+	}
 
-  if (firstLine.startsWith('the literal')) {
-    // Uppercase first letter
-    return new SearchError(
-      firstLine.charAt(0).toUpperCase() + firstLine.substr(1),
-      SearchErrorCode.invalidLiteral,
-    );
-  }
+	if (firstLine.startsWith('the literal')) {
+		// Uppercase first letter
+		return new SearchError(firstLine.charAt(0).toUpperCase() + firstLine.substr(1), SearchErrorCode.invalidLiteral);
+	}
 
-  if (firstLine.startsWith('PCRE2: error compiling pattern')) {
-    return new SearchError(firstLine, SearchErrorCode.regexParseError);
-  }
+	if (firstLine.startsWith('PCRE2: error compiling pattern')) {
+		return new SearchError(firstLine, SearchErrorCode.regexParseError);
+	}
 
-  return undefined;
+	return undefined;
 }
 
 function buildRegexParseError(lines: string[]): string {
-  const errorMessage: string[] = ['Regex parse error'];
-  const pcre2ErrorLine = lines.filter((l) => l.startsWith('PCRE2:'));
-  if (pcre2ErrorLine.length >= 1) {
-    const pcre2ErrorMessage = pcre2ErrorLine[0].replace('PCRE2:', '');
-    if (pcre2ErrorMessage.indexOf(':') !== -1 && pcre2ErrorMessage.split(':').length >= 2) {
-      const pcre2ActualErrorMessage = pcre2ErrorMessage.split(':')[1];
-      errorMessage.push(`:${pcre2ActualErrorMessage}`);
-    }
-  }
+	const errorMessage: string[] = ['Regex parse error'];
+	const pcre2ErrorLine = lines.filter(l => (l.startsWith('PCRE2:')));
+	if (pcre2ErrorLine.length >= 1) {
+		const pcre2ErrorMessage = pcre2ErrorLine[0].replace('PCRE2:', '');
+		if (pcre2ErrorMessage.indexOf(':') !== -1 && pcre2ErrorMessage.split(':').length >= 2) {
+			const pcre2ActualErrorMessage = pcre2ErrorMessage.split(':')[1];
+			errorMessage.push(':' + pcre2ActualErrorMessage);
+		}
+	}
 
-  return errorMessage.join('');
+	return errorMessage.join('');
 }
 
+
 export class RipgrepParser extends EventEmitter {
-  private remainder = '';
+	private remainder = '';
+	private isDone = false;
+	private hitLimit = false;
+	private stringDecoder: StringDecoder;
 
-  private isDone = false;
+	private numResults = 0;
 
-  private hitLimit = false;
+	constructor(private maxResults: number, private root: URI, private previewOptions: ITextSearchPreviewOptions) {
+		super();
+		this.stringDecoder = new StringDecoder();
+	}
 
-  private stringDecoder: StringDecoder;
+	cancel(): void {
+		this.isDone = true;
+	}
 
-  private numResults = 0;
+	flush(): void {
+		this.handleDecodedData(this.stringDecoder.end());
+	}
 
-  constructor(
-    private maxResults: number,
-    private root: URI,
-    private previewOptions: ITextSearchPreviewOptions,
-  ) {
-    super();
-    this.stringDecoder = new StringDecoder();
-  }
 
-  cancel(): void {
-    this.isDone = true;
-  }
+	override on(event: 'result', listener: (result: TextSearchResult2) => void): this;
+	override on(event: 'hitLimit', listener: () => void): this;
+	override on(event: string, listener: (...args: any[]) => void): this {
+		super.on(event, listener);
+		return this;
+	}
 
-  flush(): void {
-    this.handleDecodedData(this.stringDecoder.end());
-  }
+	handleData(data: Buffer | string): void {
+		if (this.isDone) {
+			return;
+		}
 
-  override on(event: 'result', listener: (result: TextSearchResult2) => void): this;
+		const dataStr = typeof data === 'string' ? data : this.stringDecoder.write(data);
+		this.handleDecodedData(dataStr);
+	}
 
-  override on(event: 'hitLimit', listener: () => void): this;
+	private handleDecodedData(decodedData: string): void {
+		// check for newline before appending to remainder
+		let newlineIdx = decodedData.indexOf('\n');
 
-  override on(event: string, listener: (...args: any[]) => void): this {
-    super.on(event, listener);
-    return this;
-  }
+		// If the previous data chunk didn't end in a newline, prepend it to this chunk
+		const dataStr = this.remainder + decodedData;
 
-  handleData(data: Buffer | string): void {
-    if (this.isDone) {
-      return;
-    }
+		if (newlineIdx >= 0) {
+			newlineIdx += this.remainder.length;
+		} else {
+			// Shortcut
+			this.remainder = dataStr;
+			return;
+		}
 
-    const dataStr = typeof data === 'string' ? data : this.stringDecoder.write(data);
-    this.handleDecodedData(dataStr);
-  }
+		let prevIdx = 0;
+		while (newlineIdx >= 0) {
+			this.handleLine(dataStr.substring(prevIdx, newlineIdx).trim());
+			prevIdx = newlineIdx + 1;
+			newlineIdx = dataStr.indexOf('\n', prevIdx);
+		}
 
-  private handleDecodedData(decodedData: string): void {
-    // check for newline before appending to remainder
-    let newlineIdx = decodedData.indexOf('\n');
+		this.remainder = dataStr.substring(prevIdx);
+	}
 
-    // If the previous data chunk didn't end in a newline, prepend it to this chunk
-    const dataStr = this.remainder + decodedData;
 
-    if (newlineIdx >= 0) {
-      newlineIdx += this.remainder.length;
-    } else {
-      // Shortcut
-      this.remainder = dataStr;
-      return;
-    }
+	private handleLine(outputLine: string): void {
+		if (this.isDone || !outputLine) {
+			return;
+		}
 
-    let prevIdx = 0;
-    while (newlineIdx >= 0) {
-      this.handleLine(dataStr.substring(prevIdx, newlineIdx).trim());
-      prevIdx = newlineIdx + 1;
-      newlineIdx = dataStr.indexOf('\n', prevIdx);
-    }
+		let parsedLine: IRgMessage;
+		try {
+			parsedLine = JSON.parse(outputLine);
+		} catch (e) {
+			throw new Error(`malformed line from rg: ${outputLine}`);
+		}
 
-    this.remainder = dataStr.substring(prevIdx);
-  }
+		if (parsedLine.type === 'match') {
+			const matchPath = bytesOrTextToString(parsedLine.data.path);
+			const uri = URI.joinPath(this.root, matchPath);
+			const result = this.createTextSearchMatch(parsedLine.data, uri);
+			this.onResult(result);
 
-  private handleLine(outputLine: string): void {
-    if (this.isDone || !outputLine) {
-      return;
-    }
+			if (this.hitLimit) {
+				this.cancel();
+				this.emit('hitLimit');
+			}
+		} else if (parsedLine.type === 'context') {
+			const contextPath = bytesOrTextToString(parsedLine.data.path);
+			const uri = URI.joinPath(this.root, contextPath);
+			const result = this.createTextSearchContexts(parsedLine.data, uri);
+			result.forEach(r => this.onResult(r));
+		}
+	}
 
-    let parsedLine: IRgMessage;
-    try {
-      parsedLine = JSON.parse(outputLine);
-    } catch (e) {
-      throw new Error(`malformed line from rg: ${outputLine}`);
-    }
+	private createTextSearchMatch(data: IRgMatch, uri: URI): TextSearchMatch2 {
+		const lineNumber = data.line_number - 1;
+		const fullText = bytesOrTextToString(data.lines);
+		const fullTextBytes = Buffer.from(fullText);
 
-    if (parsedLine.type === 'match') {
-      const matchPath = bytesOrTextToString(parsedLine.data.path);
-      const uri = URI.joinPath(this.root, matchPath);
-      const result = this.createTextSearchMatch(parsedLine.data, uri);
-      this.onResult(result);
+		let prevMatchEnd = 0;
+		let prevMatchEndCol = 0;
+		let prevMatchEndLine = lineNumber;
 
-      if (this.hitLimit) {
-        this.cancel();
-        this.emit('hitLimit');
-      }
-    } else if (parsedLine.type === 'context') {
-      const contextPath = bytesOrTextToString(parsedLine.data.path);
-      const uri = URI.joinPath(this.root, contextPath);
-      const result = this.createTextSearchContexts(parsedLine.data, uri);
-      result.forEach((r) => this.onResult(r));
-    }
-  }
+		// it looks like certain regexes can match a line, but cause rg to not
+		// emit any specific submatches for that line.
+		// https://github.com/microsoft/vscode/issues/100569#issuecomment-738496991
+		if (data.submatches.length === 0) {
+			data.submatches.push(
+				fullText.length
+					? { start: 0, end: 1, match: { text: fullText[0] } }
+					: { start: 0, end: 0, match: { text: '' } }
+			);
+		}
 
-  private createTextSearchMatch(data: IRgMatch, uri: URI): TextSearchMatch2 {
-    const lineNumber = data.line_number - 1;
-    const fullText = bytesOrTextToString(data.lines);
-    const fullTextBytes = Buffer.from(fullText);
+		const ranges = coalesce(data.submatches.map((match, i) => {
+			if (this.hitLimit) {
+				return null;
+			}
 
-    let prevMatchEnd = 0;
-    let prevMatchEndCol = 0;
-    let prevMatchEndLine = lineNumber;
+			this.numResults++;
+			if (this.numResults >= this.maxResults) {
+				// Finish the line, then report the result below
+				this.hitLimit = true;
+			}
 
-    // it looks like certain regexes can match a line, but cause rg to not
-    // emit any specific submatches for that line.
-    // https://github.com/microsoft/vscode/issues/100569#issuecomment-738496991
-    if (data.submatches.length === 0) {
-      data.submatches.push(
-        fullText.length
-          ? { start: 0, end: 1, match: { text: fullText[0] } }
-          : { start: 0, end: 0, match: { text: '' } },
-      );
-    }
+			const matchText = bytesOrTextToString(match.match);
 
-    const ranges = coalesce(
-      data.submatches.map((match, i) => {
-        if (this.hitLimit) {
-          return null;
-        }
+			const inBetweenText = fullTextBytes.slice(prevMatchEnd, match.start).toString();
+			const inBetweenStats = getNumLinesAndLastNewlineLength(inBetweenText);
+			const startCol = inBetweenStats.numLines > 0 ?
+				inBetweenStats.lastLineLength :
+				inBetweenStats.lastLineLength + prevMatchEndCol;
 
-        this.numResults++;
-        if (this.numResults >= this.maxResults) {
-          // Finish the line, then report the result below
-          this.hitLimit = true;
-        }
+			const stats = getNumLinesAndLastNewlineLength(matchText);
+			const startLineNumber = inBetweenStats.numLines + prevMatchEndLine;
+			const endLineNumber = stats.numLines + startLineNumber;
+			const endCol = stats.numLines > 0 ?
+				stats.lastLineLength :
+				stats.lastLineLength + startCol;
 
-        const matchText = bytesOrTextToString(match.match);
+			prevMatchEnd = match.end;
+			prevMatchEndCol = endCol;
+			prevMatchEndLine = endLineNumber;
 
-        const inBetweenText = fullTextBytes.slice(prevMatchEnd, match.start).toString();
-        const inBetweenStats = getNumLinesAndLastNewlineLength(inBetweenText);
-        const startCol =
-          inBetweenStats.numLines > 0
-            ? inBetweenStats.lastLineLength
-            : inBetweenStats.lastLineLength + prevMatchEndCol;
+			return new Range(startLineNumber, startCol, endLineNumber, endCol);
+		}));
 
-        const stats = getNumLinesAndLastNewlineLength(matchText);
-        const startLineNumber = inBetweenStats.numLines + prevMatchEndLine;
-        const endLineNumber = stats.numLines + startLineNumber;
-        const endCol = stats.numLines > 0 ? stats.lastLineLength : stats.lastLineLength + startCol;
+		const searchRange = mapArrayOrNot(<Range[]>ranges, rangeToSearchRange);
 
-        prevMatchEnd = match.end;
-        prevMatchEndCol = endCol;
-        prevMatchEndLine = endLineNumber;
+		const internalResult = new TextSearchMatch(fullText, searchRange, this.previewOptions);
+		return new TextSearchMatch2(
+			uri,
+			internalResult.rangeLocations.map(e => (
+				{
+					sourceRange: searchRangeToRange(e.source),
+					previewRange: searchRangeToRange(e.preview),
+				}
+			)),
+			internalResult.previewText);
+	}
 
-        return new Range(startLineNumber, startCol, endLineNumber, endCol);
-      }),
-    );
+	private createTextSearchContexts(data: IRgMatch, uri: URI): TextSearchContext2[] {
+		const text = bytesOrTextToString(data.lines);
+		const startLine = data.line_number;
+		return text
+			.replace(/\r?\n$/, '')
+			.split('\n')
+			.map((line, i) => new TextSearchContext2(uri, line, startLine + i));
+	}
 
-    const searchRange = mapArrayOrNot(<Range[]>ranges, rangeToSearchRange);
-
-    const internalResult = new TextSearchMatch(fullText, searchRange, this.previewOptions);
-    return new TextSearchMatch2(
-      uri,
-      internalResult.rangeLocations.map((e) => ({
-        sourceRange: searchRangeToRange(e.source),
-        previewRange: searchRangeToRange(e.preview),
-      })),
-      internalResult.previewText,
-    );
-  }
-
-  private createTextSearchContexts(data: IRgMatch, uri: URI): TextSearchContext2[] {
-    const text = bytesOrTextToString(data.lines);
-    const startLine = data.line_number;
-    return text
-      .replace(/\r?\n$/, '')
-      .split('\n')
-      .map((line, i) => new TextSearchContext2(uri, line, startLine + i));
-  }
-
-  private onResult(match: TextSearchResult2): void {
-    this.emit('result', match);
-  }
+	private onResult(match: TextSearchResult2): void {
+		this.emit('result', match);
+	}
 }
 
 function bytesOrTextToString(obj: any): string {
-  return obj.bytes ? Buffer.from(obj.bytes, 'base64').toString() : obj.text;
+	return obj.bytes ?
+		Buffer.from(obj.bytes, 'base64').toString() :
+		obj.text;
 }
 
-function getNumLinesAndLastNewlineLength(text: string): {
-  numLines: number;
-  lastLineLength: number;
-} {
-  const re = /\n/g;
-  let numLines = 0;
-  let lastNewlineIdx = -1;
-  let match: ReturnType<typeof re.exec>;
-  while ((match = re.exec(text))) {
-    numLines++;
-    lastNewlineIdx = match.index;
-  }
+function getNumLinesAndLastNewlineLength(text: string): { numLines: number; lastLineLength: number } {
+	const re = /\n/g;
+	let numLines = 0;
+	let lastNewlineIdx = -1;
+	let match: ReturnType<typeof re.exec>;
+	while (match = re.exec(text)) {
+		numLines++;
+		lastNewlineIdx = match.index;
+	}
 
-  const lastLineLength = lastNewlineIdx >= 0 ? text.length - lastNewlineIdx - 1 : text.length;
+	const lastLineLength = lastNewlineIdx >= 0 ?
+		text.length - lastNewlineIdx - 1 :
+		text.length;
 
-  return { numLines, lastLineLength };
+	return { numLines, lastLineLength };
 }
 
 // exported for testing
 export function getRgArgs(query: TextSearchQuery2, options: RipgrepTextSearchOptions): string[] {
-  const args = ['--hidden', '--no-require-git'];
-  args.push(query.isCaseSensitive ? '--case-sensitive' : '--ignore-case');
+	const args = ['--hidden', '--no-require-git'];
+	args.push(query.isCaseSensitive ? '--case-sensitive' : '--ignore-case');
 
-  const { doubleStarIncludes, otherIncludes } = groupBy(
-    options.folderOptions.includes,
-    (include: string) => (include.startsWith('**') ? 'doubleStarIncludes' : 'otherIncludes'),
-  );
+	if (options.folderOptions.ignoreGlobCase) {
+		args.push('--glob-case-insensitive');
+		args.push('--ignore-file-case-insensitive');
+	}
 
-  if (otherIncludes && otherIncludes.length) {
-    const uniqueOthers = new Set<string>();
-    otherIncludes.forEach((other) => {
-      uniqueOthers.add(other);
-    });
+	const { doubleStarIncludes, otherIncludes } = groupBy(
+		options.folderOptions.includes,
+		(include: string) => include.startsWith('**') ? 'doubleStarIncludes' : 'otherIncludes');
 
-    args.push('-g', '!*');
-    uniqueOthers.forEach((otherIncude) => {
-      spreadGlobComponents(otherIncude)
-        .map(anchorGlob)
-        .forEach((globArg) => {
-          args.push('-g', globArg);
-        });
-    });
-  }
+	if (otherIncludes && otherIncludes.length) {
+		const uniqueOthers = new Set<string>();
+		otherIncludes.forEach(other => { uniqueOthers.add(other); });
 
-  if (doubleStarIncludes && doubleStarIncludes.length) {
-    doubleStarIncludes.forEach((globArg) => {
-      args.push('-g', globArg);
-    });
-  }
+		args.push('-g', '!*');
+		uniqueOthers
+			.forEach(otherIncude => {
+				spreadGlobComponents(otherIncude)
+					.map(anchorGlob)
+					.forEach(globArg => {
+						args.push('-g', globArg);
+					});
+			});
+	}
 
-  options.folderOptions.excludes
-    .map((e) => (typeof e === 'string' ? e : e.pattern))
-    .map(anchorGlob)
-    .forEach((rgGlob) => args.push('-g', `!${rgGlob}`));
+	if (doubleStarIncludes && doubleStarIncludes.length) {
+		doubleStarIncludes.forEach(globArg => {
+			args.push('-g', globArg);
+		});
+	}
 
-  if (options.maxFileSize) {
-    args.push('--max-filesize', `${options.maxFileSize}`);
-  }
+	options.folderOptions.excludes.map(e => typeof (e) === 'string' ? e : e.pattern)
+		.map(anchorGlob)
+		.forEach(rgGlob => args.push('-g', `!${rgGlob}`));
 
-  if (options.folderOptions.useIgnoreFiles.local) {
-    if (!options.folderOptions.useIgnoreFiles.parent) {
-      args.push('--no-ignore-parent');
-    }
-  } else {
-    // Don't use .gitignore or .ignore
-    args.push('--no-ignore');
-  }
+	if (options.maxFileSize) {
+		args.push('--max-filesize', options.maxFileSize + '');
+	}
 
-  if (options.folderOptions.followSymlinks) {
-    args.push('--follow');
-  }
+	if (options.folderOptions.useIgnoreFiles.local) {
+		if (!options.folderOptions.useIgnoreFiles.parent) {
+			args.push('--no-ignore-parent');
+		}
+	} else {
+		// Don't use .gitignore or .ignore
+		args.push('--no-ignore');
+	}
 
-  if (options.folderOptions.encoding && options.folderOptions.encoding !== 'utf8') {
-    args.push('--encoding', options.folderOptions.encoding);
-  }
+	if (options.folderOptions.followSymlinks) {
+		args.push('--follow');
+	}
 
-  if (options.numThreads) {
-    args.push('--threads', `${options.numThreads}`);
-  }
+	if (options.folderOptions.encoding && options.folderOptions.encoding !== 'utf8') {
+		args.push('--encoding', options.folderOptions.encoding);
+	}
 
-  // Ripgrep handles -- as a -- arg separator. Only --.
-  // - is ok, --- is ok, --some-flag is also ok. Need to special case.
-  if (query.pattern === '--') {
-    query.isRegExp = true;
-    query.pattern = '\\-\\-';
-  }
+	if (options.numThreads) {
+		args.push('--threads', `${options.numThreads}`);
+	}
 
-  if (query.isMultiline && !query.isRegExp) {
-    query.pattern = escapeRegExpCharacters(query.pattern);
-    query.isRegExp = true;
-  }
+	// Ripgrep handles -- as a -- arg separator. Only --.
+	// - is ok, --- is ok, --some-flag is also ok. Need to special case.
+	if (query.pattern === '--') {
+		query.isRegExp = true;
+		query.pattern = '\\-\\-';
+	}
 
-  if ((<IExtendedExtensionSearchOptions>options).usePCRE2) {
-    args.push('--pcre2');
-  }
+	if (query.isMultiline && !query.isRegExp) {
+		query.pattern = escapeRegExpCharacters(query.pattern);
+		query.isRegExp = true;
+	}
 
-  // Allow $ to match /r/n
-  args.push('--crlf');
+	// Allow $ to match /r/n
+	args.push('--crlf');
 
-  if (query.isRegExp) {
-    query.pattern = unicodeEscapesToPCRE2(query.pattern);
-    args.push('--engine', 'auto');
-  }
+	if (query.isRegExp) {
+		query.pattern = unicodeEscapesToPCRE2(query.pattern);
+		args.push('--engine', 'auto');
+	}
 
-  let searchPatternAfterDoubleDashes: Maybe<string>;
-  if (query.isWordMatch) {
-    const regexp = createRegExp(query.pattern, !!query.isRegExp, { wholeWord: query.isWordMatch });
-    const regexpStr = regexp.source.replace(/\\\//g, '/'); // RegExp.source arbitrarily returns escaped slashes. Search and destroy.
-    args.push('--regexp', regexpStr);
-  } else if (query.isRegExp) {
-    let fixedRegexpQuery = fixRegexNewline(query.pattern);
-    fixedRegexpQuery = fixNewline(fixedRegexpQuery);
-    args.push('--regexp', fixedRegexpQuery);
-  } else {
-    searchPatternAfterDoubleDashes = query.pattern;
-    args.push('--fixed-strings');
-  }
+	let searchPatternAfterDoubleDashes: Maybe<string>;
+	if (query.isWordMatch) {
+		const regexp = createRegExp(query.pattern, !!query.isRegExp, { wholeWord: query.isWordMatch });
+		const regexpStr = regexp.source.replace(/\\\//g, '/'); // RegExp.source arbitrarily returns escaped slashes. Search and destroy.
+		args.push('--regexp', regexpStr);
+	} else if (query.isRegExp) {
+		let fixedRegexpQuery = fixRegexNewline(query.pattern);
+		fixedRegexpQuery = fixNewline(fixedRegexpQuery);
+		args.push('--regexp', fixedRegexpQuery);
+	} else {
+		searchPatternAfterDoubleDashes = query.pattern;
+		args.push('--fixed-strings');
+	}
 
-  args.push('--no-config');
-  if (!options.folderOptions.useIgnoreFiles.global) {
-    args.push('--no-ignore-global');
-  }
+	args.push('--no-config');
+	if (!options.folderOptions.useIgnoreFiles.global) {
+		args.push('--no-ignore-global');
+	}
 
-  args.push('--json');
+	args.push('--json');
 
-  if (query.isMultiline) {
-    args.push('--multiline');
-  }
+	if (query.isMultiline) {
+		args.push('--multiline');
+	}
 
-  if (options.surroundingContext) {
-    args.push('--before-context', `${options.surroundingContext}`);
-    args.push('--after-context', `${options.surroundingContext}`);
-  }
+	if (options.surroundingContext) {
+		args.push('--before-context', options.surroundingContext + '');
+		args.push('--after-context', options.surroundingContext + '');
+	}
 
-  // Folder to search
-  args.push('--');
+	// Folder to search
+	args.push('--');
 
-  if (searchPatternAfterDoubleDashes) {
-    // Put the query after --, in case the query starts with a dash
-    args.push(searchPatternAfterDoubleDashes);
-  }
+	if (searchPatternAfterDoubleDashes) {
+		// Put the query after --, in case the query starts with a dash
+		args.push(searchPatternAfterDoubleDashes);
+	}
 
-  args.push('.');
+	args.push('.');
 
-  return args;
+	return args;
 }
 
 /**
  * `"foo/*bar/something"` -> `["foo", "foo/*bar", "foo/*bar/something", "foo/*bar/something/**"]`
  */
 function spreadGlobComponents(globComponent: string): string[] {
-  const globComponentWithBraceExpansion = performBraceExpansionForRipgrep(globComponent);
+	const globComponentWithBraceExpansion = performBraceExpansionForRipgrep(globComponent);
 
-  return globComponentWithBraceExpansion.flatMap((globArg) => {
-    const components = splitGlobAware(globArg, '/');
-    return components.map((_, i) => components.slice(0, i + 1).join('/'));
-  });
+	return globComponentWithBraceExpansion.flatMap((globArg) => {
+		const components = splitGlobAware(globArg, '/');
+		return components.map((_, i) => components.slice(0, i + 1).join('/'));
+	});
+
 }
 
 export function unicodeEscapesToPCRE2(pattern: string): string {
-  // Match \u1234
-  const unicodePattern = /((?:[^\\]|^)(?:\\\\)*)\\u([a-z0-9]{4})/gi;
+	// Match \u1234
+	const unicodePattern = /((?:[^\\]|^)(?:\\\\)*)\\u([a-z0-9]{4})/gi;
 
-  while (pattern.match(unicodePattern)) {
-    pattern = pattern.replace(unicodePattern, `$1\\x{$2}`);
-  }
+	while (pattern.match(unicodePattern)) {
+		pattern = pattern.replace(unicodePattern, `$1\\x{$2}`);
+	}
 
-  // Match \u{1234}
-  // \u with 5-6 characters will be left alone because \x only takes 4 characters.
-  const unicodePatternWithBraces = /((?:[^\\]|^)(?:\\\\)*)\\u\{([a-z0-9]{4})\}/gi;
-  while (pattern.match(unicodePatternWithBraces)) {
-    pattern = pattern.replace(unicodePatternWithBraces, `$1\\x{$2}`);
-  }
+	// Match \u{1234}
+	// \u with 5-6 characters will be left alone because \x only takes 4 characters.
+	const unicodePatternWithBraces = /((?:[^\\]|^)(?:\\\\)*)\\u\{([a-z0-9]{4})\}/gi;
+	while (pattern.match(unicodePatternWithBraces)) {
+		pattern = pattern.replace(unicodePatternWithBraces, `$1\\x{$2}`);
+	}
 
-  return pattern;
+	return pattern;
 }
 
 export interface IRgMessage {
-  type: 'match' | 'context' | string;
-  data: IRgMatch;
+	type: 'match' | 'context' | string;
+	data: IRgMatch;
 }
 
 export interface IRgMatch {
-  path: IRgBytesOrText;
-  lines: IRgBytesOrText;
-  line_number: number;
-  absolute_offset: number;
-  submatches: IRgSubmatch[];
+	path: IRgBytesOrText;
+	lines: IRgBytesOrText;
+	line_number: number;
+	absolute_offset: number;
+	submatches: IRgSubmatch[];
 }
 
 export interface IRgSubmatch {
-  match: IRgBytesOrText;
-  start: number;
-  end: number;
+	match: IRgBytesOrText;
+	start: number;
+	end: number;
 }
 
 export type IRgBytesOrText = { bytes: string } | { text: string };
@@ -637,102 +643,92 @@ export type IRgBytesOrText = { bytes: string } | { text: string };
 const isLookBehind = (node: ReAST.Node) => node.type === 'Assertion' && node.kind === 'lookbehind';
 
 export function fixRegexNewline(pattern: string): string {
-  // we parse the pattern anew each tiem
-  let re: ReAST.Pattern;
-  try {
-    re = new RegExpParser().parsePattern(pattern);
-  } catch {
-    return pattern;
-  }
+	// we parse the pattern anew each tiem
+	let re: ReAST.Pattern;
+	try {
+		re = new RegExpParser().parsePattern(pattern);
+	} catch {
+		return pattern;
+	}
 
-  let output = '';
-  let lastEmittedIndex = 0;
-  const replace = (start: number, end: number, text: string) => {
-    output += pattern.slice(lastEmittedIndex, start) + text;
-    lastEmittedIndex = end;
-  };
+	let output = '';
+	let lastEmittedIndex = 0;
+	const replace = (start: number, end: number, text: string) => {
+		output += pattern.slice(lastEmittedIndex, start) + text;
+		lastEmittedIndex = end;
+	};
 
-  const context: ReAST.Node[] = [];
-  const visitor = new RegExpVisitor({
-    onCharacterEnter(char) {
-      if (char.raw !== '\\n') {
-        return;
-      }
+	const context: ReAST.Node[] = [];
+	const visitor = new RegExpVisitor({
+		onCharacterEnter(char) {
+			if (char.raw !== '\\n') {
+				return;
+			}
 
-      const parent = context[0];
-      if (!parent) {
-        // simple char, \n -> \r?\n
-        replace(char.start, char.end, '\\r?\\n');
-      } else if (context.some(isLookBehind)) {
-        // no-op in a lookbehind, see #100569
-      } else if (parent.type === 'CharacterClass') {
-        if (parent.negate) {
-          // negative bracket expr, [^a-z\n] -> (?![a-z]|\r?\n)
-          const otherContent =
-            pattern.slice(parent.start + 2, char.start) + pattern.slice(char.end, parent.end - 1);
-          if (parent.parent?.type === 'Quantifier') {
-            // If quantified, we can't use a negative lookahead in a quantifier.
-            // But `.` already doesn't match new lines, so we can just use that
-            // (with any other negations) instead.
-            replace(parent.start, parent.end, otherContent ? `[^${otherContent}]` : '.');
-          } else {
-            replace(
-              parent.start,
-              parent.end,
-              `(?!\\r?\\n${otherContent ? `|[${otherContent}]` : ''})`,
-            );
-          }
-        } else {
-          // positive bracket expr, [a-z\n] -> (?:[a-z]|\r?\n)
-          const otherContent =
-            pattern.slice(parent.start + 1, char.start) + pattern.slice(char.end, parent.end - 1);
-          replace(
-            parent.start,
-            parent.end,
-            otherContent === '' ? '\\r?\\n' : `(?:[${otherContent}]|\\r?\\n)`,
-          );
-        }
-      } else if (parent.type === 'Quantifier') {
-        replace(char.start, char.end, '(?:\\r?\\n)');
-      }
-    },
-    onQuantifierEnter(node) {
-      context.unshift(node);
-    },
-    onQuantifierLeave() {
-      context.shift();
-    },
-    onCharacterClassRangeEnter(node) {
-      context.unshift(node);
-    },
-    onCharacterClassRangeLeave() {
-      context.shift();
-    },
-    onCharacterClassEnter(node) {
-      context.unshift(node);
-    },
-    onCharacterClassLeave() {
-      context.shift();
-    },
-    onAssertionEnter(node) {
-      if (isLookBehind(node)) {
-        context.push(node);
-      }
-    },
-    onAssertionLeave(node) {
-      if (context[0] === node) {
-        context.shift();
-      }
-    },
-  });
+			const parent = context[0];
+			if (!parent) {
+				// simple char, \n -> \r?\n
+				replace(char.start, char.end, '\\r?\\n');
+			} else if (context.some(isLookBehind)) {
+				// no-op in a lookbehind, see #100569
+			} else if (parent.type === 'CharacterClass') {
+				if (parent.negate) {
+					// negative bracket expr, [^a-z\n] -> (?![a-z]|\r?\n)
+					const otherContent = pattern.slice(parent.start + 2, char.start) + pattern.slice(char.end, parent.end - 1);
+					if (parent.parent?.type === 'Quantifier') {
+						// If quantified, we can't use a negative lookahead in a quantifier.
+						// But `.` already doesn't match new lines, so we can just use that
+						// (with any other negations) instead.
+						replace(parent.start, parent.end, otherContent ? `[^${otherContent}]` : '.');
+					} else {
+						replace(parent.start, parent.end, '(?!\\r?\\n' + (otherContent ? `|[${otherContent}]` : '') + ')');
+					}
+				} else {
+					// positive bracket expr, [a-z\n] -> (?:[a-z]|\r?\n)
+					const otherContent = pattern.slice(parent.start + 1, char.start) + pattern.slice(char.end, parent.end - 1);
+					replace(parent.start, parent.end, otherContent === '' ? '\\r?\\n' : `(?:[${otherContent}]|\\r?\\n)`);
+				}
+			} else if (parent.type === 'Quantifier') {
+				replace(char.start, char.end, '(?:\\r?\\n)');
+			}
+		},
+		onQuantifierEnter(node) {
+			context.unshift(node);
+		},
+		onQuantifierLeave() {
+			context.shift();
+		},
+		onCharacterClassRangeEnter(node) {
+			context.unshift(node);
+		},
+		onCharacterClassRangeLeave() {
+			context.shift();
+		},
+		onCharacterClassEnter(node) {
+			context.unshift(node);
+		},
+		onCharacterClassLeave() {
+			context.shift();
+		},
+		onAssertionEnter(node) {
+			if (isLookBehind(node)) {
+				context.push(node);
+			}
+		},
+		onAssertionLeave(node) {
+			if (context[0] === node) {
+				context.shift();
+			}
+		},
+	});
 
-  visitor.visit(re);
-  output += pattern.slice(lastEmittedIndex);
-  return output;
+	visitor.visit(re);
+	output += pattern.slice(lastEmittedIndex);
+	return output;
 }
 
 export function fixNewline(pattern: string): string {
-  return pattern.replace(/\n/g, '\\r?\\n');
+	return pattern.replace(/\n/g, '\\r?\\n');
 }
 
 // brace expansion for ripgrep
@@ -743,81 +739,79 @@ export function fixNewline(pattern: string): string {
  * - Does not process escapes that are within the sub-glob.
  * - If two unescaped `{` occur before `}`, then ripgrep will return an error for brace nesting, so don't split on those.
  */
-function getEscapeAwareSplitStringForRipgrep(pattern: string): {
-  fixedStart?: string;
-  strInBraces: string;
-  fixedEnd?: string;
-} {
-  let inBraces = false;
-  let escaped = false;
-  let fixedStart = '';
-  let strInBraces = '';
-  for (let i = 0; i < pattern.length; i++) {
-    const char = pattern[i];
-    switch (char) {
-      case '\\':
-        if (escaped) {
-          // If we're already escaped, then just leave the escaped slash and the preceeding slash that escapes it.
-          // The two escaped slashes will result in a single slash and whatever processes the glob later will properly process the escape
-          if (inBraces) {
-            strInBraces += `\\${char}`;
-          } else {
-            fixedStart += `\\${char}`;
-          }
-          escaped = false;
-        } else {
-          escaped = true;
-        }
-        break;
-      case '{':
-        if (escaped) {
-          // if we escaped this opening bracket, then it is to be taken literally. Remove the `\` because we've acknowleged it and add the `{` to the appropriate string
-          if (inBraces) {
-            strInBraces += char;
-          } else {
-            fixedStart += char;
-          }
-          escaped = false;
-        } else {
-          if (inBraces) {
-            // ripgrep treats this as attempting to do a nested alternate group, which is invalid. Return with pattern including changes from escaped braces.
-            return { strInBraces: `${fixedStart}{${strInBraces}{${pattern.substring(i + 1)}` };
-          }
-          inBraces = true;
-        }
-        break;
-      case '}':
-        if (escaped) {
-          // same as `}`, but for closing bracket
-          if (inBraces) {
-            strInBraces += char;
-          } else {
-            fixedStart += char;
-          }
-          escaped = false;
-        } else if (inBraces) {
-          // we found an end bracket to a valid opening bracket. Return the appropriate strings.
-          return { fixedStart, strInBraces, fixedEnd: pattern.substring(i + 1) };
-        } else {
-          // if we're not in braces and not escaped, then this is a literal `}` character and we're still adding to fixedStart.
-          fixedStart += char;
-        }
-        break;
-      default:
-        // similar to the `\\` case, we didn't do anything with the escape, so we should re-insert it into the appropriate string
-        // to be consumed later when individual parts of the glob are processed
-        if (inBraces) {
-          strInBraces += (escaped ? '\\' : '') + char;
-        } else {
-          fixedStart += (escaped ? '\\' : '') + char;
-        }
-        escaped = false;
-        break;
-    }
-  }
+function getEscapeAwareSplitStringForRipgrep(pattern: string): { fixedStart?: string; strInBraces: string; fixedEnd?: string } {
+	let inBraces = false;
+	let escaped = false;
+	let fixedStart = '';
+	let strInBraces = '';
+	for (let i = 0; i < pattern.length; i++) {
+		const char = pattern[i];
+		switch (char) {
+			case '\\':
+				if (escaped) {
+					// If we're already escaped, then just leave the escaped slash and the preceeding slash that escapes it.
+					// The two escaped slashes will result in a single slash and whatever processes the glob later will properly process the escape
+					if (inBraces) {
+						strInBraces += '\\' + char;
+					} else {
+						fixedStart += '\\' + char;
+					}
+					escaped = false;
+				} else {
+					escaped = true;
+				}
+				break;
+			case '{':
+				if (escaped) {
+					// if we escaped this opening bracket, then it is to be taken literally. Remove the `\` because we've acknowleged it and add the `{` to the appropriate string
+					if (inBraces) {
+						strInBraces += char;
+					} else {
+						fixedStart += char;
+					}
+					escaped = false;
+				} else {
+					if (inBraces) {
+						// ripgrep treats this as attempting to do a nested alternate group, which is invalid. Return with pattern including changes from escaped braces.
+						return { strInBraces: fixedStart + '{' + strInBraces + '{' + pattern.substring(i + 1) };
+					} else {
+						inBraces = true;
+					}
+				}
+				break;
+			case '}':
+				if (escaped) {
+					// same as `}`, but for closing bracket
+					if (inBraces) {
+						strInBraces += char;
+					} else {
+						fixedStart += char;
+					}
+					escaped = false;
+				} else if (inBraces) {
+					// we found an end bracket to a valid opening bracket. Return the appropriate strings.
+					return { fixedStart, strInBraces, fixedEnd: pattern.substring(i + 1) };
+				} else {
+					// if we're not in braces and not escaped, then this is a literal `}` character and we're still adding to fixedStart.
+					fixedStart += char;
+				}
+				break;
+			default:
+				// similar to the `\\` case, we didn't do anything with the escape, so we should re-insert it into the appropriate string
+				// to be consumed later when individual parts of the glob are processed
+				if (inBraces) {
+					strInBraces += (escaped ? '\\' : '') + char;
+				} else {
+					fixedStart += (escaped ? '\\' : '') + char;
+				}
+				escaped = false;
+				break;
+		}
+	}
 
-  // we are haven't hit the last brace, so no splitting should occur. Return with pattern including changes from escaped braces.
-  return { strInBraces: fixedStart + (inBraces ? `{${strInBraces}` : '') };
+
+	// we are haven't hit the last brace, so no splitting should occur. Return with pattern including changes from escaped braces.
+	return { strInBraces: fixedStart + (inBraces ? ('{' + strInBraces) : '') };
 }
 
 /**
@@ -825,22 +819,24 @@ function getEscapeAwareSplitStringForRipgrep(pattern: string): {
  * Exported for testing.
  */
 export function performBraceExpansionForRipgrep(pattern: string): string[] {
-  const { fixedStart, strInBraces, fixedEnd } = getEscapeAwareSplitStringForRipgrep(pattern);
-  if (fixedStart === undefined || fixedEnd === undefined) {
-    return [strInBraces];
-  }
+	const { fixedStart, strInBraces, fixedEnd } = getEscapeAwareSplitStringForRipgrep(pattern);
+	if (fixedStart === undefined || fixedEnd === undefined) {
+		return [strInBraces];
+	}
 
-  let arr = splitGlobAware(strInBraces, ',');
+	let arr = splitGlobAware(strInBraces, ',');
 
-  if (!arr.length) {
-    // occurs if the braces are empty.
-    arr = [''];
-  }
+	if (!arr.length) {
+		// occurs if the braces are empty.
+		arr = [''];
+	}
 
-  const ends = performBraceExpansionForRipgrep(fixedEnd);
+	const ends = performBraceExpansionForRipgrep(fixedEnd);
 
-  return arr.flatMap((elem) => {
-    const start = fixedStart + elem;
-    return ends.map((end) => start + end);
-  });
+	return arr.flatMap((elem) => {
+		const start = fixedStart + elem;
+		return ends.map((end) => {
+			return start + end;
+		});
+	});
 }

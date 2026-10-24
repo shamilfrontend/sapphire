@@ -6,21 +6,48 @@
 import * as assert from 'assert';
 import 'mocha';
 import * as vscode from 'vscode';
+import { assertNoRpc, closeAllEditors, createRandomFile } from '../utils';
 
-(vscode.env.uiKind === vscode.UIKind.Web ? suite.skip : suite)('ipynb NotebookSerializer', () => {
-  test('Can open an ipynb notebook', async () => {
-    assert.ok(vscode.workspace.workspaceFolders);
-    const workspace = vscode.workspace.workspaceFolders[0];
-    const uri = vscode.Uri.joinPath(workspace.uri, 'test.ipynb');
-    const notebook = await vscode.workspace.openNotebookDocument(uri);
-    await vscode.window.showNotebookDocument(notebook);
+const ipynbContent = JSON.stringify({
+	'cells': [
+		{
+			'cell_type': 'markdown',
+			'source': ['## Header'],
+			'metadata': {}
+		},
+		{
+			'cell_type': 'code',
+			'execution_count': 2,
+			'source': [`print('hello 1')\n`, `print('hello 2')`],
+			'outputs': [
+				{
+					'output_type': 'stream',
+					'name': 'stdout',
+					'text': ['hello 1\n', 'hello 2\n']
+				}
+			],
+			'metadata': {}
+		}
+	]
+});
 
-    const notebookEditor = vscode.window.activeNotebookEditor;
-    assert.ok(notebookEditor);
+suite('ipynb NotebookSerializer', function () {
+	teardown(async function () {
+		assertNoRpc();
+		await closeAllEditors();
+	});
 
-    assert.strictEqual(notebookEditor.notebook.cellCount, 2);
-    assert.strictEqual(notebookEditor.notebook.cellAt(0).kind, vscode.NotebookCellKind.Markup);
-    assert.strictEqual(notebookEditor.notebook.cellAt(1).kind, vscode.NotebookCellKind.Code);
-    assert.strictEqual(notebookEditor.notebook.cellAt(1).outputs.length, 1);
-  });
+	test.skip('Can open an ipynb notebook', async () => {
+		const file = await createRandomFile(ipynbContent, undefined, '.ipynb');
+		const notebook = await vscode.workspace.openNotebookDocument(file);
+		await vscode.window.showNotebookDocument(notebook);
+
+		const notebookEditor = vscode.window.activeNotebookEditor;
+		assert.ok(notebookEditor);
+
+		assert.strictEqual(notebookEditor.notebook.cellCount, 2);
+		assert.strictEqual(notebookEditor.notebook.cellAt(0).kind, vscode.NotebookCellKind.Markup);
+		assert.strictEqual(notebookEditor.notebook.cellAt(1).kind, vscode.NotebookCellKind.Code);
+		assert.strictEqual(notebookEditor.notebook.cellAt(1).outputs.length, 1);
+	});
 });

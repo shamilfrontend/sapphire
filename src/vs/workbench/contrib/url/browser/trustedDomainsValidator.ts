@@ -16,136 +16,131 @@ import { IProductService } from '../../../../platform/product/common/productServ
 import { IQuickInputService } from '../../../../platform/quickinput/common/quickInput.js';
 import { IStorageService } from '../../../../platform/storage/common/storage.js';
 import { ITelemetryService } from '../../../../platform/telemetry/common/telemetry.js';
-import { IWorkspaceTrustManagementService } from '../../../../platform/workspace/common/workspaceTrust.js';
+import { IWorkspaceTrustManagementService, IWorkspaceTrustRequestService } from '../../../../platform/workspace/common/workspaceTrust.js';
 import { IWorkbenchContribution } from '../../../common/contributions.js';
 import { ITrustedDomainService } from './trustedDomainService.js';
-import { isURLDomainTrusted } from '../common/trustedDomains.js';
-import {
-  configureOpenerTrustedDomainsHandler,
-  readStaticTrustedDomains,
-} from './trustedDomains.js';
+import { isURLDomainTrusted } from '../../../../platform/url/common/trustedDomains.js';
+import { configureOpenerTrustedDomainsHandler, readStaticTrustedDomains } from './trustedDomains.js';
 import { IEditorService } from '../../../services/editor/common/editorService.js';
 
 export class OpenerValidatorContributions implements IWorkbenchContribution {
-  constructor(
-    @IOpenerService private readonly _openerService: IOpenerService,
-    @IStorageService private readonly _storageService: IStorageService,
-    @IDialogService private readonly _dialogService: IDialogService,
-    @IProductService private readonly _productService: IProductService,
-    @IQuickInputService private readonly _quickInputService: IQuickInputService,
-    @IEditorService private readonly _editorService: IEditorService,
-    @IClipboardService private readonly _clipboardService: IClipboardService,
-    @ITelemetryService private readonly _telemetryService: ITelemetryService,
-    @IInstantiationService private readonly _instantiationService: IInstantiationService,
-    @IConfigurationService private readonly _configurationService: IConfigurationService,
-    @IWorkspaceTrustManagementService
-    private readonly _workspaceTrustService: IWorkspaceTrustManagementService,
-    @ITrustedDomainService private readonly _trustedDomainService: ITrustedDomainService,
-  ) {
-    this._openerService.registerValidator({
-      shouldOpen: (uri, options) => this.validateLink(uri, options),
-    });
-  }
 
-  async validateLink(resource: URI | string, openOptions?: OpenOptions): Promise<boolean> {
-    if (!matchesScheme(resource, Schemas.http) && !matchesScheme(resource, Schemas.https)) {
-      return true;
-    }
+	constructor(
+		@IOpenerService private readonly _openerService: IOpenerService,
+		@IStorageService private readonly _storageService: IStorageService,
+		@IDialogService private readonly _dialogService: IDialogService,
+		@IProductService private readonly _productService: IProductService,
+		@IQuickInputService private readonly _quickInputService: IQuickInputService,
+		@IEditorService private readonly _editorService: IEditorService,
+		@IClipboardService private readonly _clipboardService: IClipboardService,
+		@ITelemetryService private readonly _telemetryService: ITelemetryService,
+		@IInstantiationService private readonly _instantiationService: IInstantiationService,
+		@IConfigurationService private readonly _configurationService: IConfigurationService,
+		@IWorkspaceTrustManagementService private readonly _workspaceTrustService: IWorkspaceTrustManagementService,
+		@IWorkspaceTrustRequestService private readonly _workspaceTrustRequestService: IWorkspaceTrustRequestService,
+		@ITrustedDomainService private readonly _trustedDomainService: ITrustedDomainService,
+	) {
+		this._openerService.registerValidator({ shouldOpen: (uri, options) => this.validateLink(uri, options) });
+	}
 
-    if (
-      openOptions?.fromWorkspace &&
-      this._workspaceTrustService.isWorkspaceTrusted() &&
-      !this._configurationService.getValue('workbench.trustedDomains.promptInTrustedWorkspace')
-    ) {
-      return true;
-    }
+	async validateLink(resource: URI | string, openOptions?: OpenOptions): Promise<boolean> {
+		const resourceUri = typeof resource === 'string' ? URI.parse(resource) : resource;
 
-    const originalResource = resource;
-    let resourceUri: URI;
-    if (typeof resource === 'string') {
-      resourceUri = URI.parse(resource);
-    } else {
-      resourceUri = resource;
-    }
+		if (matchesScheme(resourceUri, Schemas.command)
+			&& !this._workspaceTrustService.isWorkspaceTrusted()
+			&& (openOptions?.allowCommands === true || (Array.isArray(openOptions?.allowCommands) && openOptions.allowCommands.includes(resourceUri.path)))) {
+			let message: string | undefined;
+			if (openOptions?.fromWorkspace) {
+				message = localize('commandWorkspaceTrust', "Running a command from a link requires trusting this workspace.");
+			}
 
-    if (this._trustedDomainService.isValid(resourceUri)) {
-      return true;
-    }
-    const { scheme, authority, path, query, fragment } = resourceUri;
-    let formattedLink = `${scheme}://${authority}${path}`;
+			if (message) {
+				return await this._workspaceTrustRequestService.requestWorkspaceTrust({ message }) === true;
+			}
+		}
 
-    const linkTail = `${query ? `?${query}` : ''}${fragment ? `#${fragment}` : ''}`;
+		if (!matchesScheme(resourceUri, Schemas.http) && !matchesScheme(resourceUri, Schemas.https)) {
+			return true;
+		}
 
-    const remainingLength = Math.max(0, 60 - formattedLink.length);
-    const linkTailLengthToKeep = Math.min(Math.max(5, remainingLength), linkTail.length);
+		if (openOptions?.fromWorkspace && this._workspaceTrustService.isWorkspaceTrusted() && !this._configurationService.getValue('workbench.trustedDomains.promptInTrustedWorkspace')) {
+			return true;
+		}
 
-    if (linkTailLengthToKeep === linkTail.length) {
-      formattedLink += linkTail;
-    } else {
-      // keep the first char ? or #
-      // add ... and keep the tail end as much as possible
-      formattedLink += `${linkTail.charAt(0)}...${linkTail.substring(
-        linkTail.length - linkTailLengthToKeep + 1,
-      )}`;
-    }
+		const originalResource = resource;
 
-    const { result } = await this._dialogService.prompt<boolean>({
-      type: Severity.Info,
-      message: localize(
-        'openExternalLinkAt',
-        'Do you want {0} to open the external website?',
-        this._productService.nameShort,
-      ),
-      detail: typeof originalResource === 'string' ? originalResource : formattedLink,
-      buttons: [
-        {
-          label: localize({ key: 'open', comment: ['&& denotes a mnemonic'] }, '&&Open'),
-          run: () => true,
-        },
-        {
-          label: localize({ key: 'copy', comment: ['&& denotes a mnemonic'] }, '&&Copy'),
-          run: () => {
-            this._clipboardService.writeText(
-              typeof originalResource === 'string' ? originalResource : resourceUri.toString(true),
-            );
-            return false;
-          },
-        },
-        {
-          label: localize(
-            { key: 'configureTrustedDomains', comment: ['&& denotes a mnemonic'] },
-            'Configure &&Trusted Domains',
-          ),
-          run: async () => {
-            const { trustedDomains } =
-              this._instantiationService.invokeFunction(readStaticTrustedDomains);
-            const domainToOpen = `${scheme}://${authority}`;
-            const pickedDomains = await configureOpenerTrustedDomainsHandler(
-              trustedDomains,
-              domainToOpen,
-              resourceUri,
-              this._quickInputService,
-              this._storageService,
-              this._editorService,
-              this._telemetryService,
-            );
-            // Trust all domains
-            if (pickedDomains.indexOf('*') !== -1) {
-              return true;
-            }
-            // Trust current domain
-            if (isURLDomainTrusted(resourceUri, pickedDomains)) {
-              return true;
-            }
-            return false;
-          },
-        },
-      ],
-      cancelButton: {
-        run: () => false,
-      },
-    });
+		if (this._trustedDomainService.isValid(resourceUri)) {
+			return true;
+		} else {
+			const { scheme, authority, path, query, fragment } = resourceUri;
+			let formattedLink = `${scheme}://${authority}${path}`;
 
-    return result;
-  }
+			const linkTail = `${query ? '?' + query : ''}${fragment ? '#' + fragment : ''}`;
+
+
+			const remainingLength = Math.max(0, 60 - formattedLink.length);
+			const linkTailLengthToKeep = Math.min(Math.max(5, remainingLength), linkTail.length);
+
+			if (linkTailLengthToKeep === linkTail.length) {
+				formattedLink += linkTail;
+			} else {
+				// keep the first char ? or #
+				// add ... and keep the tail end as much as possible
+				formattedLink += linkTail.charAt(0) + '...' + linkTail.substring(linkTail.length - linkTailLengthToKeep + 1);
+			}
+
+			const { result } = await this._dialogService.prompt<boolean>({
+				type: Severity.Info,
+				message: localize(
+					'openExternalLinkAt',
+					'Do you want {0} to open the external website?',
+					this._productService.nameShort
+				),
+				detail: typeof originalResource === 'string' ? originalResource : formattedLink,
+				buttons: [
+					{
+						label: localize({ key: 'open', comment: ['&& denotes a mnemonic'] }, '&&Open'),
+						run: () => true
+					},
+					{
+						label: localize({ key: 'copy', comment: ['&& denotes a mnemonic'] }, '&&Copy'),
+						run: () => {
+							this._clipboardService.writeText(typeof originalResource === 'string' ? originalResource : resourceUri.toString(true));
+							return false;
+						}
+					},
+					{
+						label: localize({ key: 'configureTrustedDomains', comment: ['&& denotes a mnemonic'] }, 'Configure &&Trusted Domains'),
+						run: async () => {
+							const { trustedDomains, } = this._instantiationService.invokeFunction(readStaticTrustedDomains);
+							const domainToOpen = `${scheme}://${authority}`;
+							const pickedDomains = await configureOpenerTrustedDomainsHandler(
+								trustedDomains,
+								domainToOpen,
+								resourceUri,
+								this._quickInputService,
+								this._storageService,
+								this._editorService,
+								this._telemetryService,
+							);
+							// Trust all domains
+							if (pickedDomains.indexOf('*') !== -1) {
+								return true;
+							}
+							// Trust current domain
+							if (isURLDomainTrusted(resourceUri, pickedDomains)) {
+								return true;
+							}
+							return false;
+						}
+					}
+				],
+				cancelButton: {
+					run: () => false
+				}
+			});
+
+			return result;
+		}
+	}
 }

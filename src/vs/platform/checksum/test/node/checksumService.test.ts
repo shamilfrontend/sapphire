@@ -14,33 +14,29 @@ import { DiskFileSystemProvider } from '../../../files/node/diskFileSystemProvid
 import { NullLogService } from '../../../log/common/log.js';
 
 suite('Checksum Service', () => {
-  let diskFileSystemProvider: DiskFileSystemProvider;
-  let fileService: IFileService;
 
-  setup(() => {
-    const logService = new NullLogService();
-    fileService = new FileService(logService);
+	let diskFileSystemProvider: DiskFileSystemProvider;
+	let fileService: IFileService;
 
-    diskFileSystemProvider = new DiskFileSystemProvider(logService);
-    fileService.registerProvider(Schemas.file, diskFileSystemProvider);
-  });
+	setup(() => {
+		const logService = new NullLogService();
+		fileService = new FileService(logService);
 
-  teardown(() => {
-    diskFileSystemProvider.dispose();
-    fileService.dispose();
-  });
+		diskFileSystemProvider = new DiskFileSystemProvider(logService);
+		fileService.registerProvider(Schemas.file, diskFileSystemProvider);
+	});
 
-  test('checksum', async () => {
-    const checksumService = new ChecksumService(fileService);
+	teardown(() => {
+		diskFileSystemProvider.dispose();
+		fileService.dispose();
+	});
 
-    const checksum = await checksumService.checksum(
-      URI.file(FileAccess.asFileUri('vs/platform/checksum/test/node/fixtures/lorem.txt').fsPath),
-    );
-    assert.ok(
-      checksum === 'd/9bMU0ydNCmc/hg8ItWeiLT/ePnf7gyPRQVGpd6tRI' ||
-        checksum === 'eJeeTIS0dzi8MZY+nHhjPBVtNbmGqxfVvgEOB4sqVIc',
-    ); // depends on line endings git config
-  });
+	test('checksum', async () => {
+		const checksumService = new ChecksumService(fileService);
 
-  ensureNoDisposablesAreLeakedInTestSuite();
+		const checksum = await checksumService.checksum(URI.file(FileAccess.asFileUri('vs/platform/checksum/test/node/fixtures/lorem.txt').fsPath));
+		assert.ok(checksum === 'd/9bMU0ydNCmc/hg8ItWeiLT/ePnf7gyPRQVGpd6tRI' || checksum === 'eJeeTIS0dzi8MZY+nHhjPBVtNbmGqxfVvgEOB4sqVIc'); // depends on line endings git config
+	});
+
+	ensureNoDisposablesAreLeakedInTestSuite();
 });

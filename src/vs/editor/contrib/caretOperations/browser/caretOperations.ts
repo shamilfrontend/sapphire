@@ -4,62 +4,58 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { ICodeEditor } from '../../../browser/editorBrowser.js';
-import {
-  EditorAction,
-  IActionOptions,
-  registerEditorAction,
-  ServicesAccessor,
-} from '../../../browser/editorExtensions.js';
+import { EditorAction, IActionOptions, registerEditorAction, ServicesAccessor } from '../../../browser/editorExtensions.js';
 import { ICommand } from '../../../common/editorCommon.js';
 import { EditorContextKeys } from '../../../common/editorContextKeys.js';
 import { MoveCaretCommand } from './moveCaretCommand.js';
 import * as nls from '../../../../nls.js';
 
 class MoveCaretAction extends EditorAction {
-  private readonly left: boolean;
 
-  constructor(left: boolean, opts: IActionOptions) {
-    super(opts);
+	private readonly left: boolean;
 
-    this.left = left;
-  }
+	constructor(left: boolean, opts: IActionOptions) {
+		super(opts);
 
-  public run(accessor: ServicesAccessor, editor: ICodeEditor): void {
-    if (!editor.hasModel()) {
-      return;
-    }
+		this.left = left;
+	}
 
-    const commands: ICommand[] = [];
-    const selections = editor.getSelections();
+	public run(accessor: ServicesAccessor, editor: ICodeEditor): void {
+		if (!editor.hasModel()) {
+			return;
+		}
 
-    for (const selection of selections) {
-      commands.push(new MoveCaretCommand(selection, this.left));
-    }
+		const commands: ICommand[] = [];
+		const selections = editor.getSelections();
 
-    editor.pushUndoStop();
-    editor.executeCommands(this.id, commands);
-    editor.pushUndoStop();
-  }
+		for (const selection of selections) {
+			commands.push(new MoveCaretCommand(selection, this.left));
+		}
+
+		editor.pushUndoStop();
+		editor.executeCommands(this.id, commands);
+		editor.pushUndoStop();
+	}
 }
 
 class MoveCaretLeftAction extends MoveCaretAction {
-  constructor() {
-    super(true, {
-      id: 'editor.action.moveCarretLeftAction',
-      label: nls.localize2('caret.moveLeft', 'Move Selected Text Left'),
-      precondition: EditorContextKeys.writable,
-    });
-  }
+	constructor() {
+		super(true, {
+			id: 'editor.action.moveCarretLeftAction',
+			label: nls.localize2('caret.moveLeft', "Move Selected Text Left"),
+			precondition: EditorContextKeys.writable
+		});
+	}
 }
 
 class MoveCaretRightAction extends MoveCaretAction {
-  constructor() {
-    super(false, {
-      id: 'editor.action.moveCarretRightAction',
-      label: nls.localize2('caret.moveRight', 'Move Selected Text Right'),
-      precondition: EditorContextKeys.writable,
-    });
-  }
+	constructor() {
+		super(false, {
+			id: 'editor.action.moveCarretRightAction',
+			label: nls.localize2('caret.moveRight', "Move Selected Text Right"),
+			precondition: EditorContextKeys.writable
+		});
+	}
 }
 
 registerEditorAction(MoveCaretLeftAction);

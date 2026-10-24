@@ -15,52 +15,52 @@ import { IPaneCompositePartService } from '../../../services/panecomposite/brows
 import { ViewContainerLocation } from '../../../common/views.js';
 import { SideBarVisibleContext } from '../../../common/contextkeys.js';
 
-registerAction2(
-  class extends Action2 {
-    constructor() {
-      super({
-        id: 'workbench.action.closeSidebar',
-        title: localize2('closeSidebar', 'Close Primary Side Bar'),
-        category: Categories.View,
-        f1: true,
-        precondition: SideBarVisibleContext,
-      });
-    }
+registerAction2(class extends Action2 {
 
-    run(accessor: ServicesAccessor): void {
-      accessor.get(IWorkbenchLayoutService).setPartHidden(true, Parts.SIDEBAR_PART);
-    }
-  },
-);
+	constructor() {
+		super({
+			id: 'workbench.action.closeSidebar',
+			title: localize2('closeSidebar', 'Close Primary Side Bar'),
+			category: Categories.View,
+			f1: true,
+			precondition: SideBarVisibleContext
+		});
+	}
+
+	run(accessor: ServicesAccessor): void {
+		accessor.get(IWorkbenchLayoutService).setPartHidden(true, Parts.SIDEBAR_PART);
+	}
+});
 
 export class FocusSideBarAction extends Action2 {
-  constructor() {
-    super({
-      id: 'workbench.action.focusSideBar',
-      title: localize2('focusSideBar', 'Focus into Primary Side Bar'),
-      category: Categories.View,
-      f1: true,
-      keybinding: {
-        weight: KeybindingWeight.WorkbenchContrib,
-        when: null,
-        primary: KeyMod.CtrlCmd | KeyCode.Digit0,
-      },
-    });
-  }
 
-  async run(accessor: ServicesAccessor): Promise<void> {
-    const layoutService = accessor.get(IWorkbenchLayoutService);
-    const paneCompositeService = accessor.get(IPaneCompositePartService);
+	constructor() {
+		super({
+			id: 'workbench.action.focusSideBar',
+			title: localize2('focusSideBar', 'Focus into Primary Side Bar'),
+			category: Categories.View,
+			f1: true,
+			keybinding: {
+				weight: KeybindingWeight.WorkbenchContrib,
+				when: null,
+				primary: KeyMod.CtrlCmd | KeyCode.Digit0
+			}
+		});
+	}
 
-    // Show side bar
-    if (!layoutService.isVisible(Parts.SIDEBAR_PART)) {
-      layoutService.setPartHidden(false, Parts.SIDEBAR_PART);
-    }
+	async run(accessor: ServicesAccessor): Promise<void> {
+		const layoutService = accessor.get(IWorkbenchLayoutService);
+		const paneCompositeService = accessor.get(IPaneCompositePartService);
 
-    // Focus into active viewlet
-    const viewlet = paneCompositeService.getActivePaneComposite(ViewContainerLocation.Sidebar);
-    viewlet?.focus();
-  }
+		// Show side bar
+		if (!layoutService.isVisible(Parts.SIDEBAR_PART)) {
+			layoutService.setPartHidden(false, Parts.SIDEBAR_PART);
+		}
+
+		// Focus into active viewlet
+		const viewlet = paneCompositeService.getActivePaneComposite(ViewContainerLocation.Sidebar);
+		viewlet?.focus();
+	}
 }
 
 registerAction2(FocusSideBarAction);

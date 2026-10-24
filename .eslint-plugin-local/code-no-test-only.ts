@@ -4,15 +4,18 @@
  *--------------------------------------------------------------------------------------------*/
 
 import * as eslint from 'eslint';
+import type * as ESTree from 'estree';
 
-export = new (class NoTestOnly implements eslint.Rule.RuleModule {
-  create(context: eslint.Rule.RuleContext): eslint.Rule.RuleListener {
-    return {
-      'MemberExpression[object.name=/^(test|suite)$/][property.name="only"]': (node: any) =>
-        context.report({
-          node,
-          message: 'only is a dev-time tool and CANNOT be pushed',
-        }),
-    };
-  }
-})();
+export default new class NoTestOnly implements eslint.Rule.RuleModule {
+
+	create(context: eslint.Rule.RuleContext): eslint.Rule.RuleListener {
+		return {
+			['MemberExpression[object.name=/^(test|suite)$/][property.name="only"]']: (node: ESTree.MemberExpression) => {
+				return context.report({
+					node,
+					message: 'only is a dev-time tool and CANNOT be pushed'
+				});
+			}
+		};
+	}
+};

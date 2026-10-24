@@ -11,11 +11,11 @@ import { BrowserResourcePerformanceMarks, BrowserStartupTimings } from './startu
 // -- startup timings
 
 Registry.as<IWorkbenchContributionsRegistry>(Extensions.Workbench).registerWorkbenchContribution(
-  BrowserResourcePerformanceMarks,
-  LifecyclePhase.Eventually,
+	BrowserResourcePerformanceMarks,
+	LifecyclePhase.Eventually
 );
 
 Registry.as<IWorkbenchContributionsRegistry>(Extensions.Workbench).registerWorkbenchContribution(
-  BrowserStartupTimings,
-  LifecyclePhase.Eventually,
+	BrowserStartupTimings,
+	LifecyclePhase.Eventually
 );

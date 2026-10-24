@@ -53,7 +53,7 @@
     "Other"
   ],
   "activationEvents": [
-    "workspaceContains:src/vs/loader.js"
+    "workspaceContains:src/vscode-dts/vscode.d.ts"
   ],
   "workspaceTrust": {
     "request": "onDemand",
@@ -72,13 +72,13 @@
   },
   "license": "MIT",
   "scripts": {
-    "compile": "node ../../../scripts/build/main.mjs run compile-extension:vscode-selfhost-test-provider",
-    "watch": "node ../../../scripts/build/main.mjs run watch-extension:vscode-selfhost-test-provider",
+    "compile": "gulp compile-extension:vscode-selfhost-test-provider",
+    "watch": "gulp watch-extension:vscode-selfhost-test-provider",
     "test": "npx mocha --ui tdd 'out/*.test.js'"
   },
   "devDependencies": {
     "@types/mocha": "^10.0.6",
-    "@types/node": "20.x"
+    "@types/node": "24.x"
   },
   "dependencies": {
     "@jridgewell/trace-mapping": "^0.3.25",

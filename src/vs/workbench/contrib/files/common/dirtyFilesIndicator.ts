@@ -9,70 +9,59 @@ import { VIEWLET_ID } from './files.js';
 import { Disposable, MutableDisposable } from '../../../../base/common/lifecycle.js';
 import { IActivityService, NumberBadge } from '../../../services/activity/common/activity.js';
 import { IWorkingCopyService } from '../../../services/workingCopy/common/workingCopyService.js';
-import {
-  IWorkingCopy,
-  WorkingCopyCapabilities,
-} from '../../../services/workingCopy/common/workingCopy.js';
+import { IWorkingCopy, WorkingCopyCapabilities } from '../../../services/workingCopy/common/workingCopy.js';
 import { IFilesConfigurationService } from '../../../services/filesConfiguration/common/filesConfigurationService.js';
 
 export class DirtyFilesIndicator extends Disposable implements IWorkbenchContribution {
-  static readonly ID = 'workbench.contrib.dirtyFilesIndicator';
 
-  private readonly badgeHandle = this._register(new MutableDisposable());
+	static readonly ID = 'workbench.contrib.dirtyFilesIndicator';
 
-  private lastKnownDirtyCount = 0;
+	private readonly badgeHandle = this._register(new MutableDisposable());
 
-  constructor(
-    @IActivityService private readonly activityService: IActivityService,
-    @IWorkingCopyService private readonly workingCopyService: IWorkingCopyService,
-    @IFilesConfigurationService
-    private readonly filesConfigurationService: IFilesConfigurationService,
-  ) {
-    super();
+	private lastKnownDirtyCount = 0;
 
-    this.updateActivityBadge();
+	constructor(
+		@IActivityService private readonly activityService: IActivityService,
+		@IWorkingCopyService private readonly workingCopyService: IWorkingCopyService,
+		@IFilesConfigurationService private readonly filesConfigurationService: IFilesConfigurationService
+	) {
+		super();
 
-    this.registerListeners();
-  }
+		this.updateActivityBadge();
 
-  private registerListeners(): void {
-    // Working copy dirty indicator
-    this._register(
-      this.workingCopyService.onDidChangeDirty((workingCopy) =>
-        this.onWorkingCopyDidChangeDirty(workingCopy),
-      ),
-    );
-  }
+		this.registerListeners();
+	}
 
-  private onWorkingCopyDidChangeDirty(workingCopy: IWorkingCopy): void {
-    const gotDirty = workingCopy.isDirty();
-    if (
-      gotDirty &&
-      !(workingCopy.capabilities & WorkingCopyCapabilities.Untitled) &&
-      this.filesConfigurationService.hasShortAutoSaveDelay(workingCopy.resource)
-    ) {
-      return; // do not indicate dirty of working copies that are auto saved after short delay
-    }
+	private registerListeners(): void {
 
-    if (gotDirty || this.lastKnownDirtyCount > 0) {
-      this.updateActivityBadge();
-    }
-  }
+		// Working copy dirty indicator
+		this._register(this.workingCopyService.onDidChangeDirty(workingCopy => this.onWorkingCopyDidChangeDirty(workingCopy)));
+	}
 
-  private updateActivityBadge(): void {
-    const dirtyCount = (this.lastKnownDirtyCount = this.workingCopyService.dirtyCount);
+	private onWorkingCopyDidChangeDirty(workingCopy: IWorkingCopy): void {
+		const gotDirty = workingCopy.isDirty();
+		if (gotDirty && !(workingCopy.capabilities & WorkingCopyCapabilities.Untitled) && this.filesConfigurationService.hasShortAutoSaveDelay(workingCopy.resource)) {
+			return; // do not indicate dirty of working copies that are auto saved after short delay
+		}
 
-    // Indicate dirty count in badge if any
-    if (dirtyCount > 0) {
-      this.badgeHandle.value = this.activityService.showViewContainerActivity(VIEWLET_ID, {
-        badge: new NumberBadge(dirtyCount, (num) =>
-          num === 1
-            ? nls.localize('dirtyFile', '1 unsaved file')
-            : nls.localize('dirtyFiles', '{0} unsaved files', dirtyCount),
-        ),
-      });
-    } else {
-      this.badgeHandle.clear();
-    }
-  }
+		if (gotDirty || this.lastKnownDirtyCount > 0) {
+			this.updateActivityBadge();
+		}
+	}
+
+	private updateActivityBadge(): void {
+		const dirtyCount = this.lastKnownDirtyCount = this.workingCopyService.dirtyCount;
+
+		// Indicate dirty count in badge if any
+		if (dirtyCount > 0) {
+			this.badgeHandle.value = this.activityService.showViewContainerActivity(
+				VIEWLET_ID,
+				{
+					badge: new NumberBadge(dirtyCount, num => num === 1 ? nls.localize('dirtyFile', "1 unsaved file") : nls.localize('dirtyFiles', "{0} unsaved files", dirtyCount)),
+				}
+			);
+		} else {
+			this.badgeHandle.clear();
+		}
+	}
 }

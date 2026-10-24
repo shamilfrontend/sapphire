@@ -6,460 +6,441 @@
 import { URI } from '../../../base/common/uri.js';
 import { Emitter, Event } from '../../../base/common/event.js';
 import { Disposable } from '../../../base/common/lifecycle.js';
+import { join } from '../../../base/common/path.js';
 import { IStorage } from '../../../base/parts/storage/common/storage.js';
-import { IEnvironmentService } from '../../environment/common/environment.js';
+import { INativeEnvironmentService } from '../../environment/common/environment.js';
 import { IFileService } from '../../files/common/files.js';
 import { createDecorator } from '../../instantiation/common/instantiation.js';
-import {
-  ILifecycleMainService,
-  LifecycleMainPhase,
-  ShutdownReason,
-} from '../../lifecycle/electron-main/lifecycleMainService.js';
+import { ILifecycleMainService, LifecycleMainPhase, ShutdownReason } from '../../lifecycle/electron-main/lifecycleMainService.js';
 import { ILogService } from '../../log/common/log.js';
-import {
-  AbstractStorageService,
-  isProfileUsingDefaultStorage,
-  IStorageService,
-  StorageScope,
-  StorageTarget,
-} from '../common/storage.js';
-import {
-  ApplicationStorageMain,
-  ProfileStorageMain,
-  InMemoryStorageMain,
-  IStorageMain,
-  IStorageMainOptions,
-  WorkspaceStorageMain,
-  IStorageChangeEvent,
-} from './storageMain.js';
-import {
-  IUserDataProfile,
-  IUserDataProfilesService,
-} from '../../userDataProfile/common/userDataProfile.js';
+import { AbstractStorageService, isProfileUsingDefaultStorage, IStorageService, StorageScope, StorageTarget } from '../common/storage.js';
+import { ApplicationStorageMain, ApplicationSharedStorageMain, ProfileStorageMain, InMemoryStorageMain, IStorageMain, IStorageMainOptions, WorkspaceStorageMain, IStorageChangeEvent } from './storageMain.js';
+import { IUserDataProfile, IUserDataProfilesService } from '../../userDataProfile/common/userDataProfile.js';
 import { IUserDataProfilesMainService } from '../../userDataProfile/electron-main/userDataProfile.js';
 import { IAnyWorkspaceIdentifier } from '../../workspace/common/workspace.js';
 import { IUriIdentityService } from '../../uriIdentity/common/uriIdentity.js';
 import { Schemas } from '../../../base/common/network.js';
 
-// #region Storage Main Service (intent: make application, profile and workspace storage accessible to windows from main process)
+//#region Storage Main Service (intent: make application, profile and workspace storage accessible to windows from main process)
 
 export const IStorageMainService = createDecorator<IStorageMainService>('storageMainService');
 
 export interface IProfileStorageChangeEvent extends IStorageChangeEvent {
-  readonly storage: IStorageMain;
-  readonly profile: IUserDataProfile;
+	readonly storage: IStorageMain;
+	readonly profile: IUserDataProfile;
 }
 
 export interface IStorageMainService {
-  readonly _serviceBrand: undefined;
 
-  /**
-   * Provides access to the application storage shared across all
-   * windows and all profiles.
-   *
-   * Note: DO NOT use this for reading/writing from the main process!
-   *       Rather use `IApplicationStorageMainService` for that purpose.
-   */
-  readonly applicationStorage: IStorageMain;
+	readonly _serviceBrand: undefined;
 
-  /**
-   * Emitted whenever data is updated or deleted in profile scoped storage.
-   */
-  readonly onDidChangeProfileStorage: Event<IProfileStorageChangeEvent>;
+	/**
+	 * Provides access to the application storage shared across all
+	 * windows and all profiles.
+	 *
+	 * Note: DO NOT use this for reading/writing from the main process!
+	 *       Rather use `IApplicationStorageMainService` for that purpose.
+	 */
+	readonly applicationStorage: IStorageMain;
 
-  /**
-   * Provides access to the profile storage shared across all windows
-   * for the provided profile.
-   *
-   * Note: DO NOT use this for reading/writing from the main process!
-   *       This is currently not supported.
-   */
-  profileStorage(profile: IUserDataProfile): IStorageMain;
+	/**
+	 * Provides access to the application shared storage that is shared
+	 * across VS Code and Agents app.
+	 */
+	readonly applicationSharedStorage: IStorageMain;
 
-  /**
-   * Provides access to the workspace storage specific to a single window.
-   *
-   * Note: DO NOT use this for reading/writing from the main process!
-   *       This is currently not supported.
-   */
-  workspaceStorage(workspace: IAnyWorkspaceIdentifier): IStorageMain;
+	/**
+	 * Emitted whenever data is updated or deleted in profile scoped storage.
+	 */
+	readonly onDidChangeProfileStorage: Event<IProfileStorageChangeEvent>;
 
-  /**
-   * Checks if the provided path is currently in use for a storage database.
-   *
-   * @param path the path to the storage file or parent folder
-   */
-  isUsed(path: string): boolean;
+	/**
+	 * Provides access to the profile storage shared across all windows
+	 * for the provided profile.
+	 *
+	 * Note: DO NOT use this for reading/writing from the main process!
+	 *       This is currently not supported.
+	 */
+	profileStorage(profile: IUserDataProfile): IStorageMain;
+
+	/**
+	 * Provides access to the workspace storage specific to a single window.
+	 *
+	 * Note: DO NOT use this for reading/writing from the main process!
+	 *       This is currently not supported.
+	 */
+	workspaceStorage(workspace: IAnyWorkspaceIdentifier): IStorageMain;
+
+	/**
+	 * Checks if the provided path is currently in use for a storage database.
+	 *
+	 * @param path the path to the storage file or parent folder
+	 */
+	isUsed(path: string): boolean;
 }
 
 export class StorageMainService extends Disposable implements IStorageMainService {
-  declare readonly _serviceBrand: undefined;
 
-  private shutdownReason: ShutdownReason | undefined = undefined;
+	declare readonly _serviceBrand: undefined;
 
-  private readonly _onDidChangeProfileStorage = this._register(
-    new Emitter<IProfileStorageChangeEvent>(),
-  );
+	private shutdownReason: ShutdownReason | undefined = undefined;
 
-  readonly onDidChangeProfileStorage = this._onDidChangeProfileStorage.event;
+	private readonly _onDidChangeProfileStorage = this._register(new Emitter<IProfileStorageChangeEvent>());
+	readonly onDidChangeProfileStorage = this._onDidChangeProfileStorage.event;
 
-  constructor(
-    @ILogService private readonly logService: ILogService,
-    @IEnvironmentService private readonly environmentService: IEnvironmentService,
-    @IUserDataProfilesMainService
-    private readonly userDataProfilesService: IUserDataProfilesMainService,
-    @ILifecycleMainService private readonly lifecycleMainService: ILifecycleMainService,
-    @IFileService private readonly fileService: IFileService,
-    @IUriIdentityService private readonly uriIdentityService: IUriIdentityService,
-  ) {
-    super();
+	constructor(
+		@ILogService private readonly logService: ILogService,
+		@INativeEnvironmentService private readonly environmentService: INativeEnvironmentService,
+		@IUserDataProfilesMainService private readonly userDataProfilesService: IUserDataProfilesMainService,
+		@ILifecycleMainService private readonly lifecycleMainService: ILifecycleMainService,
+		@IFileService private readonly fileService: IFileService,
+		@IUriIdentityService private readonly uriIdentityService: IUriIdentityService,
+	) {
+		super();
 
-    this.applicationStorage = this._register(this.createApplicationStorage());
+		this.applicationStorage = this._register(this.createApplicationStorage());
+		this.applicationSharedStorage = this._register(this.createApplicationSharedStorage());
 
-    this.registerListeners();
-  }
+		this.registerListeners();
+	}
 
-  protected getStorageOptions(): IStorageMainOptions {
-    return {
-      useInMemoryStorage: !!this.environmentService.extensionTestsLocationURI, // no storage during extension tests!
-    };
-  }
+	protected getStorageOptions(): IStorageMainOptions {
+		return {
+			useInMemoryStorage: !!this.environmentService.extensionTestsLocationURI // no storage during extension tests!
+		};
+	}
 
-  private registerListeners(): void {
-    // Application Storage: Warmup when any window opens
-    (async () => {
-      await this.lifecycleMainService.when(LifecycleMainPhase.AfterWindowOpen);
+	private registerListeners(): void {
 
-      this.applicationStorage.init();
-    })();
+		// Application Storage: Warmup when any window opens
+		(async () => {
+			await this.lifecycleMainService.when(LifecycleMainPhase.AfterWindowOpen);
 
-    this._register(
-      this.lifecycleMainService.onWillLoadWindow((e) => {
-        // Profile Storage: Warmup when related window with profile loads
-        if (e.window.profile) {
-          this.profileStorage(e.window.profile).init();
-        }
+			this.applicationStorage.init();
+			this.applicationSharedStorage.init();
+		})();
 
-        // Workspace Storage: Warmup when related window with workspace loads
-        if (e.workspace) {
-          this.workspaceStorage(e.workspace).init();
-        }
-      }),
-    );
+		this._register(this.lifecycleMainService.onWillLoadWindow(e => {
 
-    // All Storage: Close when shutting down
-    this._register(
-      this.lifecycleMainService.onWillShutdown((e) => {
-        this.logService.trace('storageMainService#onWillShutdown()');
+			// Profile Storage: Warmup when related window with profile loads
+			if (e.window.profile) {
+				this.profileStorage(e.window.profile).init();
+			}
 
-        // Remember shutdown reason
-        this.shutdownReason = e.reason;
+			// Workspace Storage: Warmup when related window with workspace loads
+			if (e.workspace) {
+				this.workspaceStorage(e.workspace).init();
+			}
+		}));
 
-        // Application Storage
-        e.join('applicationStorage', this.applicationStorage.close());
+		// All Storage: Close when shutting down
+		this._register(this.lifecycleMainService.onWillShutdown(e => {
+			this.logService.trace('storageMainService#onWillShutdown()');
 
-        // Profile Storage(s)
-        for (const [, profileStorage] of this.mapProfileToStorage) {
-          e.join('profileStorage', profileStorage.close());
-        }
+			// Remember shutdown reason
+			this.shutdownReason = e.reason;
 
-        // Workspace Storage(s)
-        for (const [, workspaceStorage] of this.mapWorkspaceToStorage) {
-          e.join('workspaceStorage', workspaceStorage.close());
-        }
-      }),
-    );
+			// Application Storage
+			e.join('applicationStorage', this.applicationStorage.close());
 
-    // Prepare storage location as needed
-    this._register(
-      this.userDataProfilesService.onWillCreateProfile((e) => {
-        e.join(
-          (async () => {
-            if (!(await this.fileService.exists(e.profile.globalStorageHome))) {
-              await this.fileService.createFolder(e.profile.globalStorageHome);
-            }
-          })(),
-        );
-      }),
-    );
+			// Application Shared Storage
+			e.join('applicationSharedStorage', this.applicationSharedStorage.close());
 
-    // Close the storage of the profile that is being removed
-    this._register(
-      this.userDataProfilesService.onWillRemoveProfile((e) => {
-        const storage = this.mapProfileToStorage.get(e.profile.id);
-        if (storage) {
-          e.join(storage.close());
-        }
-      }),
-    );
-  }
+			// Profile Storage(s)
+			for (const [, profileStorage] of this.mapProfileToStorage) {
+				e.join('profileStorage', profileStorage.close());
+			}
 
-  // #region Application Storage
+			// Workspace Storage(s)
+			for (const [, workspaceStorage] of this.mapWorkspaceToStorage) {
+				e.join('workspaceStorage', workspaceStorage.close());
+			}
+		}));
 
-  readonly applicationStorage: IStorageMain;
+		// Prepare storage location as needed
+		this._register(this.userDataProfilesService.onWillCreateProfile(e => {
+			e.join((async () => {
+				if (!(await this.fileService.exists(e.profile.globalStorageHome))) {
+					await this.fileService.createFolder(e.profile.globalStorageHome);
+				}
+			})());
+		}));
 
-  private createApplicationStorage(): IStorageMain {
-    this.logService.trace(`StorageMainService: creating application storage`);
+		// Close the storage of the profile that is being removed
+		this._register(this.userDataProfilesService.onWillRemoveProfile(e => {
+			const storage = this.mapProfileToStorage.get(e.profile.id);
+			if (storage) {
+				e.join(storage.close());
+			}
+		}));
+	}
 
-    const applicationStorage = new ApplicationStorageMain(
-      this.getStorageOptions(),
-      this.userDataProfilesService,
-      this.logService,
-      this.fileService,
-    );
+	//#region Application Storage
 
-    this._register(
-      Event.once(applicationStorage.onDidCloseStorage)(() => {
-        this.logService.trace(`StorageMainService: closed application storage`);
-      }),
-    );
+	readonly applicationStorage: IStorageMain;
 
-    return applicationStorage;
-  }
+	private createApplicationStorage(): IStorageMain {
+		this.logService.trace(`StorageMainService: creating application storage`);
 
-  // #endregion
+		const applicationStorage = new ApplicationStorageMain(this.getStorageOptions(), this.userDataProfilesService, this.logService, this.fileService);
 
-  // #region Profile Storage
+		this._register(Event.once(applicationStorage.onDidCloseStorage)(() => {
+			this.logService.trace(`StorageMainService: closed application storage`);
+		}));
 
-  private readonly mapProfileToStorage = new Map<string /* profile ID */, IStorageMain>();
+		return applicationStorage;
+	}
 
-  profileStorage(profile: IUserDataProfile): IStorageMain {
-    if (isProfileUsingDefaultStorage(profile)) {
-      return this.applicationStorage; // for profiles using default storage, use application storage
-    }
+	//#endregion
 
-    let profileStorage = this.mapProfileToStorage.get(profile.id);
-    if (!profileStorage) {
-      this.logService.trace(`StorageMainService: creating profile storage (${profile.name})`);
+	//#region Application Shared Storage
 
-      profileStorage = this._register(this.createProfileStorage(profile));
-      this.mapProfileToStorage.set(profile.id, profileStorage);
+	readonly applicationSharedStorage: IStorageMain;
 
-      const listener = this._register(
-        profileStorage.onDidChangeStorage((e) =>
-          this._onDidChangeProfileStorage.fire({
-            ...e,
-            storage: profileStorage!,
-            profile,
-          }),
-        ),
-      );
+	private createApplicationSharedStorage(): IStorageMain {
+		this.logService.info(`StorageMainService: creating application shared storage`);
 
-      this._register(
-        Event.once(profileStorage.onDidCloseStorage)(() => {
-          this.logService.trace(`StorageMainService: closed profile storage (${profile.name})`);
+		const sharedStorageFolderPath = join(this.environmentService.appSharedDataHome.with({ scheme: Schemas.file }).fsPath, 'sharedStorage');
 
-          this.mapProfileToStorage.delete(profile.id);
-          listener.dispose();
-        }),
-      );
-    }
+		// Use the local application storage as fallback for transparent migration
+		// of keys from APPLICATION to APPLICATION_SHARED scope. The agents window is
+		// now part of the same VS Code app, so there is no separate "host" app DB to
+		// fall back to.
+		const applicationSharedStorage = new ApplicationSharedStorageMain(this.getStorageOptions(), sharedStorageFolderPath, this.applicationStorage, this.logService, this.fileService);
 
-    return profileStorage;
-  }
+		this._register(Event.once(applicationSharedStorage.onDidCloseStorage)(() => {
+			this.logService.trace(`StorageMainService: closed application shared storage`);
+		}));
 
-  private createProfileStorage(profile: IUserDataProfile): IStorageMain {
-    if (this.shutdownReason === ShutdownReason.KILL) {
-      // Workaround for native crashes that we see when
-      // SQLite DBs are being created even after shutdown
-      // https://github.com/microsoft/vscode/issues/143186
+		return applicationSharedStorage;
+	}
 
-      return new InMemoryStorageMain(this.logService, this.fileService);
-    }
+	//#endregion
 
-    return new ProfileStorageMain(
-      profile,
-      this.getStorageOptions(),
-      this.logService,
-      this.fileService,
-    );
-  }
+	//#region Profile Storage
 
-  // #endregion
+	private readonly mapProfileToStorage = new Map<string /* profile ID */, IStorageMain>();
 
-  // #region Workspace Storage
+	profileStorage(profile: IUserDataProfile): IStorageMain {
+		if (isProfileUsingDefaultStorage(profile)) {
+			return this.applicationStorage; // for profiles using default storage, use application storage
+		}
 
-  private readonly mapWorkspaceToStorage = new Map<string /* workspace ID */, IStorageMain>();
+		let profileStorage = this.mapProfileToStorage.get(profile.id);
+		if (!profileStorage) {
+			this.logService.trace(`StorageMainService: creating profile storage (${profile.name})`);
 
-  workspaceStorage(workspace: IAnyWorkspaceIdentifier): IStorageMain {
-    let workspaceStorage = this.mapWorkspaceToStorage.get(workspace.id);
-    if (!workspaceStorage) {
-      this.logService.trace(`StorageMainService: creating workspace storage (${workspace.id})`);
+			profileStorage = this._register(this.createProfileStorage(profile));
+			this.mapProfileToStorage.set(profile.id, profileStorage);
 
-      workspaceStorage = this._register(this.createWorkspaceStorage(workspace));
-      this.mapWorkspaceToStorage.set(workspace.id, workspaceStorage);
+			// Don't use this._register() for listeners that are disposed early
+			// as it causes entries to accumulate in _store when storage is closed/reopened
+			const listener = profileStorage.onDidChangeStorage(e => this._onDidChangeProfileStorage.fire({
+				...e,
+				storage: profileStorage!,
+				profile
+			}));
 
-      this._register(
-        Event.once(workspaceStorage.onDidCloseStorage)(() => {
-          this.logService.trace(`StorageMainService: closed workspace storage (${workspace.id})`);
+			Event.once(profileStorage.onDidCloseStorage)(() => {
+				this.logService.trace(`StorageMainService: closed profile storage (${profile.name})`);
 
-          this.mapWorkspaceToStorage.delete(workspace.id);
-        }),
-      );
-    }
+				this.mapProfileToStorage.delete(profile.id);
+				listener.dispose();
+			});
+		}
 
-    return workspaceStorage;
-  }
+		return profileStorage;
+	}
 
-  private createWorkspaceStorage(workspace: IAnyWorkspaceIdentifier): IStorageMain {
-    if (this.shutdownReason === ShutdownReason.KILL) {
-      // Workaround for native crashes that we see when
-      // SQLite DBs are being created even after shutdown
-      // https://github.com/microsoft/vscode/issues/143186
+	private createProfileStorage(profile: IUserDataProfile): IStorageMain {
+		if (this.shutdownReason === ShutdownReason.KILL) {
 
-      return new InMemoryStorageMain(this.logService, this.fileService);
-    }
+			// Workaround for native crashes that we see when
+			// SQLite DBs are being created even after shutdown
+			// https://github.com/microsoft/vscode/issues/143186
 
-    return new WorkspaceStorageMain(
-      workspace,
-      this.getStorageOptions(),
-      this.logService,
-      this.environmentService,
-      this.fileService,
-    );
-  }
+			return new InMemoryStorageMain(this.logService, this.fileService);
+		}
 
-  // #endregion
+		return new ProfileStorageMain(profile, this.getStorageOptions(), this.logService, this.fileService);
+	}
 
-  isUsed(path: string): boolean {
-    const pathUri = URI.file(path);
+	//#endregion
 
-    for (const storage of [
-      this.applicationStorage,
-      ...this.mapProfileToStorage.values(),
-      ...this.mapWorkspaceToStorage.values(),
-    ]) {
-      if (!storage.path) {
-        continue;
-      }
 
-      if (this.uriIdentityService.extUri.isEqualOrParent(URI.file(storage.path), pathUri)) {
-        return true;
-      }
-    }
+	//#region Workspace Storage
 
-    return false;
-  }
+	private readonly mapWorkspaceToStorage = new Map<string /* workspace ID */, IStorageMain>();
+
+	workspaceStorage(workspace: IAnyWorkspaceIdentifier): IStorageMain {
+		let workspaceStorage = this.mapWorkspaceToStorage.get(workspace.id);
+		if (!workspaceStorage) {
+			this.logService.trace(`StorageMainService: creating workspace storage (${workspace.id})`);
+
+			workspaceStorage = this._register(this.createWorkspaceStorage(workspace));
+			this.mapWorkspaceToStorage.set(workspace.id, workspaceStorage);
+
+			// Don't use this._register() for Event.once as it auto-disposes
+			Event.once(workspaceStorage.onDidCloseStorage)(() => {
+				this.logService.trace(`StorageMainService: closed workspace storage (${workspace.id})`);
+
+				this.mapWorkspaceToStorage.delete(workspace.id);
+			});
+		}
+
+		return workspaceStorage;
+	}
+
+	private createWorkspaceStorage(workspace: IAnyWorkspaceIdentifier): IStorageMain {
+		if (this.shutdownReason === ShutdownReason.KILL) {
+
+			// Workaround for native crashes that we see when
+			// SQLite DBs are being created even after shutdown
+			// https://github.com/microsoft/vscode/issues/143186
+
+			return new InMemoryStorageMain(this.logService, this.fileService);
+		}
+
+		return new WorkspaceStorageMain(workspace, this.getStorageOptions(), this.logService, this.environmentService, this.fileService);
+	}
+
+	//#endregion
+
+	isUsed(path: string): boolean {
+		const pathUri = URI.file(path);
+
+		for (const storage of [this.applicationStorage, this.applicationSharedStorage, ...this.mapProfileToStorage.values(), ...this.mapWorkspaceToStorage.values()]) {
+			if (!storage.path) {
+				continue;
+			}
+
+			if (this.uriIdentityService.extUri.isEqualOrParent(URI.file(storage.path), pathUri)) {
+				return true;
+			}
+		}
+
+		return false;
+	}
 }
 
-// #endregion
+//#endregion
 
-// #region Application Main Storage Service (intent: use application storage from main process)
 
-export const IApplicationStorageMainService = createDecorator<IStorageMainService>(
-  'applicationStorageMainService',
-);
+//#region Application Main Storage Service (intent: use application storage from main process)
+
+export const IApplicationStorageMainService = createDecorator<IStorageMainService>('applicationStorageMainService');
 
 /**
  * A specialized `IStorageService` interface that only allows
  * access to the `StorageScope.APPLICATION` scope.
  */
+type ApplicationStorageScope = StorageScope.APPLICATION | StorageScope.APPLICATION_SHARED;
+
 export interface IApplicationStorageMainService extends IStorageService {
-  /**
-   * Important: unlike other storage services in the renderer, the
-   * main process does not await the storage to be ready, rather
-   * storage is being initialized while a window opens to reduce
-   * pressure on startup.
-   *
-   * As such, any client wanting to access application storage from the
-   * main process needs to wait for `whenReady`, otherwise there is
-   * a chance that the service operates on an in-memory store that
-   * is not backed by any persistent DB.
-   */
-  readonly whenReady: Promise<void>;
 
-  get(key: string, scope: StorageScope.APPLICATION, fallbackValue: string): string;
-  get(key: string, scope: StorageScope.APPLICATION, fallbackValue?: string): string | undefined;
+	/**
+	 * Important: unlike other storage services in the renderer, the
+	 * main process does not await the storage to be ready, rather
+	 * storage is being initialized while a window opens to reduce
+	 * pressure on startup.
+	 *
+	 * As such, any client wanting to access application storage from the
+	 * main process needs to wait for `whenReady`, otherwise there is
+	 * a chance that the service operates on an in-memory store that
+	 * is not backed by any persistent DB.
+	 */
+	readonly whenReady: Promise<void>;
 
-  getBoolean(key: string, scope: StorageScope.APPLICATION, fallbackValue: boolean): boolean;
-  getBoolean(
-    key: string,
-    scope: StorageScope.APPLICATION,
-    fallbackValue?: boolean,
-  ): boolean | undefined;
+	get(key: string, scope: ApplicationStorageScope, fallbackValue: string): string;
+	get(key: string, scope: ApplicationStorageScope, fallbackValue?: string): string | undefined;
 
-  getNumber(key: string, scope: StorageScope.APPLICATION, fallbackValue: number): number;
-  getNumber(
-    key: string,
-    scope: StorageScope.APPLICATION,
-    fallbackValue?: number,
-  ): number | undefined;
+	getBoolean(key: string, scope: ApplicationStorageScope, fallbackValue: boolean): boolean;
+	getBoolean(key: string, scope: ApplicationStorageScope, fallbackValue?: boolean): boolean | undefined;
 
-  store(
-    key: string,
-    value: string | boolean | number | undefined | null,
-    scope: StorageScope.APPLICATION,
-    target: StorageTarget,
-  ): void;
+	getNumber(key: string, scope: ApplicationStorageScope, fallbackValue: number): number;
+	getNumber(key: string, scope: ApplicationStorageScope, fallbackValue?: number): number | undefined;
 
-  remove(key: string, scope: StorageScope.APPLICATION): void;
+	store(key: string, value: string | boolean | number | undefined | null, scope: ApplicationStorageScope, target: StorageTarget): void;
 
-  keys(scope: StorageScope.APPLICATION, target: StorageTarget): string[];
+	remove(key: string, scope: ApplicationStorageScope): void;
 
-  switch(): never;
+	keys(scope: ApplicationStorageScope, target: StorageTarget): string[];
 
-  isNew(scope: StorageScope.APPLICATION): boolean;
+	switch(): never;
+
+	isNew(scope: ApplicationStorageScope): boolean;
 }
 
-export class ApplicationStorageMainService
-  extends AbstractStorageService
-  implements IApplicationStorageMainService
-{
-  declare readonly _serviceBrand: undefined;
+export class ApplicationStorageMainService extends AbstractStorageService implements IApplicationStorageMainService {
 
-  readonly whenReady: Promise<void>;
+	declare readonly _serviceBrand: undefined;
 
-  constructor(
-    @IUserDataProfilesService private readonly userDataProfilesService: IUserDataProfilesService,
-    @IStorageMainService private readonly storageMainService: IStorageMainService,
-  ) {
-    super();
+	readonly whenReady: Promise<void>;
 
-    this.whenReady = this.storageMainService.applicationStorage.whenInit;
-  }
+	constructor(
+		@IUserDataProfilesService private readonly userDataProfilesService: IUserDataProfilesService,
+		@IStorageMainService private readonly storageMainService: IStorageMainService
+	) {
+		super();
 
-  protected doInitialize(): Promise<void> {
-    // application storage is being initialized as part
-    // of the first window opening, so we do not trigger
-    // it here but can join it
-    return this.storageMainService.applicationStorage.whenInit;
-  }
+		this.whenReady = Promise.all([
+			this.storageMainService.applicationStorage.whenInit,
+			this.storageMainService.applicationSharedStorage.whenInit
+		]).then(() => undefined);
+	}
 
-  protected getStorage(scope: StorageScope): IStorage | undefined {
-    if (scope === StorageScope.APPLICATION) {
-      return this.storageMainService.applicationStorage.storage;
-    }
+	protected doInitialize(): Promise<void> {
 
-    return undefined; // any other scope is unsupported from main process
-  }
+		// application storage is being initialized as part
+		// of the first window opening, so we do not trigger
+		// it here but can join it
+		return Promise.all([
+			this.storageMainService.applicationStorage.whenInit,
+			this.storageMainService.applicationSharedStorage.whenInit
+		]).then(() => undefined);
+	}
 
-  protected getLogDetails(scope: StorageScope): string | undefined {
-    if (scope === StorageScope.APPLICATION) {
-      return this.userDataProfilesService.defaultProfile.globalStorageHome.with({
-        scheme: Schemas.file,
-      }).fsPath;
-    }
+	protected getStorage(scope: StorageScope): IStorage | undefined {
+		if (scope === StorageScope.APPLICATION) {
+			return this.storageMainService.applicationStorage.storage;
+		}
 
-    return undefined; // any other scope is unsupported from main process
-  }
+		if (scope === StorageScope.APPLICATION_SHARED) {
+			return this.storageMainService.applicationSharedStorage.storage;
+		}
 
-  protected override shouldFlushWhenIdle(): boolean {
-    return false; // not needed here, will be triggered from any window that is opened
-  }
+		return undefined; // any other scope is unsupported from main process
+	}
 
-  override switch(): never {
-    throw new Error('Migrating storage is unsupported from main process');
-  }
+	protected getLogDetails(scope: StorageScope): string | undefined {
+		if (scope === StorageScope.APPLICATION) {
+			return this.userDataProfilesService.defaultProfile.globalStorageHome.with({ scheme: Schemas.file }).fsPath;
+		}
 
-  protected switchToProfile(): never {
-    throw new Error('Switching storage profile is unsupported from main process');
-  }
+		if (scope === StorageScope.APPLICATION_SHARED) {
+			return this.storageMainService.applicationSharedStorage.path;
+		}
 
-  protected switchToWorkspace(): never {
-    throw new Error('Switching storage workspace is unsupported from main process');
-  }
+		return undefined; // any other scope is unsupported from main process
+	}
 
-  hasScope(): never {
-    throw new Error('Main process is never profile or workspace scoped');
-  }
+	protected override shouldFlushWhenIdle(): boolean {
+		return false; // not needed here, will be triggered from any window that is opened
+	}
+
+	override switch(): never {
+		throw new Error('Migrating storage is unsupported from main process');
+	}
+
+	protected switchToProfile(): never {
+		throw new Error('Switching storage profile is unsupported from main process');
+	}
+
+	protected switchToWorkspace(): never {
+		throw new Error('Switching storage workspace is unsupported from main process');
+	}
+
+	hasScope(): never {
+		throw new Error('Main process is never profile or workspace scoped');
+	}
 }

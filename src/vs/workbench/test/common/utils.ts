@@ -15,12 +15,8 @@ import { LanguagesRegistry } from '../../../editor/common/services/languagesRegi
  * @skipMangle
  */
 export function assertCleanState(): void {
-  // If this test fails, it is a clear indication that
-  // your test or suite is leaking services (e.g. via leaking text models)
-  // assert.strictEqual(LanguageService.instanceCount, 0, 'No leaking ILanguageService');
-  assert.strictEqual(
-    LanguagesRegistry.instanceCount,
-    0,
-    'Error: Test run should not leak in LanguagesRegistry.',
-  );
+	// If this test fails, it is a clear indication that
+	// your test or suite is leaking services (e.g. via leaking text models)
+	// assert.strictEqual(LanguageService.instanceCount, 0, 'No leaking ILanguageService');
+	assert.strictEqual(LanguagesRegistry.instanceCount, 0, 'Error: Test run should not leak in LanguagesRegistry.');
 }

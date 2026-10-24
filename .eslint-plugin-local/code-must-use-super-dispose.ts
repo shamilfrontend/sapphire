@@ -3,29 +3,33 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
+import { TSESTree } from '@typescript-eslint/utils';
 import * as eslint from 'eslint';
+import type * as ESTree from 'estree';
 
-export = new (class NoAsyncSuite implements eslint.Rule.RuleModule {
-  create(context: eslint.Rule.RuleContext): eslint.Rule.RuleListener {
-    function doesCallSuperDispose(node: any) {
-      if (!node.override) {
-        return;
-      }
+export default new class NoAsyncSuite implements eslint.Rule.RuleModule {
 
-      const body = context.getSourceCode().getText(node);
+	create(context: eslint.Rule.RuleContext): eslint.Rule.RuleListener {
+		function doesCallSuperDispose(node: TSESTree.MethodDefinition) {
 
-      if (body.includes('super.dispose')) {
-        return;
-      }
+			if (!node.override) {
+				return;
+			}
 
-      context.report({
-        node,
-        message: 'dispose() should call super.dispose()',
-      });
-    }
+			const body = context.sourceCode.getText(node as ESTree.Node);
 
-    return {
-      'MethodDefinition[override][key.name="dispose"]': doesCallSuperDispose,
-    };
-  }
-})();
+			if (body.includes('super.dispose')) {
+				return;
+			}
+
+			context.report({
+				node,
+				message: 'dispose() should call super.dispose()'
+			});
+		}
+
+		return {
+			['MethodDefinition[override][key.name="dispose"]']: doesCallSuperDispose,
+		};
+	}
+};

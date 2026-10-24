@@ -8,113 +8,139 @@ import { Disposable } from '../../../../base/common/lifecycle.js';
 import { URI } from '../../../../base/common/uri.js';
 import * as nls from '../../../../nls.js';
 import { IExtensionDescription } from '../../../../platform/extensions/common/extensions.js';
-import {
-  IStorageService,
-  StorageScope,
-  StorageTarget,
-} from '../../../../platform/storage/common/storage.js';
+import { IStorageService, StorageScope, StorageTarget } from '../../../../platform/storage/common/storage.js';
 import { Memento } from '../../../common/memento.js';
-import { CustomEditorDescriptor, CustomEditorInfo } from './customEditor.js';
+import { CustomEditorDescriptor, CustomEditorInfo, CustomEditorPriority, CustomEditorPriorityInfo } from './customEditor.js';
 import { customEditorsExtensionPoint, ICustomEditorsExtensionPoint } from './extensionPoint.js';
 import { RegisteredEditorPriority } from '../../../services/editor/common/editorResolverService.js';
 import { IExtensionPointUser } from '../../../services/extensions/common/extensionsRegistry.js';
 
+type StoredCustomEditorPriorityInfo = Omit<CustomEditorPriorityInfo, 'diff'> & {
+	readonly diff?: RegisteredEditorPriority;
+};
+
+type StoredCustomEditorDescriptor = Omit<CustomEditorDescriptor, 'priority'> & {
+	readonly priority: StoredCustomEditorPriorityInfo | RegisteredEditorPriority;
+};
+
+interface CustomEditorsMemento {
+	editors?: StoredCustomEditorDescriptor[];
+}
+
 export class ContributedCustomEditors extends Disposable {
-  private static readonly CUSTOM_EDITORS_STORAGE_ID = 'customEditors';
 
-  private static readonly CUSTOM_EDITORS_ENTRY_ID = 'editors';
+	private static readonly CUSTOM_EDITORS_STORAGE_ID = 'customEditors';
+	private static readonly CUSTOM_EDITORS_ENTRY_ID = 'editors';
 
-  private readonly _editors = new Map<string, CustomEditorInfo>();
+	private readonly _editors = new Map<string, CustomEditorInfo>();
+	private readonly _memento: Memento<CustomEditorsMemento>;
 
-  private readonly _memento: Memento;
+	constructor(storageService: IStorageService) {
+		super();
 
-  constructor(storageService: IStorageService) {
-    super();
+		this._memento = new Memento(ContributedCustomEditors.CUSTOM_EDITORS_STORAGE_ID, storageService);
 
-    this._memento = new Memento(ContributedCustomEditors.CUSTOM_EDITORS_STORAGE_ID, storageService);
+		const mementoObject = this._memento.getMemento(StorageScope.PROFILE, StorageTarget.MACHINE);
+		for (const info of mementoObject[ContributedCustomEditors.CUSTOM_EDITORS_ENTRY_ID] || []) {
+			this.add(new CustomEditorInfo(normalizeStoredCustomEditorDescriptor(info)));
+		}
 
-    const mementoObject = this._memento.getMemento(StorageScope.PROFILE, StorageTarget.MACHINE);
-    for (const info of (mementoObject[ContributedCustomEditors.CUSTOM_EDITORS_ENTRY_ID] ||
-      []) as CustomEditorDescriptor[]) {
-      this.add(new CustomEditorInfo(info));
-    }
+		this._register(customEditorsExtensionPoint.setHandler(extensions => {
+			this.update(extensions);
+		}));
+	}
 
-    customEditorsExtensionPoint.setHandler((extensions) => {
-      this.update(extensions);
-    });
-  }
+	private readonly _onChange = this._register(new Emitter<void>());
+	public readonly onChange = this._onChange.event;
 
-  private readonly _onChange = this._register(new Emitter<void>());
+	private update(extensions: readonly IExtensionPointUser<ICustomEditorsExtensionPoint[]>[]) {
+		this._editors.clear();
 
-  public readonly onChange = this._onChange.event;
+		for (const extension of extensions) {
+			for (const webviewEditorContribution of extension.value) {
+				const priority = getPriorityFromContribution(webviewEditorContribution.priority, extension.description);
+				this.add(new CustomEditorInfo({
+					id: webviewEditorContribution.viewType,
+					displayName: webviewEditorContribution.displayName,
+					providerDisplayName: extension.description.isBuiltin ? nls.localize('builtinProviderDisplayName', "Built-in") : extension.description.displayName || extension.description.identifier.value,
+					selector: webviewEditorContribution.selector || [],
+					priority,
+				}));
+			}
+		}
 
-  private update(extensions: readonly IExtensionPointUser<ICustomEditorsExtensionPoint[]>[]) {
-    this._editors.clear();
+		const mementoObject = this._memento.getMemento(StorageScope.PROFILE, StorageTarget.MACHINE);
+		mementoObject[ContributedCustomEditors.CUSTOM_EDITORS_ENTRY_ID] = Array.from(this._editors.values());
+		this._memento.saveMemento();
 
-    for (const extension of extensions) {
-      for (const webviewEditorContribution of extension.value) {
-        this.add(
-          new CustomEditorInfo({
-            id: webviewEditorContribution.viewType,
-            displayName: webviewEditorContribution.displayName,
-            providerDisplayName: extension.description.isBuiltin
-              ? nls.localize('builtinProviderDisplayName', 'Built-in')
-              : extension.description.displayName || extension.description.identifier.value,
-            selector: webviewEditorContribution.selector || [],
-            priority: getPriorityFromContribution(webviewEditorContribution, extension.description),
-          }),
-        );
-      }
-    }
+		this._onChange.fire();
+	}
 
-    const mementoObject = this._memento.getMemento(StorageScope.PROFILE, StorageTarget.MACHINE);
-    mementoObject[ContributedCustomEditors.CUSTOM_EDITORS_ENTRY_ID] = Array.from(
-      this._editors.values(),
-    );
-    this._memento.saveMemento();
+	public [Symbol.iterator](): Iterator<CustomEditorInfo> {
+		return this._editors.values();
+	}
 
-    this._onChange.fire();
-  }
+	public get(viewType: string): CustomEditorInfo | undefined {
+		return this._editors.get(viewType);
+	}
 
-  public [Symbol.iterator](): Iterator<CustomEditorInfo> {
-    return this._editors.values();
-  }
+	public getContributedEditors(resource: URI): readonly CustomEditorInfo[] {
+		return Array.from(this._editors.values())
+			.filter(customEditor => customEditor.matches(resource));
+	}
 
-  public get(viewType: string): CustomEditorInfo | undefined {
-    return this._editors.get(viewType);
-  }
+	private add(info: CustomEditorInfo): void {
+		if (this._editors.has(info.id)) {
+			console.error(`Custom editor with id '${info.id}' already registered`);
+			return;
+		}
+		this._editors.set(info.id, info);
+	}
+}
 
-  public getContributedEditors(resource: URI): readonly CustomEditorInfo[] {
-    return Array.from(this._editors.values()).filter((customEditor) =>
-      customEditor.matches(resource),
-    );
-  }
-
-  private add(info: CustomEditorInfo): void {
-    if (this._editors.has(info.id)) {
-      console.error(`Custom editor with id '${info.id}' already registered`);
-      return;
-    }
-    this._editors.set(info.id, info);
-  }
+function normalizeStoredCustomEditorDescriptor(descriptor: StoredCustomEditorDescriptor): CustomEditorDescriptor {
+	return {
+		id: descriptor.id,
+		displayName: descriptor.displayName,
+		providerDisplayName: descriptor.providerDisplayName,
+		selector: descriptor.selector,
+		priority: typeof descriptor.priority === 'string' ? {
+			editor: descriptor.priority,
+			diff: RegisteredEditorPriority.explicit,
+		} : {
+			editor: descriptor.priority.editor,
+			diff: descriptor.priority.diff ?? RegisteredEditorPriority.explicit,
+		},
+	};
 }
 
 function getPriorityFromContribution(
-  contribution: ICustomEditorsExtensionPoint,
-  extension: IExtensionDescription,
-): RegisteredEditorPriority {
-  switch (contribution.priority) {
-    case RegisteredEditorPriority.default:
-    case RegisteredEditorPriority.option:
-      return contribution.priority;
+	contribution: ICustomEditorsExtensionPoint['priority'],
+	extension: IExtensionDescription,
+): CustomEditorDescriptor['priority'] {
+	const editorPriority = getSinglePriorityFromContribution(typeof contribution === 'string' ? contribution : contribution?.textEditor, extension) ?? RegisteredEditorPriority.default;
+	return {
+		editor: editorPriority,
+		diff: (typeof contribution === 'string' ? undefined : getSinglePriorityFromContribution(contribution?.diffEditor, extension)) ?? RegisteredEditorPriority.explicit,
+	};
+}
 
-    case RegisteredEditorPriority.builtin:
-      // Builtin is only valid for builtin extensions
-      return extension.isBuiltin
-        ? RegisteredEditorPriority.builtin
-        : RegisteredEditorPriority.default;
+function getSinglePriorityFromContribution(value: CustomEditorPriority | undefined, extension: IExtensionDescription): RegisteredEditorPriority | undefined {
+	switch (value) {
+		case CustomEditorPriority.default:
+			return RegisteredEditorPriority.default;
 
-    default:
-      return RegisteredEditorPriority.default;
-  }
+		case CustomEditorPriority.option:
+			return RegisteredEditorPriority.option;
+
+		case CustomEditorPriority.explicit:
+			return RegisteredEditorPriority.explicit;
+
+		case CustomEditorPriority.builtin:
+			// Builtin is only valid for builtin extensions
+			return extension.isBuiltin ? RegisteredEditorPriority.builtin : RegisteredEditorPriority.default;
+
+		default:
+			return undefined;
+	}
 }

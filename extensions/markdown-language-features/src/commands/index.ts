@@ -13,41 +13,41 @@ import { InsertLinkFromWorkspace, InsertImageFromWorkspace } from './insertResou
 import { RefreshPreviewCommand } from './refreshPreview';
 import { ReloadPlugins } from './reloadPlugins';
 import { RenderDocument } from './renderDocument';
-import {
-  ShowLockedPreviewToSideCommand,
-  ShowPreviewCommand,
-  ShowPreviewToSideCommand,
-} from './showPreview';
+import { ShowLockedPreviewToSideCommand, ShowPreviewCommand, ShowPreviewToSideCommand } from './showPreview';
+import { ReopenAsPreviewCommand, ReopenAsSourceCommand, TogglePreviewCommand } from './reopenAsPreview';
 import { CopyImageCommand } from './copyImage';
 import { ShowPreviewSecuritySelectorCommand } from './showPreviewSecuritySelector';
 import { ShowSourceCommand } from './showSource';
 import { ToggleLockCommand } from './toggleLock';
 import { OpenImageCommand } from './openImage';
+import { OpenFrontMatterSettingsCommand } from './openFrontMatterSettings';
 
 export function registerMarkdownCommands(
-  commandManager: CommandManager,
-  previewManager: MarkdownPreviewManager,
-  telemetryReporter: TelemetryReporter,
-  cspArbiter: ContentSecurityPolicyArbiter,
-  engine: MarkdownItEngine,
+	commandManager: CommandManager,
+	previewManager: MarkdownPreviewManager,
+	telemetryReporter: TelemetryReporter,
+	cspArbiter: ContentSecurityPolicyArbiter,
+	engine: MarkdownItEngine,
 ): vscode.Disposable {
-  const previewSecuritySelector = new PreviewSecuritySelector(cspArbiter, previewManager);
+	const previewSecuritySelector = new PreviewSecuritySelector(cspArbiter, previewManager);
 
-  commandManager.register(new OpenImageCommand(previewManager));
-  commandManager.register(new CopyImageCommand(previewManager));
-  commandManager.register(new ShowPreviewCommand(previewManager, telemetryReporter));
-  commandManager.register(new ShowPreviewToSideCommand(previewManager, telemetryReporter));
-  commandManager.register(new ShowLockedPreviewToSideCommand(previewManager, telemetryReporter));
-  commandManager.register(new ShowSourceCommand(previewManager));
-  commandManager.register(new RefreshPreviewCommand(previewManager, engine));
-  commandManager.register(
-    new ShowPreviewSecuritySelectorCommand(previewSecuritySelector, previewManager),
-  );
-  commandManager.register(new ToggleLockCommand(previewManager));
-  commandManager.register(new RenderDocument(engine));
-  commandManager.register(new ReloadPlugins(previewManager, engine));
-  commandManager.register(new InsertLinkFromWorkspace());
-  commandManager.register(new InsertImageFromWorkspace());
+	commandManager.register(new OpenImageCommand(previewManager));
+	commandManager.register(new CopyImageCommand(previewManager));
+	commandManager.register(new OpenFrontMatterSettingsCommand());
+	commandManager.register(new ShowPreviewCommand(previewManager, telemetryReporter));
+	commandManager.register(new ShowPreviewToSideCommand(previewManager, telemetryReporter));
+	commandManager.register(new ShowLockedPreviewToSideCommand(previewManager, telemetryReporter));
+	commandManager.register(new ShowSourceCommand(previewManager));
+	commandManager.register(new ReopenAsPreviewCommand());
+	commandManager.register(new ReopenAsSourceCommand());
+	commandManager.register(new TogglePreviewCommand());
+	commandManager.register(new RefreshPreviewCommand(previewManager, engine));
+	commandManager.register(new ShowPreviewSecuritySelectorCommand(previewSecuritySelector, previewManager));
+	commandManager.register(new ToggleLockCommand(previewManager));
+	commandManager.register(new RenderDocument(engine));
+	commandManager.register(new ReloadPlugins(previewManager, engine));
+	commandManager.register(new InsertLinkFromWorkspace());
+	commandManager.register(new InsertImageFromWorkspace());
 
-  return commandManager;
+	return commandManager;
 }

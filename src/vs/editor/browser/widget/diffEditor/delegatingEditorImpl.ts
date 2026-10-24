@@ -7,236 +7,164 @@ import { Emitter } from '../../../../base/common/event.js';
 import { Disposable } from '../../../../base/common/lifecycle.js';
 import { CodeEditorWidget } from '../codeEditor/codeEditorWidget.js';
 import { IEditorOptions } from '../../../common/config/editorOptions.js';
-import { IDimension } from '../../../common/core/dimension.js';
+import { IDimension } from '../../../common/core/2d/dimension.js';
 import { IPosition, Position } from '../../../common/core/position.js';
 import { IRange, Range } from '../../../common/core/range.js';
 import { ISelection, Selection } from '../../../common/core/selection.js';
-import {
-  IDiffEditorViewModel,
-  IEditor,
-  IEditorAction,
-  IEditorDecorationsCollection,
-  IEditorModel,
-  IEditorViewState,
-  ScrollType,
-} from '../../../common/editorCommon.js';
+import { IDiffEditorViewModel, IEditor, IEditorAction, IEditorDecorationsCollection, IEditorModel, IEditorViewState, ScrollType } from '../../../common/editorCommon.js';
 import { IModelDecorationsChangeAccessor, IModelDeltaDecoration } from '../../../common/model.js';
 
 export abstract class DelegatingEditor extends Disposable implements IEditor {
-  private static idCounter = 0;
+	private static idCounter = 0;
+	private readonly _id = ++DelegatingEditor.idCounter;
 
-  private readonly _id = ++DelegatingEditor.idCounter;
+	private readonly _onDidDispose = this._register(new Emitter<void>());
+	public readonly onDidDispose = this._onDidDispose.event;
 
-  private readonly _onDidDispose = this._register(new Emitter<void>());
+	protected abstract get _targetEditor(): CodeEditorWidget;
 
-  public readonly onDidDispose = this._onDidDispose.event;
+	getId(): string { return this.getEditorType() + ':v2:' + this._id; }
 
-  protected abstract get _targetEditor(): CodeEditorWidget;
+	abstract getEditorType(): string;
+	abstract updateOptions(newOptions: IEditorOptions): void;
+	abstract onVisible(): void;
+	abstract onHide(): void;
+	abstract layout(dimension?: IDimension | undefined): void;
+	abstract hasTextFocus(): boolean;
+	abstract saveViewState(): IEditorViewState | null;
+	abstract restoreViewState(state: IEditorViewState | null): void;
+	abstract getModel(): IEditorModel | null;
+	abstract setModel(model: IEditorModel | null | IDiffEditorViewModel): void;
 
-  getId(): string {
-    return `${this.getEditorType()}:v2:${this._id}`;
-  }
+	// #region editorBrowser.IDiffEditor: Delegating to modified Editor
 
-  abstract getEditorType(): string;
+	public getVisibleColumnFromPosition(position: IPosition): number {
+		return this._targetEditor.getVisibleColumnFromPosition(position);
+	}
 
-  abstract updateOptions(newOptions: IEditorOptions): void;
+	public getStatusbarColumn(position: IPosition): number {
+		return this._targetEditor.getStatusbarColumn(position);
+	}
 
-  abstract onVisible(): void;
+	public getPosition(): Position | null {
+		return this._targetEditor.getPosition();
+	}
 
-  abstract onHide(): void;
+	public setPosition(position: IPosition, source: string = 'api'): void {
+		this._targetEditor.setPosition(position, source);
+	}
 
-  abstract layout(dimension?: IDimension | undefined): void;
+	public revealLine(lineNumber: number, scrollType: ScrollType = ScrollType.Smooth): void {
+		this._targetEditor.revealLine(lineNumber, scrollType);
+	}
 
-  abstract hasTextFocus(): boolean;
+	public revealLineInCenter(lineNumber: number, scrollType: ScrollType = ScrollType.Smooth): void {
+		this._targetEditor.revealLineInCenter(lineNumber, scrollType);
+	}
 
-  abstract saveViewState(): IEditorViewState | null;
+	public revealLineInCenterIfOutsideViewport(lineNumber: number, scrollType: ScrollType = ScrollType.Smooth): void {
+		this._targetEditor.revealLineInCenterIfOutsideViewport(lineNumber, scrollType);
+	}
 
-  abstract restoreViewState(state: IEditorViewState | null): void;
+	public revealLineNearTop(lineNumber: number, scrollType: ScrollType = ScrollType.Smooth): void {
+		this._targetEditor.revealLineNearTop(lineNumber, scrollType);
+	}
 
-  abstract getModel(): IEditorModel | null;
+	public revealPosition(position: IPosition, scrollType: ScrollType = ScrollType.Smooth): void {
+		this._targetEditor.revealPosition(position, scrollType);
+	}
 
-  abstract setModel(model: IEditorModel | null | IDiffEditorViewModel): void;
+	public revealPositionInCenter(position: IPosition, scrollType: ScrollType = ScrollType.Smooth): void {
+		this._targetEditor.revealPositionInCenter(position, scrollType);
+	}
 
-  // #region editorBrowser.IDiffEditor: Delegating to modified Editor
+	public revealPositionInCenterIfOutsideViewport(position: IPosition, scrollType: ScrollType = ScrollType.Smooth): void {
+		this._targetEditor.revealPositionInCenterIfOutsideViewport(position, scrollType);
+	}
 
-  public getVisibleColumnFromPosition(position: IPosition): number {
-    return this._targetEditor.getVisibleColumnFromPosition(position);
-  }
+	public revealPositionNearTop(position: IPosition, scrollType: ScrollType = ScrollType.Smooth): void {
+		this._targetEditor.revealPositionNearTop(position, scrollType);
+	}
 
-  public getStatusbarColumn(position: IPosition): number {
-    return this._targetEditor.getStatusbarColumn(position);
-  }
+	public getSelection(): Selection | null {
+		return this._targetEditor.getSelection();
+	}
 
-  public getPosition(): Position | null {
-    return this._targetEditor.getPosition();
-  }
+	public getSelections(): Selection[] | null {
+		return this._targetEditor.getSelections();
+	}
 
-  public setPosition(position: IPosition, source: string = 'api'): void {
-    this._targetEditor.setPosition(position, source);
-  }
+	public setSelection(range: IRange, source?: string): void;
+	public setSelection(editorRange: Range, source?: string): void;
+	public setSelection(selection: ISelection, source?: string): void;
+	public setSelection(editorSelection: Selection, source?: string): void;
+	public setSelection(something: unknown, source: string = 'api'): void {
+		this._targetEditor.setSelection(something, source);
+	}
 
-  public revealLine(lineNumber: number, scrollType: ScrollType = ScrollType.Smooth): void {
-    this._targetEditor.revealLine(lineNumber, scrollType);
-  }
+	public setSelections(ranges: readonly ISelection[], source: string = 'api'): void {
+		this._targetEditor.setSelections(ranges, source);
+	}
 
-  public revealLineInCenter(lineNumber: number, scrollType: ScrollType = ScrollType.Smooth): void {
-    this._targetEditor.revealLineInCenter(lineNumber, scrollType);
-  }
+	public revealLines(startLineNumber: number, endLineNumber: number, scrollType: ScrollType = ScrollType.Smooth): void {
+		this._targetEditor.revealLines(startLineNumber, endLineNumber, scrollType);
+	}
 
-  public revealLineInCenterIfOutsideViewport(
-    lineNumber: number,
-    scrollType: ScrollType = ScrollType.Smooth,
-  ): void {
-    this._targetEditor.revealLineInCenterIfOutsideViewport(lineNumber, scrollType);
-  }
+	public revealLinesInCenter(startLineNumber: number, endLineNumber: number, scrollType: ScrollType = ScrollType.Smooth): void {
+		this._targetEditor.revealLinesInCenter(startLineNumber, endLineNumber, scrollType);
+	}
 
-  public revealLineNearTop(lineNumber: number, scrollType: ScrollType = ScrollType.Smooth): void {
-    this._targetEditor.revealLineNearTop(lineNumber, scrollType);
-  }
+	public revealLinesInCenterIfOutsideViewport(startLineNumber: number, endLineNumber: number, scrollType: ScrollType = ScrollType.Smooth): void {
+		this._targetEditor.revealLinesInCenterIfOutsideViewport(startLineNumber, endLineNumber, scrollType);
+	}
 
-  public revealPosition(position: IPosition, scrollType: ScrollType = ScrollType.Smooth): void {
-    this._targetEditor.revealPosition(position, scrollType);
-  }
+	public revealLinesNearTop(startLineNumber: number, endLineNumber: number, scrollType: ScrollType = ScrollType.Smooth): void {
+		this._targetEditor.revealLinesNearTop(startLineNumber, endLineNumber, scrollType);
+	}
 
-  public revealPositionInCenter(
-    position: IPosition,
-    scrollType: ScrollType = ScrollType.Smooth,
-  ): void {
-    this._targetEditor.revealPositionInCenter(position, scrollType);
-  }
+	public revealRange(range: IRange, scrollType: ScrollType = ScrollType.Smooth, revealVerticalInCenter: boolean = false, revealHorizontal: boolean = true): void {
+		this._targetEditor.revealRange(range, scrollType, revealVerticalInCenter, revealHorizontal);
+	}
 
-  public revealPositionInCenterIfOutsideViewport(
-    position: IPosition,
-    scrollType: ScrollType = ScrollType.Smooth,
-  ): void {
-    this._targetEditor.revealPositionInCenterIfOutsideViewport(position, scrollType);
-  }
+	public revealRangeInCenter(range: IRange, scrollType: ScrollType = ScrollType.Smooth): void {
+		this._targetEditor.revealRangeInCenter(range, scrollType);
+	}
 
-  public revealPositionNearTop(
-    position: IPosition,
-    scrollType: ScrollType = ScrollType.Smooth,
-  ): void {
-    this._targetEditor.revealPositionNearTop(position, scrollType);
-  }
+	public revealRangeInCenterIfOutsideViewport(range: IRange, scrollType: ScrollType = ScrollType.Smooth): void {
+		this._targetEditor.revealRangeInCenterIfOutsideViewport(range, scrollType);
+	}
 
-  public getSelection(): Selection | null {
-    return this._targetEditor.getSelection();
-  }
+	public revealRangeNearTop(range: IRange, scrollType: ScrollType = ScrollType.Smooth): void {
+		this._targetEditor.revealRangeNearTop(range, scrollType);
+	}
 
-  public getSelections(): Selection[] | null {
-    return this._targetEditor.getSelections();
-  }
+	public revealRangeNearTopIfOutsideViewport(range: IRange, scrollType: ScrollType = ScrollType.Smooth): void {
+		this._targetEditor.revealRangeNearTopIfOutsideViewport(range, scrollType);
+	}
 
-  public setSelection(range: IRange, source?: string): void;
+	public revealRangeAtTop(range: IRange, scrollType: ScrollType = ScrollType.Smooth): void {
+		this._targetEditor.revealRangeAtTop(range, scrollType);
+	}
 
-  public setSelection(editorRange: Range, source?: string): void;
+	public getSupportedActions(): IEditorAction[] {
+		return this._targetEditor.getSupportedActions();
+	}
 
-  public setSelection(selection: ISelection, source?: string): void;
+	public focus(): void {
+		this._targetEditor.focus();
+	}
 
-  public setSelection(editorSelection: Selection, source?: string): void;
+	public trigger(source: string | null | undefined, handlerId: string, payload: unknown): void {
+		this._targetEditor.trigger(source, handlerId, payload);
+	}
 
-  public setSelection(something: any, source: string = 'api'): void {
-    this._targetEditor.setSelection(something, source);
-  }
+	public createDecorationsCollection(decorations?: IModelDeltaDecoration[]): IEditorDecorationsCollection {
+		return this._targetEditor.createDecorationsCollection(decorations);
+	}
 
-  public setSelections(ranges: readonly ISelection[], source: string = 'api'): void {
-    this._targetEditor.setSelections(ranges, source);
-  }
+	public changeDecorations<T>(callback: (changeAccessor: IModelDecorationsChangeAccessor) => T): T | null {
+		return this._targetEditor.changeDecorations(callback);
+	}
 
-  public revealLines(
-    startLineNumber: number,
-    endLineNumber: number,
-    scrollType: ScrollType = ScrollType.Smooth,
-  ): void {
-    this._targetEditor.revealLines(startLineNumber, endLineNumber, scrollType);
-  }
-
-  public revealLinesInCenter(
-    startLineNumber: number,
-    endLineNumber: number,
-    scrollType: ScrollType = ScrollType.Smooth,
-  ): void {
-    this._targetEditor.revealLinesInCenter(startLineNumber, endLineNumber, scrollType);
-  }
-
-  public revealLinesInCenterIfOutsideViewport(
-    startLineNumber: number,
-    endLineNumber: number,
-    scrollType: ScrollType = ScrollType.Smooth,
-  ): void {
-    this._targetEditor.revealLinesInCenterIfOutsideViewport(
-      startLineNumber,
-      endLineNumber,
-      scrollType,
-    );
-  }
-
-  public revealLinesNearTop(
-    startLineNumber: number,
-    endLineNumber: number,
-    scrollType: ScrollType = ScrollType.Smooth,
-  ): void {
-    this._targetEditor.revealLinesNearTop(startLineNumber, endLineNumber, scrollType);
-  }
-
-  public revealRange(
-    range: IRange,
-    scrollType: ScrollType = ScrollType.Smooth,
-    revealVerticalInCenter: boolean = false,
-    revealHorizontal: boolean = true,
-  ): void {
-    this._targetEditor.revealRange(range, scrollType, revealVerticalInCenter, revealHorizontal);
-  }
-
-  public revealRangeInCenter(range: IRange, scrollType: ScrollType = ScrollType.Smooth): void {
-    this._targetEditor.revealRangeInCenter(range, scrollType);
-  }
-
-  public revealRangeInCenterIfOutsideViewport(
-    range: IRange,
-    scrollType: ScrollType = ScrollType.Smooth,
-  ): void {
-    this._targetEditor.revealRangeInCenterIfOutsideViewport(range, scrollType);
-  }
-
-  public revealRangeNearTop(range: IRange, scrollType: ScrollType = ScrollType.Smooth): void {
-    this._targetEditor.revealRangeNearTop(range, scrollType);
-  }
-
-  public revealRangeNearTopIfOutsideViewport(
-    range: IRange,
-    scrollType: ScrollType = ScrollType.Smooth,
-  ): void {
-    this._targetEditor.revealRangeNearTopIfOutsideViewport(range, scrollType);
-  }
-
-  public revealRangeAtTop(range: IRange, scrollType: ScrollType = ScrollType.Smooth): void {
-    this._targetEditor.revealRangeAtTop(range, scrollType);
-  }
-
-  public getSupportedActions(): IEditorAction[] {
-    return this._targetEditor.getSupportedActions();
-  }
-
-  public focus(): void {
-    this._targetEditor.focus();
-  }
-
-  public trigger(source: string | null | undefined, handlerId: string, payload: any): void {
-    this._targetEditor.trigger(source, handlerId, payload);
-  }
-
-  public createDecorationsCollection(
-    decorations?: IModelDeltaDecoration[],
-  ): IEditorDecorationsCollection {
-    return this._targetEditor.createDecorationsCollection(decorations);
-  }
-
-  public changeDecorations(
-    callback: (changeAccessor: IModelDecorationsChangeAccessor) => any,
-  ): any {
-    return this._targetEditor.changeDecorations(callback);
-  }
-
-  // #endregion
+	// #endregion
 }

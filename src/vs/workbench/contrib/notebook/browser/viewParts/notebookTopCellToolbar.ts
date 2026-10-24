@@ -4,15 +4,8 @@
  *--------------------------------------------------------------------------------------------*/
 
 import * as DOM from '../../../../../base/browser/dom.js';
-import {
-  Disposable,
-  DisposableStore,
-  MutableDisposable,
-} from '../../../../../base/common/lifecycle.js';
-import {
-  HiddenItemStrategy,
-  MenuWorkbenchToolBar,
-} from '../../../../../platform/actions/browser/toolbar.js';
+import { Disposable, DisposableStore, MutableDisposable } from '../../../../../base/common/lifecycle.js';
+import { HiddenItemStrategy, MenuWorkbenchToolBar } from '../../../../../platform/actions/browser/toolbar.js';
 import { IMenuService, MenuItemAction } from '../../../../../platform/actions/common/actions.js';
 import { IContextMenuService } from '../../../../../platform/contextview/browser/contextView.js';
 import { IInstantiationService } from '../../../../../platform/instantiation/common/instantiation.js';
@@ -22,161 +15,134 @@ import { NotebookOptions } from '../notebookOptions.js';
 import { CodiconActionViewItem } from '../view/cellParts/cellActionView.js';
 
 export class ListTopCellToolbar extends Disposable {
-  private readonly topCellToolbarContainer: HTMLElement;
+	private readonly topCellToolbarContainer: HTMLElement;
+	private topCellToolbar: HTMLElement;
+	private readonly viewZone: MutableDisposable<DisposableStore> = this._register(new MutableDisposable());
+	private readonly _modelDisposables = this._register(new DisposableStore());
+	constructor(
+		protected readonly notebookEditor: INotebookEditorDelegate,
+		private readonly notebookOptions: NotebookOptions,
+		@IInstantiationService protected readonly instantiationService: IInstantiationService,
+		@IContextMenuService protected readonly contextMenuService: IContextMenuService,
+		@IMenuService protected readonly menuService: IMenuService
+	) {
+		super();
 
-  private topCellToolbar: HTMLElement;
+		this.topCellToolbarContainer = DOM.$('div');
+		this.topCellToolbar = DOM.$('.cell-list-top-cell-toolbar-container');
+		this.topCellToolbarContainer.appendChild(this.topCellToolbar);
 
-  private readonly viewZone: MutableDisposable<DisposableStore> = this._register(
-    new MutableDisposable(),
-  );
+		this._register(this.notebookEditor.onDidAttachViewModel(() => {
+			this.updateTopToolbar();
+		}));
 
-  private readonly _modelDisposables = this._register(new DisposableStore());
+		this._register(this.notebookOptions.onDidChangeOptions(e => {
+			if (e.insertToolbarAlignment || e.insertToolbarPosition || e.cellToolbarLocation) {
+				this.updateTopToolbar();
+			}
+		}));
+	}
 
-  constructor(
-    protected readonly notebookEditor: INotebookEditorDelegate,
-    private readonly notebookOptions: NotebookOptions,
-    @IInstantiationService protected readonly instantiationService: IInstantiationService,
-    @IContextMenuService protected readonly contextMenuService: IContextMenuService,
-    @IMenuService protected readonly menuService: IMenuService,
-  ) {
-    super();
+	private updateTopToolbar() {
+		const layoutInfo = this.notebookOptions.getLayoutConfiguration();
+		this.viewZone.value = new DisposableStore();
 
-    this.topCellToolbarContainer = DOM.$('div');
-    this.topCellToolbar = DOM.$('.cell-list-top-cell-toolbar-container');
-    this.topCellToolbarContainer.appendChild(this.topCellToolbar);
+		if (layoutInfo.insertToolbarPosition === 'hidden' || layoutInfo.insertToolbarPosition === 'notebookToolbar') {
+			const height = this.notebookOptions.computeTopInsertToolbarHeight(this.notebookEditor.textModel?.viewType);
 
-    this._register(
-      this.notebookEditor.onDidAttachViewModel(() => {
-        this.updateTopToolbar();
-      }),
-    );
+			if (height !== 0) {
+				// reserve whitespace to avoid overlap with cell toolbar
+				this.notebookEditor.changeViewZones(accessor => {
+					const id = accessor.addZone({
+						afterModelPosition: 0,
+						heightInPx: height,
+						domNode: DOM.$('div')
+					});
+					accessor.layoutZone(id);
+					this.viewZone.value?.add({
+						dispose: () => {
+							if (!this.notebookEditor.isDisposed) {
+								this.notebookEditor.changeViewZones(accessor => {
+									accessor.removeZone(id);
+								});
+							}
+						}
+					});
+				});
+			}
+			return;
+		}
 
-    this._register(
-      this.notebookOptions.onDidChangeOptions((e) => {
-        if (e.insertToolbarAlignment || e.insertToolbarPosition || e.cellToolbarLocation) {
-          this.updateTopToolbar();
-        }
-      }),
-    );
-  }
 
-  private updateTopToolbar() {
-    const layoutInfo = this.notebookOptions.getLayoutConfiguration();
-    this.viewZone.value = new DisposableStore();
+		this.notebookEditor.changeViewZones(accessor => {
+			const height = this.notebookOptions.computeTopInsertToolbarHeight(this.notebookEditor.textModel?.viewType);
+			const id = accessor.addZone({
+				afterModelPosition: 0,
+				heightInPx: height,
+				domNode: this.topCellToolbarContainer
+			});
+			accessor.layoutZone(id);
 
-    if (
-      layoutInfo.insertToolbarPosition === 'hidden' ||
-      layoutInfo.insertToolbarPosition === 'notebookToolbar'
-    ) {
-      const height = this.notebookOptions.computeTopInsertToolbarHeight(
-        this.notebookEditor.textModel?.viewType,
-      );
+			this.viewZone.value?.add({
+				dispose: () => {
+					if (!this.notebookEditor.isDisposed) {
+						this.notebookEditor.changeViewZones(accessor => {
+							accessor.removeZone(id);
+						});
+					}
+				}
+			});
 
-      if (height !== 0) {
-        // reserve whitespace to avoid overlap with cell toolbar
-        this.notebookEditor.changeViewZones((accessor) => {
-          const id = accessor.addZone({
-            afterModelPosition: 0,
-            heightInPx: height,
-            domNode: DOM.$('div'),
-          });
-          accessor.layoutZone(id);
-          this.viewZone.value?.add({
-            dispose: () => {
-              if (!this.notebookEditor.isDisposed) {
-                this.notebookEditor.changeViewZones((accessor) => {
-                  accessor.removeZone(id);
-                });
-              }
-            },
-          });
-        });
-      }
-      return;
-    }
+			DOM.clearNode(this.topCellToolbar);
 
-    this.notebookEditor.changeViewZones((accessor) => {
-      const height = this.notebookOptions.computeTopInsertToolbarHeight(
-        this.notebookEditor.textModel?.viewType,
-      );
-      const id = accessor.addZone({
-        afterModelPosition: 0,
-        heightInPx: height,
-        domNode: this.topCellToolbarContainer,
-      });
-      accessor.layoutZone(id);
+			const toolbar = this.instantiationService.createInstance(MenuWorkbenchToolBar, this.topCellToolbar, this.notebookEditor.creationOptions.menuIds.cellTopInsertToolbar, {
+				actionViewItemProvider: (action, options) => {
+					if (action instanceof MenuItemAction) {
+						const item = this.instantiationService.createInstance(CodiconActionViewItem, action, { hoverDelegate: options.hoverDelegate });
+						return item;
+					}
 
-      this.viewZone.value?.add({
-        dispose: () => {
-          if (!this.notebookEditor.isDisposed) {
-            this.notebookEditor.changeViewZones((accessor) => {
-              accessor.removeZone(id);
-            });
-          }
-        },
-      });
+					return undefined;
+				},
+				menuOptions: {
+					shouldForwardArgs: true
+				},
+				toolbarOptions: {
+					primaryGroup: (g: string) => /^inline/.test(g),
+				},
+				hiddenItemStrategy: HiddenItemStrategy.Ignore,
+			});
 
-      DOM.clearNode(this.topCellToolbar);
+			if (this.notebookEditor.hasModel()) {
+				toolbar.context = {
+					notebookEditor: this.notebookEditor
+				} satisfies INotebookActionContext;
+			}
 
-      const toolbar = this.instantiationService.createInstance(
-        MenuWorkbenchToolBar,
-        this.topCellToolbar,
-        this.notebookEditor.creationOptions.menuIds.cellTopInsertToolbar,
-        {
-          actionViewItemProvider: (action, options) => {
-            if (action instanceof MenuItemAction) {
-              const item = this.instantiationService.createInstance(CodiconActionViewItem, action, {
-                hoverDelegate: options.hoverDelegate,
-              });
-              return item;
-            }
+			this.viewZone.value?.add(toolbar);
 
-            return undefined;
-          },
-          menuOptions: {
-            shouldForwardArgs: true,
-          },
-          toolbarOptions: {
-            primaryGroup: (g: string) => /^inline/.test(g),
-          },
-          hiddenItemStrategy: HiddenItemStrategy.Ignore,
-        },
-      );
+			// update toolbar container css based on cell list length
+			this.viewZone.value?.add(this.notebookEditor.onDidChangeModel(() => {
+				this._modelDisposables.clear();
 
-      if (this.notebookEditor.hasModel()) {
-        toolbar.context = {
-          notebookEditor: this.notebookEditor,
-        } satisfies INotebookActionContext;
-      }
+				if (this.notebookEditor.hasModel()) {
+					this._modelDisposables.add(this.notebookEditor.onDidChangeViewCells(() => {
+						this.updateClass();
+					}));
 
-      this.viewZone.value?.add(toolbar);
+					this.updateClass();
+				}
+			}));
 
-      // update toolbar container css based on cell list length
-      this.viewZone.value?.add(
-        this.notebookEditor.onDidChangeModel(() => {
-          this._modelDisposables.clear();
+			this.updateClass();
+		});
+	}
 
-          if (this.notebookEditor.hasModel()) {
-            this._modelDisposables.add(
-              this.notebookEditor.onDidChangeViewCells(() => {
-                this.updateClass();
-              }),
-            );
-
-            this.updateClass();
-          }
-        }),
-      );
-
-      this.updateClass();
-    });
-  }
-
-  private updateClass() {
-    if (this.notebookEditor.hasModel() && this.notebookEditor.getLength() === 0) {
-      this.topCellToolbar.classList.add('emptyNotebook');
-    } else {
-      this.topCellToolbar.classList.remove('emptyNotebook');
-    }
-  }
+	private updateClass() {
+		if (this.notebookEditor.hasModel() && this.notebookEditor.getLength() === 0) {
+			this.topCellToolbar.classList.add('emptyNotebook');
+		} else {
+			this.topCellToolbar.classList.remove('emptyNotebook');
+		}
+	}
 }

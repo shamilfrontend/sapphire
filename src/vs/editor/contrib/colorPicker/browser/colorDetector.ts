@@ -3,15 +3,11 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import {
-  CancelablePromise,
-  createCancelablePromise,
-  TimeoutTimer,
-} from '../../../../base/common/async.js';
+import { CancelablePromise, createCancelablePromise, TimeoutTimer } from '../../../../base/common/async.js';
 import { RGBA } from '../../../../base/common/color.js';
 import { onUnexpectedError } from '../../../../base/common/errors.js';
 import { Emitter, Event } from '../../../../base/common/event.js';
-import { Disposable, DisposableStore } from '../../../../base/common/lifecycle.js';
+import { Disposable, DisposableStore, toDisposable } from '../../../../base/common/lifecycle.js';
 import { StopWatch } from '../../../../base/common/stopwatch.js';
 import { noBreakWhitespace } from '../../../../base/common/strings.js';
 import { ICodeEditor } from '../../../browser/editorBrowser.js';
@@ -22,313 +18,288 @@ import { Range } from '../../../common/core/range.js';
 import { IEditorContribution, IEditorDecorationsCollection } from '../../../common/editorCommon.js';
 import { IModelDecoration, IModelDeltaDecoration } from '../../../common/model.js';
 import { ModelDecorationOptions } from '../../../common/model/textModel.js';
-import {
-  IFeatureDebounceInformation,
-  ILanguageFeatureDebounceService,
-} from '../../../common/services/languageFeatureDebounce.js';
+import { IFeatureDebounceInformation, ILanguageFeatureDebounceService } from '../../../common/services/languageFeatureDebounce.js';
 import { ILanguageFeaturesService } from '../../../common/services/languageFeatures.js';
 import { getColors, IColorData } from './color.js';
 import { IConfigurationService } from '../../../../platform/configuration/common/configuration.js';
 
 export const ColorDecorationInjectedTextMarker = Object.create({});
 
+
 export class ColorDetector extends Disposable implements IEditorContribution {
-  public static readonly ID: string = 'editor.contrib.colorDetector';
 
-  static readonly RECOMPUTE_TIME = 1000; // ms
+	public static readonly ID: string = 'editor.contrib.colorDetector';
 
-  private readonly _localToDispose = this._register(new DisposableStore());
+	static readonly RECOMPUTE_TIME = 1000; // ms
 
-  private _computePromise: CancelablePromise<IColorData[]> | null;
+	private readonly _localToDispose = this._register(new DisposableStore());
+	private _computePromise: CancelablePromise<IColorData[]> | null;
+	private _timeoutTimer: TimeoutTimer | null;
+	private _debounceInformation: IFeatureDebounceInformation;
 
-  private _timeoutTimer: TimeoutTimer | null;
+	private _decorationsIds: string[] = [];
+	private _colorDatas = new Map<string, IColorData>();
 
-  private _debounceInformation: IFeatureDebounceInformation;
+	private readonly _colorDecoratorIds: IEditorDecorationsCollection;
 
-  private _decorationsIds: string[] = [];
+	private _isColorDecoratorsEnabled: boolean;
+	private _defaultColorDecoratorsEnablement: 'auto' | 'always' | 'never';
 
-  private _colorDatas = new Map<string, IColorData>();
+	private readonly _ruleFactory: DynamicCssRules;
 
-  private readonly _colorDecoratorIds: IEditorDecorationsCollection;
+	private readonly _decoratorLimitReporter = this._register(new DecoratorLimitReporter());
 
-  private _isColorDecoratorsEnabled: boolean;
+	private static readonly colorDecoratorInnerWidthInEm = 0.8;
+	private static readonly colorDecoratorMarginInEm = 0.2;
 
-  private _defaultColorDecoratorsEnablement: 'auto' | 'always' | 'never';
+	constructor(
+		private readonly _editor: ICodeEditor,
+		@IConfigurationService private readonly _configurationService: IConfigurationService,
+		@ILanguageFeaturesService private readonly _languageFeaturesService: ILanguageFeaturesService,
+		@ILanguageFeatureDebounceService languageFeatureDebounceService: ILanguageFeatureDebounceService,
+	) {
+		super();
+		this._colorDecoratorIds = this._editor.createDecorationsCollection();
+		this._ruleFactory = this._register(new DynamicCssRules(this._editor));
+		const editorDomNode = this._editor.getContainerDomNode();
+		editorDomNode.style.setProperty('--vscode-colorPicker-colorDecoratorWidth', `${ColorDetector.colorDecoratorInnerWidthInEm}em`);
+		editorDomNode.style.setProperty('--vscode-colorPicker-colorDecoratorMargin', `${ColorDetector.colorDecoratorMarginInEm}em`);
+		this._register(toDisposable(() => {
+			editorDomNode.style.removeProperty('--vscode-colorPicker-colorDecoratorWidth');
+			editorDomNode.style.removeProperty('--vscode-colorPicker-colorDecoratorMargin');
+		}));
+		this._debounceInformation = languageFeatureDebounceService.for(_languageFeaturesService.colorProvider, 'Document Colors', { min: ColorDetector.RECOMPUTE_TIME });
+		this._register(_editor.onDidChangeModel(() => {
+			this._isColorDecoratorsEnabled = this.isEnabled();
+			this.updateColors();
+		}));
+		this._register(_editor.onDidChangeModelLanguage(() => this.updateColors()));
+		this._register(_languageFeaturesService.colorProvider.onDidChange(() => this.updateColors()));
+		this._register(_editor.onDidChangeConfiguration((e) => {
+			const prevIsEnabled = this._isColorDecoratorsEnabled;
+			this._isColorDecoratorsEnabled = this.isEnabled();
+			this._defaultColorDecoratorsEnablement = this._editor.getOption(EditorOption.defaultColorDecorators);
+			const updatedColorDecoratorsSetting = prevIsEnabled !== this._isColorDecoratorsEnabled || e.hasChanged(EditorOption.colorDecoratorsLimit);
+			const updatedDefaultColorDecoratorsSetting = e.hasChanged(EditorOption.defaultColorDecorators);
+			if (updatedColorDecoratorsSetting || updatedDefaultColorDecoratorsSetting) {
+				if (this._isColorDecoratorsEnabled) {
+					this.updateColors();
+				}
+				else {
+					this.removeAllDecorations();
+				}
+			}
+		}));
 
-  private readonly _ruleFactory: DynamicCssRules;
+		this._timeoutTimer = null;
+		this._computePromise = null;
+		this._isColorDecoratorsEnabled = this.isEnabled();
+		this._defaultColorDecoratorsEnablement = this._editor.getOption(EditorOption.defaultColorDecorators);
+		this.updateColors();
+	}
 
-  private readonly _decoratorLimitReporter = new DecoratorLimitReporter();
+	isEnabled(): boolean {
+		const model = this._editor.getModel();
+		if (!model) {
+			return false;
+		}
+		const languageId = model.getLanguageId();
+		// handle deprecated settings. [languageId].colorDecorators.enable
+		const deprecatedConfig = this._configurationService.getValue(languageId);
+		if (deprecatedConfig && typeof deprecatedConfig === 'object') {
+			// eslint-disable-next-line local/code-no-any-casts
+			const colorDecorators = (deprecatedConfig as any)['colorDecorators']; // deprecatedConfig.valueOf('.colorDecorators.enable');
+			if (colorDecorators && colorDecorators['enable'] !== undefined && !colorDecorators['enable']) {
+				return colorDecorators['enable'];
+			}
+		}
 
-  constructor(
-    private readonly _editor: ICodeEditor,
-    @IConfigurationService private readonly _configurationService: IConfigurationService,
-    @ILanguageFeaturesService private readonly _languageFeaturesService: ILanguageFeaturesService,
-    @ILanguageFeatureDebounceService
-    languageFeatureDebounceService: ILanguageFeatureDebounceService,
-  ) {
-    super();
-    this._colorDecoratorIds = this._editor.createDecorationsCollection();
-    this._ruleFactory = new DynamicCssRules(this._editor);
-    this._debounceInformation = languageFeatureDebounceService.for(
-      _languageFeaturesService.colorProvider,
-      'Document Colors',
-      { min: ColorDetector.RECOMPUTE_TIME },
-    );
-    this._register(
-      _editor.onDidChangeModel(() => {
-        this._isColorDecoratorsEnabled = this.isEnabled();
-        this.updateColors();
-      }),
-    );
-    this._register(_editor.onDidChangeModelLanguage(() => this.updateColors()));
-    this._register(_languageFeaturesService.colorProvider.onDidChange(() => this.updateColors()));
-    this._register(
-      _editor.onDidChangeConfiguration((e) => {
-        const prevIsEnabled = this._isColorDecoratorsEnabled;
-        this._isColorDecoratorsEnabled = this.isEnabled();
-        this._defaultColorDecoratorsEnablement = this._editor.getOption(
-          EditorOption.defaultColorDecorators,
-        );
-        const updatedColorDecoratorsSetting =
-          prevIsEnabled !== this._isColorDecoratorsEnabled ||
-          e.hasChanged(EditorOption.colorDecoratorsLimit);
-        const updatedDefaultColorDecoratorsSetting = e.hasChanged(
-          EditorOption.defaultColorDecorators,
-        );
-        if (updatedColorDecoratorsSetting || updatedDefaultColorDecoratorsSetting) {
-          if (this._isColorDecoratorsEnabled) {
-            this.updateColors();
-          } else {
-            this.removeAllDecorations();
-          }
-        }
-      }),
-    );
+		return this._editor.getOption(EditorOption.colorDecorators);
+	}
 
-    this._timeoutTimer = null;
-    this._computePromise = null;
-    this._isColorDecoratorsEnabled = this.isEnabled();
-    this._defaultColorDecoratorsEnablement = this._editor.getOption(
-      EditorOption.defaultColorDecorators,
-    );
-    this.updateColors();
-  }
+	public get limitReporter() {
+		return this._decoratorLimitReporter;
+	}
 
-  isEnabled(): boolean {
-    const model = this._editor.getModel();
-    if (!model) {
-      return false;
-    }
-    const languageId = model.getLanguageId();
-    // handle deprecated settings. [languageId].colorDecorators.enable
-    const deprecatedConfig = this._configurationService.getValue(languageId);
-    if (deprecatedConfig && typeof deprecatedConfig === 'object') {
-      const colorDecorators = (deprecatedConfig as any).colorDecorators; // deprecatedConfig.valueOf('.colorDecorators.enable');
-      if (colorDecorators && colorDecorators.enable !== undefined && !colorDecorators.enable) {
-        return colorDecorators.enable;
-      }
-    }
+	static get(editor: ICodeEditor): ColorDetector | null {
+		return editor.getContribution<ColorDetector>(this.ID);
+	}
 
-    return this._editor.getOption(EditorOption.colorDecorators);
-  }
+	override dispose(): void {
+		this.stop();
+		this.removeAllDecorations();
+		super.dispose();
+	}
 
-  public get limitReporter() {
-    return this._decoratorLimitReporter;
-  }
+	private updateColors(): void {
+		this.stop();
 
-  static get(editor: ICodeEditor): ColorDetector | null {
-    return editor.getContribution<ColorDetector>(this.ID);
-  }
+		if (!this._isColorDecoratorsEnabled) {
+			this.removeAllDecorations();
+			return;
+		}
+		const model = this._editor.getModel();
 
-  override dispose(): void {
-    this.stop();
-    this.removeAllDecorations();
-    super.dispose();
-  }
+		if (!model || !this._languageFeaturesService.colorProvider.has(model)) {
+			return;
+		}
 
-  private updateColors(): void {
-    this.stop();
+		this._localToDispose.add(this._editor.onDidChangeModelContent(() => {
+			if (!this._timeoutTimer) {
+				this._timeoutTimer = new TimeoutTimer();
+				this._timeoutTimer.cancelAndSet(() => {
+					this._timeoutTimer = null;
+					this.beginCompute();
+				}, this._debounceInformation.get(model));
+			}
+		}));
+		this.beginCompute();
+	}
 
-    if (!this._isColorDecoratorsEnabled) {
-      return;
-    }
-    const model = this._editor.getModel();
+	private async beginCompute(): Promise<void> {
+		this._computePromise = createCancelablePromise(async token => {
+			const model = this._editor.getModel();
+			if (!model) {
+				return [];
+			}
+			const sw = new StopWatch(false);
+			const colors = await getColors(this._languageFeaturesService.colorProvider, model, token, this._defaultColorDecoratorsEnablement);
+			this._debounceInformation.update(model, sw.elapsed());
+			return colors;
+		});
+		try {
+			const colors = await this._computePromise;
+			this.updateDecorations(colors);
+			this.updateColorDecorators(colors);
+			this._computePromise = null;
+		} catch (e) {
+			onUnexpectedError(e);
+		}
+	}
 
-    if (!model || !this._languageFeaturesService.colorProvider.has(model)) {
-      return;
-    }
+	private stop(): void {
+		if (this._timeoutTimer) {
+			this._timeoutTimer.cancel();
+			this._timeoutTimer = null;
+		}
+		if (this._computePromise) {
+			this._computePromise.cancel();
+			this._computePromise = null;
+		}
+		this._localToDispose.clear();
+	}
 
-    this._localToDispose.add(
-      this._editor.onDidChangeModelContent(() => {
-        if (!this._timeoutTimer) {
-          this._timeoutTimer = new TimeoutTimer();
-          this._timeoutTimer.cancelAndSet(() => {
-            this._timeoutTimer = null;
-            this.beginCompute();
-          }, this._debounceInformation.get(model));
-        }
-      }),
-    );
-    this.beginCompute();
-  }
+	private updateDecorations(colorDatas: IColorData[]): void {
+		const decorations = colorDatas.map(c => ({
+			range: {
+				startLineNumber: c.colorInfo.range.startLineNumber,
+				startColumn: c.colorInfo.range.startColumn,
+				endLineNumber: c.colorInfo.range.endLineNumber,
+				endColumn: c.colorInfo.range.endColumn
+			},
+			options: ModelDecorationOptions.EMPTY
+		}));
 
-  private async beginCompute(): Promise<void> {
-    this._computePromise = createCancelablePromise(async (token) => {
-      const model = this._editor.getModel();
-      if (!model) {
-        return [];
-      }
-      const sw = new StopWatch(false);
-      const colors = await getColors(
-        this._languageFeaturesService.colorProvider,
-        model,
-        token,
-        this._defaultColorDecoratorsEnablement,
-      );
-      this._debounceInformation.update(model, sw.elapsed());
-      return colors;
-    });
-    try {
-      const colors = await this._computePromise;
-      this.updateDecorations(colors);
-      this.updateColorDecorators(colors);
-      this._computePromise = null;
-    } catch (e) {
-      onUnexpectedError(e);
-    }
-  }
+		this._editor.changeDecorations((changeAccessor) => {
+			this._decorationsIds = changeAccessor.deltaDecorations(this._decorationsIds, decorations);
 
-  private stop(): void {
-    if (this._timeoutTimer) {
-      this._timeoutTimer.cancel();
-      this._timeoutTimer = null;
-    }
-    if (this._computePromise) {
-      this._computePromise.cancel();
-      this._computePromise = null;
-    }
-    this._localToDispose.clear();
-  }
+			this._colorDatas = new Map<string, IColorData>();
+			this._decorationsIds.forEach((id, i) => this._colorDatas.set(id, colorDatas[i]));
+		});
+	}
 
-  private updateDecorations(colorDatas: IColorData[]): void {
-    const decorations = colorDatas.map((c) => ({
-      range: {
-        startLineNumber: c.colorInfo.range.startLineNumber,
-        startColumn: c.colorInfo.range.startColumn,
-        endLineNumber: c.colorInfo.range.endLineNumber,
-        endColumn: c.colorInfo.range.endColumn,
-      },
-      options: ModelDecorationOptions.EMPTY,
-    }));
+	private readonly _colorDecorationClassRefs = this._register(new DisposableStore());
 
-    this._editor.changeDecorations((changeAccessor) => {
-      this._decorationsIds = changeAccessor.deltaDecorations(this._decorationsIds, decorations);
+	private updateColorDecorators(colorData: IColorData[]): void {
+		this._colorDecorationClassRefs.clear();
 
-      this._colorDatas = new Map<string, IColorData>();
-      this._decorationsIds.forEach((id, i) => this._colorDatas.set(id, colorDatas[i]));
-    });
-  }
+		const decorations: IModelDeltaDecoration[] = [];
+		const widthInEm = ColorDetector.colorDecoratorInnerWidthInEm + 2 * ColorDetector.colorDecoratorMarginInEm;
 
-  private readonly _colorDecorationClassRefs = this._register(new DisposableStore());
+		const limit = this._editor.getOption(EditorOption.colorDecoratorsLimit);
 
-  private updateColorDecorators(colorData: IColorData[]): void {
-    this._colorDecorationClassRefs.clear();
+		for (let i = 0; i < colorData.length && decorations.length < limit; i++) {
+			const { red, green, blue, alpha } = colorData[i].colorInfo.color;
+			const rgba = new RGBA(Math.round(red * 255), Math.round(green * 255), Math.round(blue * 255), alpha);
+			const color = `rgba(${rgba.r}, ${rgba.g}, ${rgba.b}, ${rgba.a})`;
 
-    const decorations: IModelDeltaDecoration[] = [];
+			const ref = this._colorDecorationClassRefs.add(
+				this._ruleFactory.createClassNameRef({
+					backgroundColor: color
+				})
+			);
 
-    const limit = this._editor.getOption(EditorOption.colorDecoratorsLimit);
+			decorations.push({
+				range: {
+					startLineNumber: colorData[i].colorInfo.range.startLineNumber,
+					startColumn: colorData[i].colorInfo.range.startColumn,
+					endLineNumber: colorData[i].colorInfo.range.endLineNumber,
+					endColumn: colorData[i].colorInfo.range.endColumn
+				},
+				options: {
+					description: 'colorDetector',
+					before: {
+						content: noBreakWhitespace,
+						inlineClassName: `${ref.className} colorpicker-color-decoration`,
+						inlineClassNameAffectsLetterSpacing: true,
+						attachedData: ColorDecorationInjectedTextMarker,
+						widthInEm,
+					}
+				}
+			});
+		}
+		const limited = limit < colorData.length ? limit : false;
+		this._decoratorLimitReporter.update(colorData.length, limited);
 
-    for (let i = 0; i < colorData.length && decorations.length < limit; i++) {
-      const { red, green, blue, alpha } = colorData[i].colorInfo.color;
-      const rgba = new RGBA(
-        Math.round(red * 255),
-        Math.round(green * 255),
-        Math.round(blue * 255),
-        alpha,
-      );
-      const color = `rgba(${rgba.r}, ${rgba.g}, ${rgba.b}, ${rgba.a})`;
+		this._colorDecoratorIds.set(decorations);
+	}
 
-      const ref = this._colorDecorationClassRefs.add(
-        this._ruleFactory.createClassNameRef({
-          backgroundColor: color,
-        }),
-      );
+	private removeAllDecorations(): void {
+		this._editor.removeDecorations(this._decorationsIds);
+		this._decorationsIds = [];
+		this._colorDecoratorIds.clear();
+		this._colorDecorationClassRefs.clear();
+	}
 
-      decorations.push({
-        range: {
-          startLineNumber: colorData[i].colorInfo.range.startLineNumber,
-          startColumn: colorData[i].colorInfo.range.startColumn,
-          endLineNumber: colorData[i].colorInfo.range.endLineNumber,
-          endColumn: colorData[i].colorInfo.range.endColumn,
-        },
-        options: {
-          description: 'colorDetector',
-          before: {
-            content: noBreakWhitespace,
-            inlineClassName: `${ref.className} colorpicker-color-decoration`,
-            inlineClassNameAffectsLetterSpacing: true,
-            attachedData: ColorDecorationInjectedTextMarker,
-          },
-        },
-      });
-    }
-    const limited = limit < colorData.length ? limit : false;
-    this._decoratorLimitReporter.update(colorData.length, limited);
+	getColorData(position: Position): IColorData | null {
+		const model = this._editor.getModel();
+		if (!model) {
+			return null;
+		}
 
-    this._colorDecoratorIds.set(decorations);
-  }
+		const decorations = model
+			.getDecorationsInRange(Range.fromPositions(position, position))
+			.filter(d => this._colorDatas.has(d.id));
 
-  private removeAllDecorations(): void {
-    this._editor.removeDecorations(this._decorationsIds);
-    this._decorationsIds = [];
-    this._colorDecoratorIds.clear();
-    this._colorDecorationClassRefs.clear();
-  }
+		if (decorations.length === 0) {
+			return null;
+		}
 
-  getColorData(position: Position): IColorData | null {
-    const model = this._editor.getModel();
-    if (!model) {
-      return null;
-    }
+		return this._colorDatas.get(decorations[0].id)!;
+	}
 
-    const decorations = model
-      .getDecorationsInRange(Range.fromPositions(position, position))
-      .filter((d) => this._colorDatas.has(d.id));
-
-    if (decorations.length === 0) {
-      return null;
-    }
-
-    return this._colorDatas.get(decorations[0].id)!;
-  }
-
-  isColorDecoration(decoration: IModelDecoration): boolean {
-    return this._colorDecoratorIds.has(decoration);
-  }
+	isColorDecoration(decoration: IModelDecoration): boolean {
+		return this._colorDecoratorIds.has(decoration);
+	}
 }
 
-export class DecoratorLimitReporter {
-  private _onDidChange = new Emitter<void>();
+export class DecoratorLimitReporter extends Disposable {
+	private _onDidChange = this._register(new Emitter<void>());
+	public readonly onDidChange: Event<void> = this._onDidChange.event;
 
-  public readonly onDidChange: Event<void> = this._onDidChange.event;
-
-  private _computed: number = 0;
-
-  private _limited: number | false = false;
-
-  public get computed(): number {
-    return this._computed;
-  }
-
-  public get limited(): number | false {
-    return this._limited;
-  }
-
-  public update(computed: number, limited: number | false) {
-    if (computed !== this._computed || limited !== this._limited) {
-      this._computed = computed;
-      this._limited = limited;
-      this._onDidChange.fire();
-    }
-  }
+	private _computed: number = 0;
+	private _limited: number | false = false;
+	public get computed(): number {
+		return this._computed;
+	}
+	public get limited(): number | false {
+		return this._limited;
+	}
+	public update(computed: number, limited: number | false) {
+		if (computed !== this._computed || limited !== this._limited) {
+			this._computed = computed;
+			this._limited = limited;
+			this._onDidChange.fire();
+		}
+	}
 }

@@ -5,83 +5,83 @@
 
 import { Range } from '../core/range.js';
 import { Selection } from '../core/selection.js';
-import {
-  IPartialViewLinesViewportData,
-  IViewModel,
-  IViewWhitespaceViewportData,
-  ViewLineRenderingData,
-  ViewModelDecoration,
-} from '../viewModel.js';
+import { IPartialViewLinesViewportData, IViewModel, IViewWhitespaceViewportData, ViewLineRenderingData } from '../viewModel.js';
+import { ViewModelDecoration } from '../viewModel/viewModelDecoration.js';
 
 /**
  * Contains all data needed to render at a specific viewport.
  */
 export class ViewportData {
-  public readonly selections: Selection[];
 
-  /**
-   * The line number at which to start rendering (inclusive).
-   */
-  public readonly startLineNumber: number;
+	public readonly selections: Selection[];
 
-  /**
-   * The line number at which to end rendering (inclusive).
-   */
-  public readonly endLineNumber: number;
+	/**
+	 * The line number at which to start rendering (inclusive).
+	 */
+	public readonly startLineNumber: number;
 
-  /**
-   * relativeVerticalOffset[i] is the `top` position for line at `i` + `startLineNumber`.
-   */
-  public readonly relativeVerticalOffset: number[];
+	/**
+	 * The line number at which to end rendering (inclusive).
+	 */
+	public readonly endLineNumber: number;
 
-  /**
-   * The viewport as a range (startLineNumber,1) -> (endLineNumber,maxColumn(endLineNumber)).
-   */
-  public readonly visibleRange: Range;
+	/**
+	 * relativeVerticalOffset[i] is the `top` position for line at `i` + `startLineNumber`.
+	 */
+	public readonly relativeVerticalOffset: number[];
 
-  /**
-   * Value to be substracted from `scrollTop` (in order to vertical offset numbers < 1MM)
-   */
-  public readonly bigNumbersDelta: number;
+	/**
+	 * The viewport as a range (startLineNumber,1) -> (endLineNumber,maxColumn(endLineNumber)).
+	 */
+	public readonly visibleRange: Range;
 
-  /**
-   * Positioning information about gaps whitespace.
-   */
-  public readonly whitespaceViewportData: IViewWhitespaceViewportData[];
+	/**
+	 * Value to be substracted from `scrollTop` (in order to vertical offset numbers < 1MM)
+	 */
+	public readonly bigNumbersDelta: number;
 
-  private readonly _model: IViewModel;
+	/**
+	 * Positioning information about gaps whitespace.
+	 */
+	public readonly whitespaceViewportData: IViewWhitespaceViewportData[];
 
-  public readonly lineHeight: number;
+	private readonly _model: IViewModel;
 
-  constructor(
-    selections: Selection[],
-    partialData: IPartialViewLinesViewportData,
-    whitespaceViewportData: IViewWhitespaceViewportData[],
-    model: IViewModel,
-  ) {
-    this.selections = selections;
-    this.startLineNumber = partialData.startLineNumber | 0;
-    this.endLineNumber = partialData.endLineNumber | 0;
-    this.relativeVerticalOffset = partialData.relativeVerticalOffset;
-    this.bigNumbersDelta = partialData.bigNumbersDelta | 0;
-    this.lineHeight = partialData.lineHeight | 0;
-    this.whitespaceViewportData = whitespaceViewportData;
+	public readonly lineHeight: number;
 
-    this._model = model;
+	constructor(
+		selections: Selection[],
+		partialData: IPartialViewLinesViewportData,
+		whitespaceViewportData: IViewWhitespaceViewportData[],
+		model: IViewModel
+	) {
+		this.selections = selections;
+		this.startLineNumber = partialData.startLineNumber | 0;
+		this.endLineNumber = partialData.endLineNumber | 0;
+		this.relativeVerticalOffset = partialData.relativeVerticalOffset;
+		this.bigNumbersDelta = partialData.bigNumbersDelta | 0;
+		this.lineHeight = partialData.lineHeight | 0;
+		this.whitespaceViewportData = whitespaceViewportData;
 
-    this.visibleRange = new Range(
-      partialData.startLineNumber,
-      this._model.getLineMinColumn(partialData.startLineNumber),
-      partialData.endLineNumber,
-      this._model.getLineMaxColumn(partialData.endLineNumber),
-    );
-  }
+		this._model = model;
 
-  public getViewLineRenderingData(lineNumber: number): ViewLineRenderingData {
-    return this._model.getViewportViewLineRenderingData(this.visibleRange, lineNumber);
-  }
+		this.visibleRange = new Range(
+			partialData.startLineNumber,
+			this._model.getLineMinColumn(partialData.startLineNumber),
+			partialData.endLineNumber,
+			this._model.getLineMaxColumn(partialData.endLineNumber)
+		);
+	}
 
-  public getDecorationsInViewport(): ViewModelDecoration[] {
-    return this._model.getDecorationsInViewport(this.visibleRange);
-  }
+	public getViewLineRenderingData(lineNumber: number): ViewLineRenderingData {
+		return this._model.getViewportViewLineRenderingData(this.visibleRange, lineNumber);
+	}
+
+	public getViewLineContinuesWithWrappedLine(lineNumber: number): boolean {
+		return this._model.getViewLineContinuesWithWrappedLine(lineNumber);
+	}
+
+	public getDecorationsInViewport(): ViewModelDecoration[] {
+		return this._model.getDecorationsInViewport(this.visibleRange);
+	}
 }

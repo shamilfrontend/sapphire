@@ -6,30 +6,28 @@
 import { Disposable, DisposableMap } from '../../../base/common/lifecycle.js';
 import { ILabelService, ResourceLabelFormatter } from '../../../platform/label/common/label.js';
 import { MainContext, MainThreadLabelServiceShape } from '../common/extHost.protocol.js';
-import {
-  extHostNamedCustomer,
-  IExtHostContext,
-} from '../../services/extensions/common/extHostCustomers.js';
+import { extHostNamedCustomer, IExtHostContext } from '../../services/extensions/common/extHostCustomers.js';
 
 @extHostNamedCustomer(MainContext.MainThreadLabelService)
 export class MainThreadLabelService extends Disposable implements MainThreadLabelServiceShape {
-  private readonly _resourceLabelFormatters = this._register(new DisposableMap<number>());
 
-  constructor(
-    _: IExtHostContext,
-    @ILabelService private readonly _labelService: ILabelService,
-  ) {
-    super();
-  }
+	private readonly _resourceLabelFormatters = this._register(new DisposableMap<number>());
 
-  $registerResourceLabelFormatter(handle: number, formatter: ResourceLabelFormatter): void {
-    // Dynamicily registered formatters should have priority over those contributed via package.json
-    formatter.priority = true;
-    const disposable = this._labelService.registerCachedFormatter(formatter);
-    this._resourceLabelFormatters.set(handle, disposable);
-  }
+	constructor(
+		_: IExtHostContext,
+		@ILabelService private readonly _labelService: ILabelService
+	) {
+		super();
+	}
 
-  $unregisterResourceLabelFormatter(handle: number): void {
-    this._resourceLabelFormatters.deleteAndDispose(handle);
-  }
+	$registerResourceLabelFormatter(handle: number, formatter: ResourceLabelFormatter): void {
+		// Dynamicily registered formatters should have priority over those contributed via package.json
+		formatter.priority = true;
+		const disposable = this._labelService.registerCachedFormatter(formatter);
+		this._resourceLabelFormatters.set(handle, disposable);
+	}
+
+	$unregisterResourceLabelFormatter(handle: number): void {
+		this._resourceLabelFormatters.deleteAndDispose(handle);
+	}
 }
