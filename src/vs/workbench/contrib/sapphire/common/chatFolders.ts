@@ -1,7 +1,7 @@
-/*--------------------------------------------------------------------------------------
- *  Copyright 2025 Glass Devtools, Inc. All rights reserved.
- *  Licensed under the Apache License, Version 2.0. See LICENSE.txt for more information.
- *--------------------------------------------------------------------------------------*/
+/*---------------------------------------------------------------------------------------------
+ *  Copyright (c) Microsoft Corporation. All rights reserved.
+ *  Licensed under the MIT License. See License.txt in the project root for license information.
+ *--------------------------------------------------------------------------------------------*/
 
 export type ChatFolder = {
   id: string;
@@ -17,7 +17,7 @@ export function collectDescendantFolderIds(
 ): string[] {
   const children = new Map<string, string[]>();
   for (const folder of folders) {
-    if (!folder.parentId) continue;
+    if (!folder.parentId) {continue;}
     const list = children.get(folder.parentId) ?? [];
     list.push(folder.id);
     children.set(folder.parentId, list);
@@ -28,7 +28,7 @@ export function collectDescendantFolderIds(
   const seen = new Set<string>();
   while (stack.length) {
     const id = stack.pop();
-    if (!id || seen.has(id)) continue;
+    if (!id || seen.has(id)) {continue;}
     seen.add(id);
     out.push(id);
     stack.push(...(children.get(id) ?? []));
@@ -42,8 +42,8 @@ export function folderWouldCreateCycle(
   folderId: string,
   newParentId: string | null,
 ): boolean {
-  if (newParentId === null) return false;
-  if (newParentId === folderId) return true;
+  if (newParentId === null) {return false;}
+  if (newParentId === folderId) {return true;}
   return collectDescendantFolderIds(folders, folderId).includes(newParentId);
 }
 
@@ -58,8 +58,8 @@ export function reorderFolderAmongSiblings(
   beforeSiblingId: string | null,
 ): ChatFolder[] | null {
   const folder = folders.find((item) => item.id === folderId);
-  if (!folder) return null;
-  if (beforeSiblingId === folderId) return null;
+  if (!folder) {return null;}
+  if (beforeSiblingId === folderId) {return null;}
 
   const siblings = folders
     .filter((item) => item.parentId === folder.parentId && item.id !== folderId)
@@ -68,7 +68,7 @@ export function reorderFolderAmongSiblings(
   let index = siblings.length;
   if (beforeSiblingId !== null) {
     index = siblings.findIndex((item) => item.id === beforeSiblingId);
-    if (index === -1) return null;
+    if (index === -1) {return null;}
   }
 
   const ordered = [...siblings];
@@ -92,24 +92,24 @@ export const CHAT_DATE_GROUP_ORDER: readonly ChatDateGroup[] = [
 /** Календарные группы по `lastModified` (локальное время), без пересечений. */
 export function chatDateGroup(lastModifiedIso: string, now: Date): ChatDateGroup {
   const then = new Date(lastModifiedIso);
-  if (Number.isNaN(then.getTime())) return 'older';
+  if (Number.isNaN(then.getTime())) {return 'older';}
   const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
   const startOfThen = new Date(then.getFullYear(), then.getMonth(), then.getDate());
   const dayDiff = Math.round((startOfToday.getTime() - startOfThen.getTime()) / 86_400_000);
-  if (dayDiff <= 0) return 'today';
-  if (dayDiff === 1) return 'yesterday';
-  if (dayDiff <= 7) return 'week';
-  if (dayDiff <= 30) return 'month';
+  if (dayDiff <= 0) {return 'today';}
+  if (dayDiff === 1) {return 'yesterday';}
+  if (dayDiff <= 7) {return 'week';}
+  if (dayDiff <= 30) {return 'month';}
   return 'older';
 }
 
 export function normalizeChatFolders(raw: unknown): ChatFolder[] {
-  if (!Array.isArray(raw)) return [];
+  if (!Array.isArray(raw)) {return [];}
   const parsed: ChatFolder[] = [];
   for (const item of raw) {
-    if (!item || typeof item !== 'object') continue;
+    if (!item || typeof item !== 'object') {continue;}
     const folder = item as Partial<ChatFolder>;
-    if (typeof folder.id !== 'string' || typeof folder.name !== 'string') continue;
+    if (typeof folder.id !== 'string' || typeof folder.name !== 'string') {continue;}
     parsed.push({
       id: folder.id,
       name: folder.name,

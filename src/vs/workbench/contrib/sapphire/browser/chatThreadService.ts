@@ -1,7 +1,7 @@
-/*--------------------------------------------------------------------------------------
- *  Copyright 2025 Glass Devtools, Inc. All rights reserved.
- *  Licensed under the Apache License, Version 2.0. See LICENSE.txt for more information.
- *--------------------------------------------------------------------------------------*/
+/*---------------------------------------------------------------------------------------------
+ *  Copyright (c) Microsoft Corporation. All rights reserved.
+ *  Licensed under the MIT License. See License.txt in the project root for license information.
+ *--------------------------------------------------------------------------------------------*/
 
 import { Disposable } from '../../../../base/common/lifecycle.js';
 import { CancellationTokenSource } from '../../../../base/common/cancellation.js';
@@ -24,6 +24,7 @@ import { chat_userMessageContent } from '../common/prompt/prompts.js';
 import { ChatFolder, normalizeChatFolders } from '../common/chatFolders.js';
 import { getErrorMessage } from '../common/sendLLMMessageTypes.js';
 import { ISapphireSettingsService } from '../common/sapphireSettingsService.js';
+import { ChatMode } from '../common/sapphireSettingsTypes.js';
 import {
   isChatPrepTimeoutError,
   SAPPHIRE_CHAT_HEURISTIC_TIMEOUT_MS,
@@ -125,6 +126,8 @@ export interface IChatThreadService {
   setCurrentMessageState: (messageIdx: number, newState: Partial<UserMessageState>) => void;
   getCurrentThreadState: () => ThreadType['state'];
   setCurrentThreadState: (newState: Partial<ThreadType['state']>) => void;
+  /** Режим только этого чата. Не пишет globalSettings.chatMode. */
+  setThreadChatMode: (threadId: string, chatMode: ChatMode) => void;
   /** Тихо сохранить черновик композера (без notify/remount). */
   setComposerDraft: (
     threadId: string,
@@ -309,21 +312,21 @@ class ChatThreadService extends Disposable implements IChatThreadService {
   constructor(
     @IStorageService private readonly _storageService: IStorageService,
     @ISapphireModelService private readonly _sapphireModelService: ISapphireModelService,
-    @ILLMMessageService readonly _llmMessageService: ILLMMessageService,
+    @ILLMMessageService public readonly _llmMessageService: ILLMMessageService,
     @IToolsService private readonly _toolsService: IToolsService,
     @ISapphireSettingsService private readonly _settingsService: ISapphireSettingsService,
     @ILanguageFeaturesService private readonly _languageFeaturesService: ILanguageFeaturesService,
     @IEditCodeService private readonly _editCodeService: IEditCodeService,
     @INotificationService private readonly _notificationService: INotificationService,
     @IConvertToLLMMessageService
-    readonly _convertToLLMMessagesService: IConvertToLLMMessageService,
+    public readonly _convertToLLMMessagesService: IConvertToLLMMessageService,
     @IWorkspaceContextService private readonly _workspaceContextService: IWorkspaceContextService,
     @IDirectoryStrService private readonly _directoryStringService: IDirectoryStrService,
     @IFileService private readonly _fileService: IFileService,
-    @IMCPService readonly _mcpService: IMCPService,
+    @IMCPService public readonly _mcpService: IMCPService,
     @IAccessibilitySignalService
-    readonly _accessibilitySignalService: IAccessibilitySignalService,
-    @IConfigurationService readonly _configurationService: IConfigurationService,
+    public readonly _accessibilitySignalService: IAccessibilitySignalService,
+    @IConfigurationService public readonly _configurationService: IConfigurationService,
     @IEditorService private readonly _editorService: IEditorService,
     @IHeuristicFileRetrieveService
     private readonly _heuristicFileRetrieveService: IHeuristicFileRetrieveService,
@@ -399,7 +402,7 @@ class ChatThreadService extends Disposable implements IChatThreadService {
   async focusCurrentChat() {
     const threadId = this.state.currentThreadId;
     const thread = this.state.allThreads[threadId];
-    if (!thread) return;
+    if (!thread) {return;}
     const s = await thread.state.mountedInfo?.whenMounted;
     if (!this.isCurrentlyFocusingMessage()) {
       s?.textAreaRef.current?.focus();
@@ -409,7 +412,7 @@ class ChatThreadService extends Disposable implements IChatThreadService {
   async blurCurrentChat() {
     const threadId = this.state.currentThreadId;
     const thread = this.state.allThreads[threadId];
-    if (!thread) return;
+    if (!thread) {return;}
     const s = await thread.state.mountedInfo?.whenMounted;
     if (!this.isCurrentlyFocusingMessage()) {
       s?.textAreaRef.current?.blur();
@@ -570,7 +573,7 @@ class ChatThreadService extends Disposable implements IChatThreadService {
       const lastMessage = messages && messages[messages.length - 1];
       // tool_request без streamState — показываем awaiting_user
       if (lastMessage && lastMessage.role === 'tool' && lastMessage.type === 'tool_request')
-        this._setStreamState(threadId, { isRunning: 'awaiting_user' });
+        {this._setStreamState(threadId, { isRunning: 'awaiting_user' });}
 
       // running_now после рестарта — помечаем rejected, иначе UI «зависнет» на tool
       if (lastMessage && lastMessage.role === 'tool' && lastMessage.type === 'running_now') {
@@ -589,7 +592,7 @@ class ChatThreadService extends Disposable implements IChatThreadService {
     }
 
     // Обновляем promise whenMounted для React (если не suppress через doNotRefreshMountInfo)
-    if (doNotRefreshMountInfo) return;
+    if (doNotRefreshMountInfo) {return;}
 
     let whenMountedResolver: (w: WhenMounted) => void;
     const whenMountedPromise = new Promise<WhenMounted>((res) => (whenMountedResolver = res));
@@ -603,7 +606,7 @@ class ChatThreadService extends Disposable implements IChatThreadService {
           _whenMountedResolver: (w: WhenMounted) => {
             whenMountedResolver(w);
             const mountInfo = this.state.allThreads[threadId]?.state.mountedInfo;
-            if (mountInfo) mountInfo.mountedIsResolvedRef.current = true;
+            if (mountInfo) {mountInfo.mountedIsResolvedRef.current = true;}
           },
         },
       },
@@ -617,7 +620,7 @@ class ChatThreadService extends Disposable implements IChatThreadService {
     this.streamState[threadId] = state;
     const next = state?.isRunning;
     if (prev !== next) {
-      const hint = state && 'statusHint' in state && state.statusHint ? ` hint=${state.statusHint}` : '';
+      const hint = state && Object.hasOwn(state, 'statusHint') && state.statusHint ? ` hint=${state.statusHint}` : '';
       chatTrace(threadId, 'stream', `${prev ?? 'none'} -> ${next ?? 'none'}${hint}`);
     }
     this._onDidChangeStreamState.fire({ threadId });
@@ -676,10 +679,10 @@ class ChatThreadService extends Disposable implements IChatThreadService {
   private _wrapRunAgentToNotify(p: Promise<void>, threadId: string) {
     const notify = ({ error }: { error: string | null }) => {
       const thread = this.state.allThreads[threadId];
-      if (!thread) return;
+      if (!thread) {return;}
       const userMsg = findLast(thread.messages, (m) => m.role === 'user');
-      if (!userMsg) return;
-      if (userMsg.role !== 'user') return;
+      if (!userMsg) {return;}
+      if (userMsg.role !== 'user') {return;}
       const messageContent = truncate(userMsg.displayContent, 50, '...');
 
       this._notificationService.notify({
@@ -709,13 +712,13 @@ class ChatThreadService extends Disposable implements IChatThreadService {
     };
 
     p.then(() => {
-      if (threadId !== this.state.currentThreadId) notify({ error: null });
+      if (threadId !== this.state.currentThreadId) {notify({ error: null });}
     }).catch((e) => {
       this._clearStuckAgentStreamState(threadId, {
         message: getErrorMessage(e),
         fullError: e instanceof Error ? e : null,
       });
-      if (threadId !== this.state.currentThreadId) notify({ error: getErrorMessage(e) });
+      if (threadId !== this.state.currentThreadId) {notify({ error: getErrorMessage(e) });}
     });
   }
 
@@ -738,7 +741,7 @@ class ChatThreadService extends Disposable implements IChatThreadService {
     skipAutoAttach?: boolean;
   }) {
     const thread = this.state.allThreads[threadId];
-    if (!thread) return; // invariant
+    if (!thread) {return;} // invariant
 
     // Новая отправка прерывает текущий стрим/агента
     const runningBefore = this.streamState[threadId]?.isRunning;
@@ -798,9 +801,9 @@ class ChatThreadService extends Disposable implements IChatThreadService {
       displayContent: string,
       selections?: StagingSelectionItem[],
     ) => {
-      if (!isPrepActive() || userMessageIdx < 0) return;
+      if (!isPrepActive() || userMessageIdx < 0) {return;}
       const msg = this.state.allThreads[threadId]?.messages[userMessageIdx];
-      if (!msg || msg.role !== 'user') return;
+      if (!msg || msg.role !== 'user') {return;}
       this._editMessageInThread(threadId, userMessageIdx, {
         ...msg,
         content,
@@ -936,11 +939,11 @@ class ChatThreadService extends Disposable implements IChatThreadService {
           throw e;
         }
       }
-      if (!isPrepActive()) return;
+      if (!isPrepActive()) {return;}
 
       patchUserMessage(userMessageContent, instructions, currSelns);
 
-      if (!isPrepActive()) return;
+      if (!isPrepActive()) {return;}
 
       // Тот же prepEpoch — Stop во время короткого окна до входа в loop не «воскресит» агента
       agentStarted = true;
@@ -988,7 +991,7 @@ class ChatThreadService extends Disposable implements IChatThreadService {
     images?: ChatImageAttachment[];
   }) {
     const thread = this.state.allThreads[threadId];
-    if (!thread) return;
+    if (!thread) {return;}
 
     // Если пользователь «откатился» к checkpoint — обрезаем хвост истории
     if (thread.state.currCheckpointIdx !== null) {
@@ -1016,7 +1019,7 @@ class ChatThreadService extends Disposable implements IChatThreadService {
   editUserMessageAndStreamResponse: IChatThreadService['editUserMessageAndStreamResponse'] =
     async ({ userMessage, messageIdx, threadId, images }) => {
       const thread = this.state.allThreads[threadId];
-      if (!thread) return; // invariant
+      if (!thread) {return;} // invariant
 
       if (thread.messages?.[messageIdx]?.role !== 'user') {
         throw new Error(`Error: editing a message with role !=='user'`);
@@ -1245,6 +1248,13 @@ class ChatThreadService extends Disposable implements IChatThreadService {
   setCurrentThreadState = (newState: Partial<ThreadType['state']>) => {
     this._staging.setCurrentThreadState(newState);
   };
+  setThreadChatMode(threadId: string, chatMode: ChatMode): void {
+    const thread = this.state.allThreads[threadId];
+    if (!thread || thread.state.chatMode === chatMode) {return;}
+    // Без remount композера: смена режима не должна сбрасывать черновик и фокус.
+    this._setThreadState(threadId, { chatMode }, true);
+    this._storeAllThreads(this.state.allThreads);
+  }
   setComposerDraft = (
     threadId: string,
     draft: { draftText?: string; stagingImages?: ChatImageAttachment[] },

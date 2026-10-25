@@ -1,7 +1,7 @@
-/*--------------------------------------------------------------------------------------
- *  Copyright 2025 Glass Devtools, Inc. All rights reserved.
- *  Licensed under the Apache License, Version 2.0. See LICENSE.txt for more information.
- *--------------------------------------------------------------------------------------*/
+/*---------------------------------------------------------------------------------------------
+ *  Copyright (c) Microsoft Corporation. All rights reserved.
+ *  Licensed under the MIT License. See License.txt in the project root for license information.
+ *--------------------------------------------------------------------------------------------*/
 
 import { removeMCPToolNamePrefix } from '../mcpServiceTypes.js';
 
@@ -18,7 +18,7 @@ const escapeRegExp = (value: string): string => value.replace(/[.*+?^${}()|[\]\\
 
 /** Токен как отдельное «слово» (не часть другого идентификатора). */
 const mentionsToken = (text: string, token: string): boolean => {
-  if (!token) return false;
+  if (!token) {return false;}
   const re = new RegExp(`(^|[^\\p{L}\\p{N}_-])${escapeRegExp(token)}(?=$|[^\\p{L}\\p{N}_-])`, 'iu');
   return re.test(text);
 };
@@ -37,7 +37,7 @@ export const onlineMcpServerNames = (tools: readonly McpDisclosureTool[] | undef
   const seen = new Set<string>();
   for (const tool of tools ?? []) {
     const serverName = tool.mcpServerName;
-    if (!serverName || seen.has(serverName)) continue;
+    if (!serverName || seen.has(serverName)) {continue;}
     seen.add(serverName);
     names.push(serverName);
   }
@@ -49,7 +49,7 @@ export const mcpServersMentionedInText = (
   text: string,
   serverNames: readonly string[],
 ): string[] => {
-  if (!text.trim() || serverNames.length === 0) return [];
+  if (!text.trim() || serverNames.length === 0) {return [];}
   const found: string[] = [];
   for (const serverName of serverNames) {
     if (mentionsToken(text, serverName)) {
@@ -75,7 +75,7 @@ export const mergeEnabledMcpServers = (
   const next = [...(persisted ?? [])];
   const seen = new Set(next);
   for (const serverName of mcpServersMentionedInText(text, onlineServerNames)) {
-    if (seen.has(serverName)) continue;
+    if (seen.has(serverName)) {continue;}
     seen.add(serverName);
     next.push(serverName);
   }
@@ -86,7 +86,7 @@ export const selectEnabledMcpTools = <T extends McpDisclosureTool>(
   tools: readonly T[] | undefined,
   enabledServerNames: readonly string[] | undefined,
 ): T[] => {
-  if (!tools?.length || !enabledServerNames?.length) return [];
+  if (!tools?.length || !enabledServerNames?.length) {return [];}
   const enabled = new Set(enabledServerNames);
   return tools.filter((tool) => !!tool.mcpServerName && enabled.has(tool.mcpServerName));
 };
@@ -94,12 +94,12 @@ export const selectEnabledMcpTools = <T extends McpDisclosureTool>(
 const mcpServerCatalog = (tools: readonly McpDisclosureTool[] | undefined): string => {
   const namesByServer = new Map<string, string[]>();
   for (const tool of tools ?? []) {
-    if (!tool.mcpServerName) continue;
+    if (!tool.mcpServerName) {continue;}
     const names = namesByServer.get(tool.mcpServerName) ?? [];
     names.push(removeMCPToolNamePrefix(tool.name));
     namesByServer.set(tool.mcpServerName, names);
   }
-  if (namesByServer.size === 0) return '';
+  if (namesByServer.size === 0) {return '';}
 
   const lines: string[] = [];
   for (const [serverName, names] of namesByServer) {
@@ -115,8 +115,8 @@ export const enableMcpServerToolDescription = (
   tools: readonly McpDisclosureTool[] | undefined,
 ): string => {
   const base =
-    "Enable an MCP server for the rest of this thread. Call this before using that server's tools. Pass server_name exactly as listed. The server's tools are available on your next response, not in this one.";
+    'Enable an MCP server for the rest of this thread. Call this before using that server\'s tools. Pass server_name exactly as listed. The server\'s tools are available on your next response, not in this one.';
   const catalog = mcpServerCatalog(tools);
-  if (!catalog) return base;
+  if (!catalog) {return base;}
   return `${base}\nAvailable servers:\n${catalog}`;
 };

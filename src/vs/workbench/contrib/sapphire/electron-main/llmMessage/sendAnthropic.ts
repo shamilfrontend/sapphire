@@ -1,7 +1,7 @@
-/*--------------------------------------------------------------------------------------
- *  Copyright 2025 Glass Devtools, Inc. All rights reserved.
- *  Licensed under the Apache License, Version 2.0. See LICENSE.txt for more information.
- *--------------------------------------------------------------------------------------*/
+/*---------------------------------------------------------------------------------------------
+ *  Copyright (c) Microsoft Corporation. All rights reserved.
+ *  Licensed under the MIT License. See License.txt in the project root for license information.
+ *--------------------------------------------------------------------------------------------*/
 
 import Anthropic from '@anthropic-ai/sdk';
 import { getModelCapabilities, getReservedOutputTokenSpace, getSendableReasoningInfo } from '../../common/modelCapabilities.js';
@@ -47,7 +47,7 @@ const parseDataUrl = (
 	url: string,
 ): { mime: 'image/jpeg' | 'image/png' | 'image/gif' | 'image/webp'; data: string } | null => {
 	const match = /^data:(image\/(?:jpeg|png|gif|webp));base64,(.+)$/i.exec(url);
-	if (!match) return null;
+	if (!match) {return null;}
 	return { mime: match[1].toLowerCase() as 'image/jpeg' | 'image/png' | 'image/gif' | 'image/webp', data: match[2] };
 };
 
@@ -74,7 +74,7 @@ const toAnthropicMessages = (
 	separateSystemMessage: string | undefined,
 ): { system: string; messages: Anthropic.MessageParam[] } => {
 	const systemParts: string[] = [];
-	if (separateSystemMessage?.trim()) systemParts.push(separateSystemMessage.trim());
+	if (separateSystemMessage?.trim()) {systemParts.push(separateSystemMessage.trim());}
 	const out: Anthropic.MessageParam[] = [];
 
 	const push = (role: 'user' | 'assistant', content: string | Anthropic.ContentBlockParam[]) => {
@@ -104,12 +104,12 @@ const toAnthropicMessages = (
 			const text = typeof message.content === 'string'
 				? message.content
 				: message.content.map((part) => part.text).join('');
-			if (text) blocks.push({ type: 'text', text });
+			if (text) {blocks.push({ type: 'text', text });}
 			for (const toolCall of message.tool_calls ?? []) {
 				let input: Record<string, unknown> = {};
 				try {
 					const parsed: unknown = JSON.parse(toolCall.function.arguments || '{}');
-					if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) input = parsed as Record<string, unknown>;
+					if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {input = parsed as Record<string, unknown>;}
 				} catch {
 					input = {};
 				}
@@ -138,7 +138,7 @@ const anthropicTools = (params: AnthropicChatParams): Anthropic.Tool[] | undefin
 		allowedToolNames: params.allowedToolNames,
 		disableAllTools: params.disableAllTools,
 	});
-	if (!tools?.length) return undefined;
+	if (!tools?.length) {return undefined;}
 	return tools.map((tool) => ({
 		name: tool.name,
 		description: tool.description,
@@ -158,7 +158,7 @@ const rawToolOf = (name: string, paramsStr: string, id: string): RawToolCallObj 
 	} catch {
 		return null;
 	}
-	if (input === null || typeof input !== 'object' || Array.isArray(input)) return null;
+	if (input === null || typeof input !== 'object' || Array.isArray(input)) {return null;}
 	const rawParams = input as RawToolParamsObj;
 	return { id, name: name as RawToolCallObj['name'], rawParams, doneParams: Object.keys(rawParams), isDone: true };
 };
@@ -250,11 +250,11 @@ export const sendAnthropicChat = async (params: AnthropicChatParams): Promise<vo
 				toolBuckets.set(event.index, { name: event.content_block.name, id: event.content_block.id, paramsStr: '' });
 			}
 			if (event.type === 'content_block_delta') {
-				if (event.delta.type === 'text_delta') fullText += event.delta.text;
-				if (event.delta.type === 'thinking_delta') fullReasoning += event.delta.thinking;
+				if (event.delta.type === 'text_delta') {fullText += event.delta.text;}
+				if (event.delta.type === 'thinking_delta') {fullReasoning += event.delta.thinking;}
 				if (event.delta.type === 'input_json_delta') {
 					const bucket = toolBuckets.get(event.index);
-					if (bucket) bucket.paramsStr += event.delta.partial_json;
+					if (bucket) {bucket.paramsStr += event.delta.partial_json;}
 				}
 			}
 			params.onText({
@@ -277,8 +277,8 @@ export const sendAnthropicChat = async (params: AnthropicChatParams): Promise<vo
 		const toolCalls = [...toolBuckets.values()]
 			.map((bucket) => {
 				const parsed = rawToolOf(bucket.name, bucket.paramsStr, bucket.id);
-				if (parsed) return parsed;
-				if (bucket.name) truncatedToolNames.push(bucket.name);
+				if (parsed) {return parsed;}
+				if (bucket.name) {truncatedToolNames.push(bucket.name);}
 				return null;
 			})
 			.filter((tool): tool is RawToolCallObj => !!tool?.name);
@@ -298,7 +298,7 @@ export const sendAnthropicChat = async (params: AnthropicChatParams): Promise<vo
 			...(truncatedToolNames.length ? { truncatedToolNames } : {}),
 		});
 	} catch (error) {
-		if (abort.signal.aborted && !connectTimedOut) return;
+		if (abort.signal.aborted && !connectTimedOut) {return;}
 		const status = error instanceof Anthropic.APIError ? error.status : undefined;
 		if (connectTimedOut) {
 			params.onError({ message: LLM_ERROR_HINTS.connectTimeout, fullError: error instanceof Error ? error : null });
@@ -313,7 +313,7 @@ export const sendAnthropicChat = async (params: AnthropicChatParams): Promise<vo
 			return;
 		}
 		params.onError({
-			message: status != null ? `${error} (код ${status})` : `${error}`,
+			message: (status !== null && status !== undefined) ? `${error} (код ${status})` : `${error}`,
 			fullError: error instanceof Error ? error : null,
 		});
 	}

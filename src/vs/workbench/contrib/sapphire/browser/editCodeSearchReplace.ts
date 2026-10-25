@@ -1,7 +1,7 @@
-/*--------------------------------------------------------------------------------------
- *  Copyright 2025 Glass Devtools, Inc. All rights reserved.
- *  Licensed under the Apache License, Version 2.0. See LICENSE.txt for more information.
- *--------------------------------------------------------------------------------------*/
+/*---------------------------------------------------------------------------------------------
+ *  Copyright (c) Microsoft Corporation. All rights reserved.
+ *  Licensed under the MIT License. See License.txt in the project root for license information.
+ *--------------------------------------------------------------------------------------------*/
 
 import { EndOfLinePreference } from '../../../../editor/common/model.js';
 import { URI } from '../../../../base/common/uri.js';
@@ -43,7 +43,7 @@ export class EditCodeSearchReplace {
       linkedCtrlKZone: null,
       onWillUndo: () => {},
     });
-    if (!res) return;
+    if (!res) {return;}
     const { diffZone, onFinishEdit } = res;
 
     const onDone = () => {
@@ -104,10 +104,10 @@ export class EditCodeSearchReplace {
   private _instantlyApplySRBlocks(uri: URI, blocksStr: string) {
     const blocks = extractSearchReplaceBlocks(blocksStr);
     const { model } = this._s._sapphireModelService.getModel(uri);
-    if (!model) throw new Error(`Error applying Search/Replace blocks: File does not exist.`);
+    if (!model) {throw new Error(`Error applying Search/Replace blocks: File does not exist.`);}
     const modelStr = model.getValue(EndOfLinePreference.LF);
     const matched = matchSearchReplaceBlocks(modelStr, blocks);
-    if (!matched.ok) throw new Error(matched.message);
+    if (!matched.ok) {throw new Error(matched.message);}
 
     const modelStrLines = modelStr.split('\n');
     const replacements = matched.replacements.map((block) => {
@@ -146,12 +146,12 @@ export class EditCodeSearchReplace {
       : undefined;
 
     const uri = this._s._getURIBeforeStartApplying(opts);
-    if (!uri) return;
+    if (!uri) {return;}
 
     const { model } = this._s._sapphireModelService.getModel(uri);
-    if (!model) return;
+    if (!model) {return;}
 
-    let streamRequestIdRef: { current: string | null } = { current: null }; // ref для streamRequestId DiffZone
+    const streamRequestIdRef: { current: string | null } = { current: null }; // ref для streamRequestId DiffZone
 
     // Сбор сообщений LLM - ask LLM to generate search/replace block text
     const originalFileCode = model.getValue(EndOfLinePreference.LF);
@@ -169,7 +169,7 @@ export class EditCodeSearchReplace {
       });
 
     // uri уже стримится — выход (проверяет вызывающий)
-    if (this._s._uriIsStreaming(uri)) return;
+    if (this._s._uriIsStreaming(uri)) {return;}
 
     // Создать DiffZone
     const res = this._s._startStreamingDiffZone({
@@ -183,7 +183,7 @@ export class EditCodeSearchReplace {
         }
       },
     });
-    if (!res) return;
+    if (!res) {return;}
     const { diffZone, onFinishEdit } = res;
 
     // колбэки завершения / ошибки стрима
@@ -205,7 +205,7 @@ export class EditCodeSearchReplace {
             originalBounds: [originalStart2, originalEnd2],
           },
         } = blockDiffArea;
-        if (originalStart2 >= originalEnd) continue;
+        if (originalStart2 >= originalEnd) {continue;}
         const numNewLines = endLine - startLine + 1;
         const numOldLines = originalEnd2 - originalStart2 + 1;
         lineOffset += numNewLines - numOldLines;
@@ -220,7 +220,7 @@ export class EditCodeSearchReplace {
 
       // Удалить TrackingZone
       for (const trackingZone of addedTrackingZoneOfBlockNum)
-        this._s._diffZones._deleteTrackingZone(trackingZone);
+        {this._s._diffZones._deleteTrackingZone(trackingZone);}
 
       onFinishEdit();
 
@@ -332,7 +332,7 @@ export class EditCodeSearchReplace {
             shouldUpdateOrigStreamStyle = true;
 
             // Новый блок — TrackingZone для стрим-записи
-            if (!(blockNum in addedTrackingZoneOfBlockNum)) {
+            if (!Object.hasOwn(addedTrackingZoneOfBlockNum, blockNum)) {
               const originalBounds = findTextInCode(block.orig, originalFileCode, true, {
                 returnType: 'lines',
               });
@@ -446,7 +446,7 @@ export class EditCodeSearchReplace {
             }
 
             // Потоковая запись delta final
-            if (!latestStreamLocationMutable) continue;
+            if (!latestStreamLocationMutable) {continue;}
             const oldBlock = oldBlocks[blockNum];
             const oldFinalLen = (oldBlock?.final ?? '').length;
             const deltaFinalText = block.final.substring(oldFinalLen, Infinity);
@@ -520,7 +520,7 @@ export class EditCodeSearchReplace {
             onError(e);
           },
           onAbort: () => {
-            if (weAreAborting) return;
+            if (weAreAborting) {return;}
             // Выход из цикла без смены state (abort уже обработан)
             aborted = true;
             resMessageDonePromise();

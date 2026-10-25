@@ -1,6 +1,7 @@
-/*--------------------------------------------------------------------------------------
- *  Sapphire — guards for chat stream / enqueue (без DOM, для unit-тестов).
- *--------------------------------------------------------------------------------------*/
+/*---------------------------------------------------------------------------------------------
+ *  Copyright (c) Microsoft Corporation. All rights reserved.
+ *  Licensed under the MIT License. See License.txt in the project root for license information.
+ *--------------------------------------------------------------------------------------------*/
 
 /**
  * Состояния isRunning, при которых follow-up уходит в очередь.
@@ -38,4 +39,29 @@ export function shouldClearStuckStreamOnStaleEpoch(isRunning: string | undefined
 /** После enqueue: нет живого агента → сразу flush. */
 export function shouldFlushDeadQueue(isRunning: string | undefined): boolean {
   return !canEnqueueFollowUp(isRunning);
+}
+
+/**
+ * Активный запрос чата: purpose/tour индекса не должны занимать SCM.
+ * `awaiting_user` не блокирует. Живой `idle` — только с interrupt, не `not_needed`.
+ */
+export function isActiveChatRequest(isRunning: string | undefined, interrupt?: unknown): boolean {
+  if (isRunning === 'LLM' || isRunning === 'tool' || isRunning === 'preparing') {
+    return true;
+  }
+  if (isRunning === 'idle') {
+    return interrupt !== undefined && interrupt !== 'not_needed';
+  }
+  return false;
+}
+
+export function hasActiveChatWork(
+  streamState: Readonly<Record<string, { isRunning?: string; interrupt?: unknown } | undefined>>,
+): boolean {
+  for (const state of Object.values(streamState)) {
+    if (state && isActiveChatRequest(state.isRunning, state.interrupt)) {
+      return true;
+    }
+  }
+  return false;
 }

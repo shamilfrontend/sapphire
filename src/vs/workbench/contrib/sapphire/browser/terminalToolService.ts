@@ -1,7 +1,7 @@
-/*--------------------------------------------------------------------------------------
- *  Copyright 2025 Glass Devtools, Inc. All rights reserved.
- *  Licensed under the Apache License, Version 2.0. See LICENSE.txt for more information.
- *--------------------------------------------------------------------------------------*/
+/*---------------------------------------------------------------------------------------------
+ *  Copyright (c) Microsoft Corporation. All rights reserved.
+ *  Licensed under the MIT License. See License.txt in the project root for license information.
+ *--------------------------------------------------------------------------------------------*/
 
 import { Disposable, IDisposable, toDisposable } from '../../../../base/common/lifecycle.js';
 import { removeAnsiEscapeCodes } from '../../../../base/common/strings.js';
@@ -60,15 +60,15 @@ export interface ITerminalToolService {
 export const ITerminalToolService = createDecorator<ITerminalToolService>('TerminalToolService');
 
 export const persistentTerminalNameOfId = (id: string) => {
-  if (id === '1') return 'Sapphire Agent';
+  if (id === '1') {return 'Sapphire Agent';}
   return `Sapphire Agent (${id})`;
 };
 const idOfPersistentTerminalName = (name: string) => {
-  if (name === 'Sapphire Agent') return '1';
+  if (name === 'Sapphire Agent') {return '1';}
 
   const match = name.match(/Sapphire Agent \((\d+)\)/);
-  if (!match) return null;
-  if (Number.isInteger(Number(match[1])) && Number(match[1]) >= 1) return match[1];
+  if (!match) {return null;}
+  if (Number.isInteger(Number(match[1])) && Number(match[1]) >= 1) {return match[1];}
   return null;
 };
 
@@ -89,6 +89,14 @@ const truncateTerminalResult = (result: string): string => {
   return `${result.slice(0, half)}\n...\n${result.slice(result.length - half)}`;
 };
 
+function terminalConfigName(config: ICreateTerminalOptions['config']): string | undefined {
+  if (!config || typeof config !== 'object') {
+    return undefined;
+  }
+  const name = (config as { name?: unknown }).name;
+  return typeof name === 'string' ? name : undefined;
+}
+
 class TerminalToolService extends Disposable implements ITerminalToolService {
   readonly _serviceBrand: undefined;
 
@@ -106,7 +114,7 @@ class TerminalToolService extends Disposable implements ITerminalToolService {
     const initializeTerminal = (terminal: ITerminalInstance) => {
       const d = terminal.onExit(() => {
         const terminalId = idOfPersistentTerminalName(terminal.title);
-        if (terminalId !== null && terminalId in this.persistentTerminalInstanceOfId) {
+        if (terminalId !== null && Object.hasOwn(this.persistentTerminalInstanceOfId, terminalId)) {
           delete this.persistentTerminalInstanceOfId[terminalId];
         }
         d.dispose();
@@ -134,11 +142,11 @@ class TerminalToolService extends Disposable implements ITerminalToolService {
 
   getValidNewTerminalId(): string {
     const n = Object.keys(this.persistentTerminalInstanceOfId).length;
-    if (n === 0) return '1';
+    if (n === 0) {return '1';}
 
     for (let i = 1; i <= n + 1; i++) {
       const potentialId = `${i}`;
-      if (!(potentialId in this.persistentTerminalInstanceOfId)) return potentialId;
+      if (!Object.hasOwn(this.persistentTerminalInstanceOfId, potentialId)) {return potentialId;}
     }
     throw new Error('This should never be reached by pigeonhole principle');
   }
@@ -213,7 +221,7 @@ class TerminalToolService extends Disposable implements ITerminalToolService {
       cwd,
       location: hidden ? undefined : TerminalLocation.Panel,
       config: {
-        name: config && 'name' in config ? config.name : undefined,
+        name: terminalConfigName(config),
         forceShellIntegration: true,
         hideFromUser: hidden ? true : undefined,
         ...config,
@@ -274,29 +282,29 @@ class TerminalToolService extends Disposable implements ITerminalToolService {
 
   async killPersistentTerminal(terminalId: string) {
     const terminal = this.persistentTerminalInstanceOfId[terminalId];
-    if (!terminal) throw new Error(`Kill Terminal: Terminal with ID ${terminalId} did not exist.`);
+    if (!terminal) {throw new Error(`Kill Terminal: Terminal with ID ${terminalId} did not exist.`);}
     terminal.dispose();
     delete this.persistentTerminalInstanceOfId[terminalId];
   }
 
   persistentTerminalExists(terminalId: string): boolean {
-    return terminalId in this.persistentTerminalInstanceOfId;
+    return Object.hasOwn(this.persistentTerminalInstanceOfId, terminalId);
   }
 
   getTemporaryTerminal(terminalId: string): ITerminalInstance | undefined {
-    if (!terminalId) return;
+    if (!terminalId) {return;}
     return this.temporaryTerminalInstanceOfId[terminalId];
   }
 
   getPersistentTerminal(terminalId: string): ITerminalInstance | undefined {
-    if (!terminalId) return;
+    if (!terminalId) {return;}
     return this.persistentTerminalInstanceOfId[terminalId];
   }
 
   focusPersistentTerminal: ITerminalToolService['focusPersistentTerminal'] = async (terminalId) => {
-    if (!terminalId) return;
+    if (!terminalId) {return;}
     const terminal = this.persistentTerminalInstanceOfId[terminalId];
-    if (!terminal) return;
+    if (!terminal) {return;}
     this.terminalService.setActiveInstance(terminal);
     await this.terminalService.focusActiveInstance();
   };
@@ -324,8 +332,8 @@ class TerminalToolService extends Disposable implements ITerminalToolService {
 
   private async _waitForCommandDetectionCapability(terminal: ITerminalInstance, maxMs: number) {
     const cmdCap = terminal.capabilities.get(TerminalCapability.CommandDetection);
-    if (cmdCap) return cmdCap;
-    if (maxMs <= 0) return undefined;
+    if (cmdCap) {return cmdCap;}
+    if (maxMs <= 0) {return undefined;}
 
     const disposables: IDisposable[] = [];
     const waitTimeout = timeout(maxMs);
@@ -334,7 +342,7 @@ class TerminalToolService extends Disposable implements ITerminalToolService {
     >((res) => {
       disposables.push(
         terminal.capabilities.onDidAddCapability((e) => {
-          if (e.id === TerminalCapability.CommandDetection) res(e.capability);
+          if (e.id === TerminalCapability.CommandDetection) {res(e.capability);}
         }),
       );
     });
@@ -370,7 +378,7 @@ class TerminalToolService extends Disposable implements ITerminalToolService {
     };
 
     const cleanupTerminal = () => {
-      if (!terminal) return;
+      if (!terminal) {return;}
       try {
         terminal.dispose();
       } catch {
@@ -494,9 +502,9 @@ class TerminalToolService extends Disposable implements ITerminalToolService {
       );
 
       const waitUntilDone = new Promise<void>((resolve) => {
-        if (!cmdCap) return;
+        if (!cmdCap) {return;}
         const l = cmdCap.onCommandFinished((cmd) => {
-          if (resolveReason) return;
+          if (resolveReason) {return;}
           resolveReason = { type: 'done', exitCode: cmd.exitCode ?? 0 };
           result = cmd.getOutput() ?? '';
           l.dispose();
@@ -509,12 +517,12 @@ class TerminalToolService extends Disposable implements ITerminalToolService {
         ? new Promise<void>((res) => {
             const ms = absoluteBudgetMs();
             if (ms <= 0) {
-              if (!resolveReason) resolveReason = { type: 'timeout' };
+              if (!resolveReason) {resolveReason = { type: 'timeout' };}
               res();
               return;
             }
             const id = setTimeout(() => {
-              if (resolveReason) return;
+              if (resolveReason) {return;}
               resolveReason = { type: 'timeout' };
               res();
             }, ms);
@@ -525,7 +533,7 @@ class TerminalToolService extends Disposable implements ITerminalToolService {
       const waitUntilBgTimeout = isPersistent
         ? new Promise<void>((res) => {
             const id = setTimeout(() => {
-              if (resolveReason) return;
+              if (resolveReason) {return;}
               resolveReason = { type: 'timeout' };
               res();
             }, MAX_TERMINAL_BG_COMMAND_TIME * 1000);
@@ -539,7 +547,7 @@ class TerminalToolService extends Disposable implements ITerminalToolService {
             const resetTimer = () => {
               clearTimeout(globalTimeoutId);
               globalTimeoutId = setTimeout(() => {
-                if (resolveReason) return;
+                if (resolveReason) {return;}
                 resolveReason = { type: 'timeout' };
                 res();
               }, MAX_TERMINAL_INACTIVE_TIME * 1000);

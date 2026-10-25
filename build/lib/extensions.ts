@@ -317,6 +317,7 @@ const nativeExtensions = [
 
 const excludedExtensions = [
 	'copilot',
+	'mermaid-markdown-features',
 	'vscode-api-tests',
 	'vscode-colorize-tests',
 	'vscode-colorize-perf-tests',
@@ -464,6 +465,11 @@ function doPackageLocalExtensionsStream(forWeb: boolean, native: boolean): Strea
  * Package the built-in copilot extension specifically.
  * This is used by non-CI local builds where copilot is not downloaded as a VSIX
  * but must be compiled from source and included in the build.
+ *
+ * Dependencies are packaged only after fromLocal finishes: fromLocal runs the
+ * extension esbuild which invokes postinstall, and that postinstall mutates
+ * `node_modules/@github/copilot` (rm/cp of SDK dirs, deletion of `shims.txt`).
+ * Reading those paths in parallel with gulp.src races and can ENOENT.
  */
 export function packageCopilotExtensionStream(): Stream {
 	const extensionPath = path.join(root, 'extensions', 'copilot');
@@ -476,17 +482,32 @@ export function packageCopilotExtensionStream(): Stream {
 			.pipe(rename(p => p.dirname = `extensions/copilot/${p.dirname}`))
 	);
 
-	const productionDependencies = getProductionDependencies('extensions/copilot');
-	const dependenciesSrc = productionDependencies.map(d => path.relative(root, d)).map(d => [`${d}/**`, `!${d}/**/{test,tests}/**`]).flat();
+	const output = es.through();
+	const localFiles: File[] = [];
 
-	return es.merge(
-		localExtensionsStream,
-		gulp.src(dependenciesSrc, { base: '.' })
+	localExtensionsStream.on('data', (f: File) => localFiles.push(f));
+	localExtensionsStream.on('error', (err: Error) => output.emit('error', err));
+	localExtensionsStream.on('end', () => {
+		const productionDependencies = getProductionDependencies('extensions/copilot');
+		const dependenciesSrc = productionDependencies.map(d => path.relative(root, d)).map(d => [
+			`${d}/**`,
+			`!${d}/**/{test,tests}/**`,
+			// Runtime/build marker recreated later by prepareBuiltInCopilotRipgrepShim; never package from source.
+			`!${d}/shims.txt`,
+		]).flat();
+
+		const depsStream = gulp.src(dependenciesSrc, { base: '.', allowEmpty: true })
 			// The shared ignore drops @github/copilot from the app asar. The built-in
 			// extension still needs that package: packaging later looks for sdk/ inside it.
 			.pipe(util2.cleanNodeModules(path.join(root, 'build', '.moduleignore'), ['@github/copilot/**']))
-			.pipe(util2.cleanNodeModules(path.join(root, 'build', `.moduleignore.${process.platform}`)))
-	).pipe(util2.setExecutableBit(['**/*.sh']));
+			.pipe(util2.cleanNodeModules(path.join(root, 'build', `.moduleignore.${process.platform}`)));
+
+		es.merge(es.readArray(localFiles), depsStream)
+			.pipe(util2.setExecutableBit(['**/*.sh']))
+			.pipe(output);
+	});
+
+	return output;
 }
 
 export function packageMarketplaceExtensionsStream(forWeb: boolean): Stream {
@@ -630,7 +651,7 @@ const esbuildMediaScripts: { script: string; tsconfig: string }[] = [
 	{ script: 'markdown-language-features/esbuild.webview.mts', tsconfig: 'markdown-language-features/preview-src/tsconfig.json' },
 	{ script: 'markdown-language-features/esbuild.markdownEditor.mts', tsconfig: 'markdown-language-features/markdown-editor-src/tsconfig.json' },
 	{ script: 'markdown-math/esbuild.notebook.mts', tsconfig: 'markdown-math/notebook/tsconfig.json' },
-	{ script: 'mermaid-markdown-features/esbuild.webview.mts', tsconfig: 'mermaid-markdown-features/preview-src/tsconfig.json' },
+	// mermaid-markdown-features: excluded from Sapphire packaging (chat/plans use root `mermaid` + Vue MermaidBlock)
 	{ script: 'notebook-renderers/esbuild.notebook.mts', tsconfig: 'notebook-renderers/tsconfig.json' },
 	{ script: 'simple-browser/esbuild.webview.mts', tsconfig: 'simple-browser/preview-src/tsconfig.json' },
 ];

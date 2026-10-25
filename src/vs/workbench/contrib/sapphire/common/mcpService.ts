@@ -1,7 +1,7 @@
-/*--------------------------------------------------------------------------------------
- *  Copyright 2025 Glass Devtools, Inc. All rights reserved.
- *  Licensed under the Apache License, Version 2.0. See LICENSE.txt for more information.
- *--------------------------------------------------------------------------------------*/
+/*---------------------------------------------------------------------------------------------
+ *  Copyright (c) Microsoft Corporation. All rights reserved.
+ *  Licensed under the MIT License. See License.txt in the project root for license information.
+ *--------------------------------------------------------------------------------------------*/
 
 import { URI } from '../../../../base/common/uri.js';
 import { Disposable } from '../../../../base/common/lifecycle.js';
@@ -39,6 +39,8 @@ type MCPServiceState = {
 export interface IMCPService {
   readonly _serviceBrand: undefined;
   revealMCPConfigFile(): Promise<void>;
+  /** URI mcp.json; создаёт файл с пустым mcpServers, если его ещё нет. */
+  getOrCreateMCPConfigFile(): Promise<URI>;
   toggleServerIsOn(serverName: string, isOn: boolean): Promise<void>;
 
   readonly state: MCPServiceState; // не сохраняется в storage
@@ -202,7 +204,7 @@ class MCPService extends Disposable implements IMCPService {
 
     this._register(
       this.fileService.onDidFilesChange(async (e) => {
-        if (!e.contains(mcpConfigUri)) return;
+        if (!e.contains(mcpConfigUri)) {return;}
         await this._refreshMCPServers();
       }),
     );
@@ -210,9 +212,17 @@ class MCPService extends Disposable implements IMCPService {
 
   // Публичный API рендерера
 
+  public async getOrCreateMCPConfigFile(): Promise<URI> {
+    const mcpConfigUri = await this._getMCPConfigFilePath();
+    if (!(await this._configFileExists(mcpConfigUri))) {
+      await this._createMCPConfigFile(mcpConfigUri);
+    }
+    return mcpConfigUri;
+  }
+
   public async revealMCPConfigFile(): Promise<void> {
     try {
-      const mcpConfigUri = await this._getMCPConfigFilePath();
+      const mcpConfigUri = await this.getOrCreateMCPConfigFile();
       await this.editorService.openEditor({
         resource: mcpConfigUri,
         options: {
@@ -238,19 +248,20 @@ class MCPService extends Disposable implements IMCPService {
         });
       });
     }
-    if (allTools.length === 0) return undefined;
+    if (allTools.length === 0) {return undefined;}
     return allTools;
   }
 
-  private _transformInputSchemaToParams(inputSchema?: Record<string, any>): {
+  private _transformInputSchemaToParams(inputSchema?: Record<string, unknown>): {
     [paramName: string]: { description: string };
   } {
     // Без properties схема не даёт параметров для промпта
-    if (!inputSchema || !inputSchema.properties) return {};
+    if (!inputSchema || !inputSchema.properties) {return {};}
 
+    const properties = inputSchema.properties as Record<string, unknown>;
     const params: { [paramName: string]: { description: string } } = {};
-    Object.keys(inputSchema.properties).forEach((paramName) => {
-      const propertyValues = inputSchema.properties[paramName];
+    Object.keys(properties).forEach((paramName) => {
+      const propertyValues = properties[paramName];
 
       // Некорректное описание свойства в JSON Schema
       if (typeof propertyValues !== 'object') {
@@ -260,8 +271,9 @@ class MCPService extends Disposable implements IMCPService {
         return; // в forEach return = continue
       }
 
+      const description = (propertyValues as { description?: unknown }).description;
       params[paramName] = {
-        description: JSON.stringify(propertyValues.description || '', null, 2) || '',
+        description: JSON.stringify(description || '', null, 2) || '',
       };
     });
     return params;

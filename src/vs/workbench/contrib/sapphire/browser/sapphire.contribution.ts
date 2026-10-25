@@ -5,6 +5,9 @@
 
 // allow-any-unicode-comment-file
 
+// registerColor + theming participant для подсветки Accept/Reject diff
+import '../common/helpers/colors.js';
+
 // inline diff в редакторе
 import './editCodeService.js';
 
@@ -24,7 +27,7 @@ import './sapphireSettingsPane.js';
 // редактор .plan.md (Preview / Markdown)
 import './planEditor.js';
 
-// стили void и цвета хрома под Cursor
+// стили void и разовый переход профиля на тему Sapphire UI
 import './media/sapphire.css';
 import './sapphireCursorChrome.js';
 

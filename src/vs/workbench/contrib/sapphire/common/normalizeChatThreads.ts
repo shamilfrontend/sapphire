@@ -1,7 +1,7 @@
-/*--------------------------------------------------------------------------------------
- *  Copyright 2025 Glass Devtools, Inc. All rights reserved.
- *  Licensed under the Apache License, Version 2.0. See LICENSE.txt for more information.
- *--------------------------------------------------------------------------------------*/
+/*---------------------------------------------------------------------------------------------
+ *  Copyright (c) Microsoft Corporation. All rights reserved.
+ *  Licensed under the MIT License. See License.txt in the project root for license information.
+ *--------------------------------------------------------------------------------------------*/
 
 import { ChatMessage, StagingSelectionItem } from './chatThreadServiceTypes.js';
 
@@ -36,12 +36,10 @@ export const normalizeThreadsFromStorage = (
   const out: NormalizableChatThreads = {};
   for (const id of Object.keys(threads)) {
     const t = threads[id];
-    if (!t) continue;
+    if (!t) {continue;}
     const { filesWithUserChanges: _drop, ...rest } = t;
-    const prevState =
-      rest.state && typeof rest.state === 'object' ? { ...rest.state } : ({} as NonNullable<
-        NormalizableChatThread['state']
-      >);
+    const prevState: NonNullable<NormalizableChatThread['state']> =
+      rest.state && typeof rest.state === 'object' ? { ...rest.state } : {};
     const stagingSelections = Array.isArray(prevState.stagingSelections)
       ? prevState.stagingSelections
       : [];
@@ -49,6 +47,7 @@ export const normalizeThreadsFromStorage = (
       prevState.linksOfMessageIdx && typeof prevState.linksOfMessageIdx === 'object'
         ? prevState.linksOfMessageIdx
         : {};
+    const chatMode = prevState.chatMode === 'debug' ? 'agent' : prevState.chatMode;
     out[id] = {
       ...rest,
       id: typeof rest.id === 'string' ? rest.id : id,
@@ -59,6 +58,7 @@ export const normalizeThreadsFromStorage = (
           prevState.currCheckpointIdx === undefined ? null : prevState.currCheckpointIdx,
         stagingSelections,
         linksOfMessageIdx,
+        ...(chatMode === undefined ? {} : { chatMode }),
       },
     };
   }

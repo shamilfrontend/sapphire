@@ -1,7 +1,7 @@
-/*--------------------------------------------------------------------------------------
- *  Copyright 2025 Glass Devtools, Inc. All rights reserved.
- *  Licensed under the Apache License, Version 2.0. See LICENSE.txt for more information.
- *--------------------------------------------------------------------------------------*/
+/*---------------------------------------------------------------------------------------------
+ *  Copyright (c) Microsoft Corporation. All rights reserved.
+ *  Licensed under the MIT License. See License.txt in the project root for license information.
+ *--------------------------------------------------------------------------------------------*/
 
 import type { ChatThreads } from '../../../../browser/chatThreadTypes.js';
 
@@ -13,11 +13,11 @@ export const findPlanThreadId = (
   currentThreadId: string,
   planUriFsPath: string,
 ): string | undefined => {
-  if (!planUriFsPath) return undefined;
+  if (!planUriFsPath) {return undefined;}
   const current = allThreads[currentThreadId];
-  if (current?.state.activePlan?.planUriFsPath === planUriFsPath) return currentThreadId;
+  if (current?.state.activePlan?.planUriFsPath === planUriFsPath) {return currentThreadId;}
   for (const id of Object.keys(allThreads)) {
-    if (allThreads[id]?.state.activePlan?.planUriFsPath === planUriFsPath) return id;
+    if (allThreads[id]?.state.activePlan?.planUriFsPath === planUriFsPath) {return id;}
   }
   return undefined;
 };

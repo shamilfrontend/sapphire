@@ -1,7 +1,7 @@
-/*--------------------------------------------------------------------------------------
- *  Copyright 2025 Glass Devtools, Inc. All rights reserved.
- *  Licensed under the Apache License, Version 2.0. See LICENSE.txt for more information.
- *--------------------------------------------------------------------------------------*/
+/*---------------------------------------------------------------------------------------------
+ *  Copyright (c) Microsoft Corporation. All rights reserved.
+ *  Licensed under the MIT License. See License.txt in the project root for license information.
+ *--------------------------------------------------------------------------------------------*/
 
 import { VSBuffer } from '../../../../base/common/buffer.js';
 import { CancellationToken } from '../../../../base/common/cancellation.js';
@@ -18,6 +18,7 @@ import {
 } from '../../../../platform/instantiation/common/extensions.js';
 import {
   createDecorator,
+  IInstantiationService,
   ServicesAccessor,
 } from '../../../../platform/instantiation/common/instantiation.js';
 import { IWorkspaceContextService } from '../../../../platform/workspace/common/workspace.js';
@@ -32,6 +33,7 @@ import { IOfficeExtractService } from '../common/officeExtractService.js';
 import { IConvertToLLMMessageService } from './convertToLLMMessageService.js';
 import { ILLMMessageService } from '../common/sendLLMMessageService.js';
 import { ISapphireModelService } from '../common/sapphireModelService.js';
+import { hasActiveChatWork } from '../common/chatStreamGuards.js';
 import { ISapphireSettingsService } from '../common/sapphireSettingsService.js';
 import {
   analyzeCsv,
@@ -80,6 +82,17 @@ import { migrateLegacyWorkspaceDotDir } from './migrateWorkspaceDotDir.js';
 
 export const IProjectIndexService = createDecorator<IProjectIndexService>('projectIndexService');
 
+/**
+ * Тот же service id, что у IChatThreadService.
+ * Прямой import chatThreadService зациклил бы tools/heuristic → index → chat.
+ */
+const IChatThreadServiceForIndex = createDecorator<{
+  readonly streamState: Readonly<
+    Record<string, { isRunning?: string; interrupt?: unknown } | undefined>
+  >;
+  readonly onDidChangeStreamState: Event<{ threadId: string }>;
+}>('sapphireChatThreadService');
+
 export const SAPPHIRE_REINDEX_WORKSPACE_COMMAND_ID = 'sapphire.projectIndex.reindex';
 /** @deprecated keybindings may still use this; aliased to SAPPHIRE_REINDEX_WORKSPACE_COMMAND_ID */
 export const LEGACY_PPR_REINDEX_WORKSPACE_COMMAND_ID = 'ppr.projectIndex.reindex';
@@ -101,9 +114,9 @@ export interface IProjectIndexService {
   reindexFull(): Promise<void>;
   /** Пауза индексации (как cancel) — до resume или полного reindex. */
   pause(): void;
-  /** Продолжить локальную индексацию после паузы (без авто-LLM). */
+  /** Продолжить локальную индексацию после паузы. Purpose — когда чат idle. */
   resume(): Promise<void>;
-  /** Ручной запуск очереди LLM-описаний (purpose). */
+  /** Запуск очереди LLM-описаний (purpose); если чат занят — откладывается. */
   startPurposeEnrichment(): Promise<void>;
   getTour(): ProjectIndexTour | null;
   /** Один LLM-запрос → `.sapphire/index/tour.json`. */
@@ -146,6 +159,18 @@ class ProjectIndexService extends Disposable implements IProjectIndexService {
   private indexRunning = false;
   /** Схлопнуть события watcher, пришедшие во время активного прогона. */
   private pendingIncremental = false;
+  /** Purpose ждёт, пока в чате не останется активных запросов. */
+  private purposeDeferredForChat = false;
+  /** Тур ждёт idle чата (purpose уже не нужен или очередь пуста). */
+  private tourDeferredForChat = false;
+  /**
+   * Авто-purpose один раз после загрузки или после файлов, которым purpose ещё не считали.
+   * Иначе каждый пустой инкремент заново слал бы failed на шлюз.
+   */
+  private autoPurposeArmed = true;
+  private lastLlmPurposeEnabled = false;
+  private chatIdleListenerRegistered = false;
+  private chatIdleDebounce: ReturnType<typeof setTimeout> | undefined;
 
   constructor(
     @IWorkspaceContextService private readonly workspaceContextService: IWorkspaceContextService,
@@ -157,8 +182,11 @@ class ProjectIndexService extends Disposable implements IProjectIndexService {
     @ILLMMessageService private readonly llmMessageService: ILLMMessageService,
     @IConvertToLLMMessageService
     private readonly convertToLLMMessageService: IConvertToLLMMessageService,
+    @IInstantiationService private readonly instantiationService: IInstantiationService,
   ) {
     super();
+    this.lastLlmPurposeEnabled =
+      this.sapphireSettingsService.state.globalSettings.projectIndexLlmPurpose === true;
     this._register(
       this.workspaceContextService.onDidChangeWorkspaceFolders(() => {
         void this.reloadAndMaybeStart();
@@ -184,6 +212,24 @@ class ProjectIndexService extends Disposable implements IProjectIndexService {
       this.sapphireSettingsService.onDidChangeState(() => {
         if (this.sapphireSettingsService.state.globalSettings.projectIndexEnabled) {
           this.startIfNeeded();
+        }
+        const purposeEnabled =
+          this.sapphireSettingsService.state.globalSettings.projectIndexLlmPurpose === true;
+        const turnedOn = purposeEnabled && !this.lastLlmPurposeEnabled;
+        this.lastLlmPurposeEnabled = purposeEnabled;
+        if (!purposeEnabled) {
+          this.purposeDeferredForChat = false;
+          return;
+        }
+        if (
+          turnedOn &&
+          this.loaded &&
+          !this.indexRunning &&
+          !this.autoIndexPaused &&
+          !this.purposeRunning
+        ) {
+          this.autoPurposeArmed = true;
+          this.afterLocalIndex();
         }
       }),
     );
@@ -273,6 +319,7 @@ class ProjectIndexService extends Disposable implements IProjectIndexService {
       return;
     }
     if (!this.sapphireSettingsService.state.globalSettings.projectIndexLlmPurpose) {
+      this.lastLlmPurposeEnabled = true;
       await this.sapphireSettingsService.setGlobalSetting('projectIndexLlmPurpose', true);
     }
     this.autoIndexPaused = false;
@@ -281,6 +328,14 @@ class ProjectIndexService extends Disposable implements IProjectIndexService {
       await this.loadFromDisk();
     }
     this.enqueuePurposeJobs(false);
+  }
+
+  override dispose(): void {
+    if (this.chatIdleDebounce) {
+      clearTimeout(this.chatIdleDebounce);
+      this.chatIdleDebounce = undefined;
+    }
+    super.dispose();
   }
 
   async generateTour(): Promise<void> {
@@ -377,6 +432,12 @@ class ProjectIndexService extends Disposable implements IProjectIndexService {
     this.autoIndexPaused = true;
     this.runId++;
     this.purposeQueue = [];
+    this.purposeDeferredForChat = false;
+    this.tourDeferredForChat = false;
+    if (this.chatIdleDebounce) {
+      clearTimeout(this.chatIdleDebounce);
+      this.chatIdleDebounce = undefined;
+    }
     this.pendingIncremental = false;
     this.indexRunning = false;
     this.tourRunning = false;
@@ -936,7 +997,7 @@ class ProjectIndexService extends Disposable implements IProjectIndexService {
       const deletedPaths = [...this.files.keys()].filter((path) => !existingPaths.has(path));
 
       // Тихий no-op: idle @ 100%, без persist и без сдвига lastIncrementalAt.
-      // LLM purpose больше не стартует автоматически.
+      // Purpose/tour — если ещё есть работа и чат свободен.
       if (!full && toProcess.length === 0 && deletedPaths.length === 0) {
         this.setStatus({
           phase: 'idle',
@@ -944,6 +1005,7 @@ class ProjectIndexService extends Disposable implements IProjectIndexService {
           processed: 0,
           total: 0,
         });
+        this.afterLocalIndex();
         return;
       }
 
@@ -1002,6 +1064,8 @@ class ProjectIndexService extends Disposable implements IProjectIndexService {
         processed: toProcess.length,
         total: toProcess.length,
       });
+      this.autoTourScheduledForBatch = false;
+      this.afterLocalIndex();
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       this.setStatus({ phase: 'error', error: message, currentPath: null });
@@ -1173,6 +1237,9 @@ class ProjectIndexService extends Disposable implements IProjectIndexService {
       error,
       updatedAt: Date.now(),
     });
+    if (!isSecretPath(relPath) && !unchangedPurpose) {
+      this.autoPurposeArmed = true;
+    }
   }
 
   private async readTextCapped(uri: URI): Promise<string> {
@@ -1232,7 +1299,114 @@ class ProjectIndexService extends Disposable implements IProjectIndexService {
     }
   }
 
-  private enqueuePurposeJobs(forceAll: boolean): void {
+  /** После локального индекса: purpose при включённом флаге, иначе тур если нужен. */
+  private afterLocalIndex(): void {
+    if (this.cancelled || this.autoIndexPaused || this.purposeRunning || this.tourRunning) {
+      return;
+    }
+    if (!this.loaded) {
+      return;
+    }
+    if (this.sapphireSettingsService.state.globalSettings.projectIndexLlmPurpose) {
+      const resumeQueue = this.purposeDeferredForChat || this.purposeQueue.length > 0;
+      if (!this.autoPurposeArmed && !resumeQueue) {
+        this.scheduleAutoTour();
+        return;
+      }
+      this.autoPurposeArmed = false;
+      this.schedulePurposeWhenChatIdle();
+      return;
+    }
+    this.purposeDeferredForChat = false;
+    this.scheduleAutoTour();
+  }
+
+  private hasPendingPurposeFiles(): boolean {
+    for (const file of this.files.values()) {
+      if (file.llmStatus === 'pending' || file.llmStatus === 'failed') {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  private chatThreads(): {
+    readonly streamState: Readonly<
+      Record<string, { isRunning?: string; interrupt?: unknown } | undefined>
+    >;
+    readonly onDidChangeStreamState: Event<{ threadId: string }>;
+  } {
+    return this.instantiationService.invokeFunction((accessor) =>
+      accessor.get(IChatThreadServiceForIndex),
+    );
+  }
+
+  private chatIsBusy(): boolean {
+    return hasActiveChatWork(this.chatThreads().streamState);
+  }
+
+  private ensureChatIdleListener(): void {
+    if (this.chatIdleListenerRegistered) {
+      return;
+    }
+    this.chatIdleListenerRegistered = true;
+    this._register(
+      this.chatThreads().onDidChangeStreamState(() => {
+        if (!this.purposeDeferredForChat && !this.tourDeferredForChat && this.purposeQueue.length === 0) {
+          return;
+        }
+        if (this.chatIdleDebounce) {
+          clearTimeout(this.chatIdleDebounce);
+        }
+        this.chatIdleDebounce = setTimeout(() => {
+          this.chatIdleDebounce = undefined;
+          if (this.chatIsBusy()) {
+            return;
+          }
+          if (this.purposeDeferredForChat || this.purposeQueue.length > 0) {
+            this.schedulePurposeWhenChatIdle();
+            return;
+          }
+          if (this.tourDeferredForChat) {
+            this.scheduleAutoTour();
+          }
+        }, 400);
+      }),
+    );
+  }
+
+  /** Стартует или продолжает purpose, только когда в чате нет активных запросов. */
+  private schedulePurposeWhenChatIdle(): void {
+    if (this.cancelled || this.autoIndexPaused || this.purposeRunning) {
+      return;
+    }
+    if (!this.sapphireSettingsService.state.globalSettings.projectIndexLlmPurpose) {
+      this.purposeDeferredForChat = false;
+      this.scheduleAutoTour();
+      return;
+    }
+    if (this.purposeQueue.length === 0 && !this.hasPendingPurposeFiles()) {
+      this.purposeDeferredForChat = false;
+      this.scheduleAutoTour();
+      return;
+    }
+    if (this.chatIsBusy()) {
+      this.purposeDeferredForChat = true;
+      this.ensureChatIdleListener();
+      return;
+    }
+    this.purposeDeferredForChat = false;
+    if (this.purposeQueue.length === 0) {
+      this.fillPurposeQueue(false);
+    }
+    if (this.purposeQueue.length === 0) {
+      this.scheduleAutoTour();
+      return;
+    }
+    void this.drainPurposeQueue();
+  }
+
+  private fillPurposeQueue(forceAll: boolean): void {
     this.autoTourScheduledForBatch = false;
     this.purposeQueue = [];
     for (const f of this.files.values()) {
@@ -1246,7 +1420,11 @@ class ProjectIndexService extends Disposable implements IProjectIndexService {
         this.purposeQueue.push(f.path);
       }
     }
-    void this.drainPurposeQueue();
+  }
+
+  private enqueuePurposeJobs(forceAll: boolean): void {
+    this.fillPurposeQueue(forceAll);
+    this.schedulePurposeWhenChatIdle();
   }
 
   private scheduleAutoTour(): void {
@@ -1259,8 +1437,15 @@ class ProjectIndexService extends Disposable implements IProjectIndexService {
       : null;
     const missing = !this.tour || !this.tour.steps?.length;
     if (!missing && !isTourStale(this.tour, snapshot)) {
+      this.tourDeferredForChat = false;
       return;
     }
+    if (this.chatIsBusy()) {
+      this.tourDeferredForChat = true;
+      this.ensureChatIdleListener();
+      return;
+    }
+    this.tourDeferredForChat = false;
     this.autoTourScheduledForBatch = true;
     void this.generateTour();
   }
@@ -1271,12 +1456,19 @@ class ProjectIndexService extends Disposable implements IProjectIndexService {
     }
     const batchSize = this.purposeQueue.length;
     this.purposeRunning = true;
+    let pausedForChat = false;
     try {
       while (this.purposeQueue.length && PURPOSE_CONCURRENCY > 0) {
         if (this.cancelled) {
           break;
         }
         if (!this.sapphireSettingsService.state.globalSettings.projectIndexLlmPurpose) {
+          break;
+        }
+        if (this.chatIsBusy()) {
+          this.purposeDeferredForChat = true;
+          pausedForChat = true;
+          this.ensureChatIdleListener();
           break;
         }
         const path = this.purposeQueue.shift();
@@ -1304,7 +1496,14 @@ class ProjectIndexService extends Disposable implements IProjectIndexService {
       this.setStatus({ phase: 'idle', currentPath: null });
     } finally {
       this.purposeRunning = false;
-      if (batchSize > 0 && !this.cancelled) {
+      const purposeStillEnabled =
+        this.sapphireSettingsService.state.globalSettings.projectIndexLlmPurpose;
+      if (
+        batchSize > 0 &&
+        !this.cancelled &&
+        !pausedForChat &&
+        (this.purposeQueue.length === 0 || !purposeStillEnabled)
+      ) {
         this.scheduleAutoTour();
       }
       if (!this.indexRunning) {

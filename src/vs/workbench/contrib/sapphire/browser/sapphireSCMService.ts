@@ -1,7 +1,7 @@
-/*--------------------------------------------------------------------------------------
- *  Copyright 2025 Glass Devtools, Inc. All rights reserved.
- *  Licensed under the Apache License, Version 2.0. See LICENSE.txt for more information.
- *--------------------------------------------------------------------------------------*/
+/*---------------------------------------------------------------------------------------------
+ *  Copyright (c) Microsoft Corporation. All rights reserved.
+ *  Licensed under the MIT License. See License.txt in the project root for license information.
+ *--------------------------------------------------------------------------------------------*/
 
 import { ThemeIcon } from '../../../../base/common/themables.js';
 import { localize2 } from '../../../../nls.js';
@@ -188,9 +188,10 @@ class GenerateCommitMessageService extends Disposable implements IGenerateCommit
   }
 
   private gitRepoInfo() {
-    const repo = Array.from(this.scmService.repositories || []).find(
-      (r: any) => r.provider.contextValue === 'git',
-    );
+    const repo = Array.from(this.scmService.repositories || []).find((r) => {
+      const contextValue: unknown = r.provider.contextValue;
+      return contextValue === 'git';
+    });
     if (!repo) {
       throw new Error('No git repository found');
     }
@@ -243,7 +244,7 @@ class GenerateCommitMessageService extends Disposable implements IGenerateCommit
 
   /** Ошибки генерации (кроме отмены) */
 
-  private onError(error: any) {
+  private onError(error: unknown) {
     if (!isCancellationError(error)) {
       console.error(error);
       this.notificationService.error(

@@ -145,6 +145,9 @@ export interface ICompositeBarOptions {
 	readonly compact?: boolean;
 	readonly compositeSize: number;
 	readonly overflowActionSize: number;
+	// allow-any-unicode-next-line
+	/** Показывать меню дополнительных видов, даже если закреплённые иконки помещаются. */
+	readonly alwaysShowOverflow?: boolean;
 	readonly dndHandler: ICompositeDragAndDrop;
 	readonly activityHoverOptions: IActivityHoverOptions;
 	readonly preventLoopNavigation?: boolean;
@@ -566,8 +569,9 @@ export class CompositeBar extends Widget implements ICompositeBar {
 			size -= this.compositeSizeInBar.get(removedComposite!)!;
 		}
 
-		// We are overflowing, add the overflow size
-		if (totalComposites > compositesToShow.length) {
+		// We are overflowing, or the bar keeps an "additional views" menu, so reserve its slot.
+		const reserveOverflow = this.options.alwaysShowOverflow && this.model.visibleItems.some(item => !item.pinned);
+		if (totalComposites > compositesToShow.length || reserveOverflow) {
 			size += this.options.overflowActionSize;
 		}
 
@@ -578,8 +582,8 @@ export class CompositeBar extends Widget implements ICompositeBar {
 			size -= this.compositeSizeInBar.get(removedComposite!)!;
 		}
 
-		// Remove the overflow action if there are no overflows
-		if (totalComposites === compositesToShow.length && this.compositeOverflowAction.value) {
+		// Remove the overflow action if there are no overflows and no reserved menu.
+		if (totalComposites === compositesToShow.length && !reserveOverflow && this.compositeOverflowAction.value) {
 			compositeSwitcherBar.pull(compositeSwitcherBar.length() - 1);
 
 			this.compositeOverflowAction.value = undefined;
@@ -613,7 +617,7 @@ export class CompositeBar extends Widget implements ICompositeBar {
 		});
 
 		// Add overflow action as needed
-		if (totalComposites > compositesToShow.length && !this.compositeOverflowAction.value) {
+		if ((totalComposites > compositesToShow.length || reserveOverflow) && !this.compositeOverflowAction.value) {
 			this.compositeOverflowAction.value = this.instantiationService.createInstance(CompositeOverflowActivityAction, () => {
 				this.compositeOverflowActionViewItem.value?.showMenu();
 			});
@@ -648,6 +652,13 @@ export class CompositeBar extends Widget implements ICompositeBar {
 		}
 
 		overflowingIds = overflowingIds.filter(compositeId => !this.visibleComposites.includes(compositeId));
+		if (this.options.alwaysShowOverflow) {
+			for (const item of this.model.visibleItems) {
+				if (!item.pinned && !overflowingIds.includes(item.id) && !this.visibleComposites.includes(item.id)) {
+					overflowingIds.push(item.id);
+				}
+			}
+		}
 		return this.model.visibleItems.filter(c => overflowingIds.includes(c.id)).map(item => { return { id: item.id, name: this.getAction(item.id)?.label || item.name }; });
 	}
 

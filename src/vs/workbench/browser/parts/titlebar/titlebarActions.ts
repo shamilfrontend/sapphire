@@ -12,7 +12,8 @@ import { Action2, MenuId, registerAction2 } from '../../../../platform/actions/c
 import { ContextKeyExpr, ContextKeyExpression, IContextKeyService } from '../../../../platform/contextkey/common/contextkey.js';
 import { ACCOUNTS_ACTIVITY_ID, GLOBAL_ACTIVITY_ID } from '../../../common/activity.js';
 import { IAction } from '../../../../base/common/actions.js';
-import { IsMainWindowFullscreenContext, IsCompactTitleBarContext, TitleBarStyleContext, TitleBarVisibleContext } from '../../../common/contextkeys.js';
+import { Codicon } from '../../../../base/common/codicons.js';
+import { IsMainWindowFullscreenContext, IsCompactTitleBarContext, TitleBarStyleContext, TitleBarVisibleContext, IsAuxiliaryWindowContext } from '../../../common/contextkeys.js';
 import { CustomTitleBarVisibility, TitleBarSetting, TitlebarStyle } from '../../../../platform/window/common/window.js';
 import { NotificationsPosition, NotificationsSettings } from '../../../common/notifications.js';
 
@@ -283,11 +284,22 @@ export const ACCOUNTS_ACTIVITY_TILE_ACTION: IAction = {
 	run: function (): void { }
 };
 
-export const GLOBAL_ACTIVITY_TITLE_ACTION: IAction = {
-	id: GLOBAL_ACTIVITY_ID,
-	label: localize('manage', "Manage"),
-	tooltip: localize('manage', "Manage"),
-	class: undefined,
-	enabled: true,
-	run: function (): void { }
-};
+registerAction2(class extends Action2 {
+	constructor() {
+		super({
+			id: GLOBAL_ACTIVITY_ID,
+			title: localize2('manage', "Manage"),
+			icon: Codicon.settingsGear,
+			menu: {
+				id: MenuId.TitleBarLeft,
+				group: 'navigation',
+				order: 4,
+				when: IsAuxiliaryWindowContext.negate(),
+			}
+		});
+	}
+
+	// allow-any-unicode-next-line
+	// Меню открывает SimpleGlobalActivityActionViewItem в левой шапке.
+	override run(_accessor: ServicesAccessor): void { }
+});

@@ -6,6 +6,7 @@
 
 ### Changed
 
+- Placeholder композера чата всегда указывает офисные форматы (xlsx, docx, pptx, pdf); при `supportsVision` у выбранной модели добавляются картинки (png/jpeg/webp/gif)
 - Документация VitePress синхронизирована с кодом: полный каталог tools, MCP+Debug, privacy/web, Layout Agents, сжатый Roadmap
 
 ## [2026-10-05]

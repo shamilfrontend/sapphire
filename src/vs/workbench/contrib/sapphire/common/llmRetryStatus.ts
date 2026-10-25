@@ -1,7 +1,7 @@
-/*--------------------------------------------------------------------------------------
- *  Copyright 2025 Glass Devtools, Inc. All rights reserved.
- *  Licensed under the Apache License, Version 2.0. See LICENSE.txt for more information.
- *--------------------------------------------------------------------------------------*/
+/*---------------------------------------------------------------------------------------------
+ *  Copyright (c) Microsoft Corporation. All rights reserved.
+ *  Licensed under the MIT License. See License.txt in the project root for license information.
+ *--------------------------------------------------------------------------------------------*/
 
 /** Пауза между chunk стрима, после которой клиент abort (мс). */
 export const SAPPHIRE_LLM_STREAM_IDLE_MS = 90_000;
@@ -20,7 +20,7 @@ type GatewayRetryStatusParams = {
 /** Строка статуса при ожидании ретрая 408/429. */
 export function formatGatewayRetryStatusHint(opts: GatewayRetryStatusParams): string {
   const { attempt, maxAttempts, status, retryAfterSec } = opts;
-  const code = status === 408 || status === 429 ? String(status) : status != null ? String(status) : '';
+  const code = status === 408 || status === 429 ? String(status) : (status !== null && status !== undefined) ? String(status) : '';
   const head =
     status === 408
       ? `Провайдер занят (${code})`
@@ -30,7 +30,7 @@ export function formatGatewayRetryStatusHint(opts: GatewayRetryStatusParams): st
           ? `Ошибка провайдера (${code})`
           : 'Ошибка провайдера';
   const wait =
-    retryAfterSec != null && retryAfterSec > 0 ? ` через ~${retryAfterSec} с` : '';
+    (retryAfterSec !== null && retryAfterSec !== undefined) && retryAfterSec > 0 ? ` через ~${retryAfterSec} с` : '';
   return `${head}, повтор ${attempt}/${maxAttempts}${wait}…`;
 }
 

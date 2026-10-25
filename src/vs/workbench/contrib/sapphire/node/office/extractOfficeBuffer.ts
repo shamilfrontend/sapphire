@@ -1,7 +1,7 @@
-/*--------------------------------------------------------------------------------------
- *  Copyright 2025 Glass Devtools, Inc. All rights reserved.
- *  Licensed under the Apache License, Version 2.0. See LICENSE.txt for more information.
- *--------------------------------------------------------------------------------------*/
+/*---------------------------------------------------------------------------------------------
+ *  Copyright (c) Microsoft Corporation. All rights reserved.
+ *  Licensed under the MIT License. See License.txt in the project root for license information.
+ *--------------------------------------------------------------------------------------------*/
 
 import type { Entry, ZipFile } from 'yauzl';
 import { Readable } from 'stream';
@@ -65,7 +65,7 @@ function decodeXml(value: string): string {
       case '&quot;':
         return '"';
       case '&apos;':
-        return "'";
+        return '\'';
       default: {
         const hex = ent.startsWith('&#x');
         const num = parseInt(ent.slice(hex ? 3 : 2, -1), hex ? 16 : 10);

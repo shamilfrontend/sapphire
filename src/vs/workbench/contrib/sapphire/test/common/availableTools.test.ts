@@ -1,7 +1,7 @@
-/*--------------------------------------------------------------------------------------
- *  Copyright 2025 Glass Devtools, Inc. All rights reserved.
- *  Licensed under the Apache License, Version 2.0. See LICENSE.txt for more information.
- *--------------------------------------------------------------------------------------*/
+/*---------------------------------------------------------------------------------------------
+ *  Copyright (c) Microsoft Corporation. All rights reserved.
+ *  Licensed under the MIT License. See License.txt in the project root for license information.
+ *--------------------------------------------------------------------------------------------*/
 
 import assert from 'assert';
 import { ensureNoDisposablesAreLeakedInTestSuite } from '../../../../../base/test/common/utils.js';
@@ -33,14 +33,12 @@ const figmaAndGitlab: InternalToolInfo[] = [
 suite('availableTools', () => {
   ensureNoDisposablesAreLeakedInTestSuite();
 
-  test('agent and debug omit update_plan unless a plan is being built', () => {
+  test('agent omits update_plan unless a plan is being built', () => {
     assert.ok(!toolNames('agent').includes('update_plan'));
     assert.ok(!toolNames('agent').includes('create_plan'));
     assert.ok(!toolNames('agent').includes('enable_mcp_server'));
-    assert.ok(!toolNames('debug').includes('update_plan'));
     assert.ok(toolNames('agent', true).includes('update_plan'));
     assert.ok(!toolNames('agent', true).includes('create_plan'));
-    assert.ok(toolNames('debug', true).includes('update_plan'));
   });
 
   test('plan mode always includes create_plan and update_plan', () => {
@@ -63,10 +61,8 @@ suite('availableTools', () => {
     assert.ok(toolNames('agent').includes('rename_symbol'));
     assert.ok(!toolNames('plan').includes('rename_symbol'));
     assert.ok(toolNames('agent').includes('run_subagent'));
-    assert.ok(toolNames('debug').includes('run_subagent'));
     assert.ok(!toolNames('plan').includes('run_subagent'));
     assert.ok(toolNames('agent').includes('run_parallel_subagents'));
-    assert.ok(toolNames('debug').includes('run_parallel_subagents'));
     assert.ok(!toolNames('plan').includes('run_parallel_subagents'));
     assert.ok(toolNames('agent').includes('web_search'));
     assert.ok(toolNames('agent').includes('browse_url'));

@@ -1,7 +1,7 @@
-/*--------------------------------------------------------------------------------------
- *  Copyright 2025 Glass Devtools, Inc. All rights reserved.
- *  Licensed under the Apache License, Version 2.0. See LICENSE.txt for more information.
- *--------------------------------------------------------------------------------------*/
+/*---------------------------------------------------------------------------------------------
+ *  Copyright (c) Microsoft Corporation. All rights reserved.
+ *  Licensed under the MIT License. See License.txt in the project root for license information.
+ *--------------------------------------------------------------------------------------------*/
 
 /** @type {import('tailwindcss').Config} */
 module.exports = {
@@ -63,6 +63,7 @@ module.exports = {
         'void-fg-3': 'var(--void-fg-3)',
         // 'void-fg-4': 'var(--vscode-tab-inactiveForeground)',
         'void-fg-4': 'var(--void-fg-4)',
+        'void-user-msg-fg': 'var(--void-user-msg-fg)',
 
         'void-warning': 'var(--void-warning)',
         'void-success': 'var(--void-success)',

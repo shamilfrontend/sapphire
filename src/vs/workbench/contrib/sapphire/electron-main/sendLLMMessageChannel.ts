@@ -1,7 +1,7 @@
-/*--------------------------------------------------------------------------------------
- *  Copyright 2025 Glass Devtools, Inc. All rights reserved.
- *  Licensed under the Apache License, Version 2.0. See LICENSE.txt for more information.
- *--------------------------------------------------------------------------------------*/
+/*---------------------------------------------------------------------------------------------
+ *  Copyright (c) Microsoft Corporation. All rights reserved.
+ *  Licensed under the MIT License. See License.txt in the project root for license information.
+ *--------------------------------------------------------------------------------------------*/
 
 // Регистрация в app.ts.
 // Можно было бы оформить сервисом, но канал держит меньше файлов.
@@ -53,43 +53,44 @@ export class LLMMessageChannel implements IServerChannel {
   // Каналы не получают @IService через DI
   constructor() {}
 
-  listen(_: unknown, event: string): Event<any> {
-    if (event === 'onText_sendLLMMessage') return this.llmMessageEmitters.onText.event;
+  listen<T>(_: unknown, event: string): Event<T> {
+    if (event === 'onText_sendLLMMessage') {return this.llmMessageEmitters.onText.event as Event<T>;}
     if (event === 'onFinalMessage_sendLLMMessage')
-      return this.llmMessageEmitters.onFinalMessage.event;
-    if (event === 'onError_sendLLMMessage') return this.llmMessageEmitters.onError.event;
-    if (event === 'onRetry_sendLLMMessage') return this.llmMessageEmitters.onRetry.event;
-    if (event === 'onSuccess_list_gateway') return this.listEmitters.openaiCompat.success.event;
-    if (event === 'onError_list_gateway') return this.listEmitters.openaiCompat.error.event;
+      {return this.llmMessageEmitters.onFinalMessage.event as Event<T>;}
+    if (event === 'onError_sendLLMMessage') {return this.llmMessageEmitters.onError.event as Event<T>;}
+    if (event === 'onRetry_sendLLMMessage') {return this.llmMessageEmitters.onRetry.event as Event<T>;}
+    if (event === 'onSuccess_list_gateway') {return this.listEmitters.openaiCompat.success.event as Event<T>;}
+    if (event === 'onError_list_gateway') {return this.listEmitters.openaiCompat.error.event as Event<T>;}
     throw new Error(`Event not found: ${event}`);
   }
 
   // Команды с рендерера (см. sendLLMMessageService.ts)
-  async call(_: unknown, command: string, params: any): Promise<any> {
+  async call<T>(_: unknown, command: string, params?: unknown): Promise<T> {
     try {
       if (command === 'sendLLMMessage') {
-        this._callSendLLMMessage(params);
+        this._callSendLLMMessage(params as MainSendLLMMessageParams);
       } else if (command === 'abort') {
-        await this._callAbort(params);
+        await this._callAbort(params as MainLLMMessageAbortParams);
       } else if (command === 'gatewayModelList') {
-        this._callGatewayModelList(params);
+        this._callGatewayModelList(params as MainModelListParams<GatewayModelResponse>);
       } else {
         throw new Error(`Sapphire sendLLM: command "${command}" not recognized.`);
       }
     } catch (e) {
       console.log('llmMessageChannel: Call Error:', e);
     }
+    return undefined as T;
   }
 
   // Единственное место, где вызывается sendLLMMessage
   private _callSendLLMMessage(params: MainSendLLMMessageParams) {
     const { requestId } = params;
 
-    if (!(requestId in this._infoOfRunningRequest))
-      this._infoOfRunningRequest[requestId] = {
+    if (!Object.hasOwn(this._infoOfRunningRequest, requestId))
+      {this._infoOfRunningRequest[requestId] = {
         waitForSend: undefined,
         abortRef: { current: null },
-      };
+      };}
 
     const mainThreadParams: SendLLMMessageParams = {
       ...params,
@@ -114,7 +115,7 @@ export class LLMMessageChannel implements IServerChannel {
 
   private async _callAbort(params: MainLLMMessageAbortParams) {
     const { requestId } = params;
-    if (!(requestId in this._infoOfRunningRequest)) return;
+    if (!Object.hasOwn(this._infoOfRunningRequest, requestId)) {return;}
     const { waitForSend, abortRef } = this._infoOfRunningRequest[requestId];
     await waitForSend; // дождаться старта, чтобы abortRef был установлен
     abortRef?.current?.();

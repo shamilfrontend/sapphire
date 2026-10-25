@@ -1,9 +1,10 @@
-/*--------------------------------------------------------------------------------------
- *  Copyright 2025 Glass Devtools, Inc. All rights reserved.
- *  Licensed under the Apache License, Version 2.0. See LICENSE.txt for more information.
- *--------------------------------------------------------------------------------------*/
+/*---------------------------------------------------------------------------------------------
+ *  Copyright (c) Microsoft Corporation. All rights reserved.
+ *  Licensed under the MIT License. See License.txt in the project root for license information.
+ *--------------------------------------------------------------------------------------------*/
 
 import { IViewZone } from '../../../../editor/browser/editorBrowser.js';
+import { EditorOption } from '../../../../editor/common/config/editorOptions.js';
 import { IModelDecorationOptions, ITextModel } from '../../../../editor/common/model.js';
 import { RenderOptions } from '../../../../editor/browser/widget/diffEditor/components/diffEditorViewZones/renderLines.js';
 import { URI } from '../../../../base/common/uri.js';
@@ -61,7 +62,7 @@ export class EditCodeDiffZones {
     className: string,
     options?: Partial<IModelDecorationOptions>,
   ) => {
-    if (model === null) return;
+    if (model === null) {return;}
     const id = model.changeDecorations((accessor) =>
       accessor.addDecoration(
         {
@@ -80,7 +81,7 @@ export class EditCodeDiffZones {
     );
     const disposeHighlight = () => {
       if (id && !model.isDisposed())
-        model.changeDecorations((accessor) => accessor.removeDecoration(id));
+        {model.changeDecorations((accessor) => accessor.removeDecoration(id));}
     };
     return disposeHighlight;
   };
@@ -131,11 +132,11 @@ export class EditCodeDiffZones {
 
   _computeDiffsAndAddStylesToURI = (uri: URI) => {
     const { model } = this._s._sapphireModelService.getModel(uri);
-    if (model === null) return;
+    if (model === null) {return;}
 
     for (const diffareaid of this._s.diffAreasOfURI[uri.fsPath] || []) {
       const diffArea = this._s.diffAreaOfId[diffareaid];
-      if (diffArea.type !== 'DiffZone') continue;
+      if (diffArea.type !== 'DiffZone') {continue;}
 
       const newDiffAreaCode = this._s._getModelLineRange(
         model,
@@ -143,7 +144,7 @@ export class EditCodeDiffZones {
         diffArea.endLine,
       );
       const computedDiffs = findDiffs(diffArea.originalCode, newDiffAreaCode);
-      for (let computedDiff of computedDiffs) {
+      for (const computedDiff of computedDiffs) {
         if (computedDiff.type === 'deletion') {
           computedDiff.startLine += diffArea.startLine - 1;
         }
@@ -196,20 +197,20 @@ export class EditCodeDiffZones {
 
           textAreaRef: (r) => {
             textAreaRef.current = r;
-            if (!textAreaRef.current) return;
+            if (!textAreaRef.current) {return;}
 
-            if (!(ctrlKZone.diffareaid in this._s.mostRecentTextOfCtrlKZoneId)) {
+            if (!Object.hasOwn(this._s.mostRecentTextOfCtrlKZoneId, ctrlKZone.diffareaid)) {
               // Первый mount — автофокус (хак)
               this._s.mostRecentTextOfCtrlKZoneId[ctrlKZone.diffareaid] = undefined;
               setTimeout(() => textAreaRef.current?.focus(), 100);
             }
           },
           onChangeHeight(height) {
-            if (height === 0) return; // height=0 когда зона вне viewport — игнор
+            if (height === 0) {return;} // height=0 когда зона вне viewport — игнор
             viewZone.heightInPx = height;
             // layoutZone после смены высоты
             editor.changeViewZones((accessor) => {
-              if (zoneId) accessor.layoutZone(zoneId);
+              if (zoneId) {accessor.layoutZone(zoneId);}
             });
           },
           onChangeText: (text) => {
@@ -222,7 +223,7 @@ export class EditCodeDiffZones {
       // снятие view zone
       return () => {
         editor.changeViewZones((accessor) => {
-          if (zoneId) accessor.removeZone(zoneId);
+          if (zoneId) {accessor.removeZone(zoneId);}
         });
         disposeFn?.();
       };
@@ -246,7 +247,7 @@ export class EditCodeDiffZones {
   _refreshCtrlKInputs = async (uri: URI) => {
     for (const diffareaid of this._s.diffAreasOfURI[uri.fsPath] || []) {
       const diffArea = this._s.diffAreaOfId[diffareaid];
-      if (diffArea.type !== 'CtrlKZone') continue;
+      if (diffArea.type !== 'CtrlKZone') {continue;}
       if (!diffArea._mountInfo) {
         diffArea._mountInfo = this._addCtrlKZoneInput(diffArea);
         console.log('MOUNTED CTRLK', diffArea.diffareaid);
@@ -287,25 +288,29 @@ export class EditCodeDiffZones {
           const processedText = diff.originalCode.replace(/\t/g, ' '.repeat(renderOptions.tabSize));
 
           const lines = processedText.split('\n');
+          // .view-line в редакторе — position:absolute; в зоне все строки схлопываются в одну
+          // и рисуются поверх зелёного кода. Обычный поток + явная высота в px.
+          const lineHeight = editor.getOption(EditorOption.lineHeight);
+          const heightInPx = Math.max(lineHeight, lines.length * lineHeight);
 
           const linesContainer = document.createElement('div');
           linesContainer.style.fontFamily = renderOptions.fontInfo.fontFamily;
           linesContainer.style.fontSize = `${renderOptions.fontInfo.fontSize}px`;
-          linesContainer.style.lineHeight = `${renderOptions.fontInfo.lineHeight}px`;
-          // linesContainer.style.tabSize = `${tabWidth}px` // \t
+          linesContainer.style.lineHeight = `${lineHeight}px`;
           linesContainer.style.whiteSpace = 'pre';
           linesContainer.style.position = 'relative';
           linesContainer.style.width = '100%';
+          linesContainer.style.height = `${heightInPx}px`;
+          linesContainer.style.overflow = 'hidden';
 
           lines.forEach((line) => {
-            // строка удалённого фрагмента
             const lineDiv = document.createElement('div');
-            lineDiv.className = 'view-line';
+            lineDiv.className = 'sapphire-diff-line';
             lineDiv.style.whiteSpace = 'pre';
             lineDiv.style.position = 'relative';
-            lineDiv.style.height = `${renderOptions.fontInfo.lineHeight}px`;
+            lineDiv.style.height = `${lineHeight}px`;
+            lineDiv.style.lineHeight = `${lineHeight}px`;
 
-            // span как во view-line VS Code
             const span = document.createElement('span');
             span.textContent = line || '\u00a0';
             span.style.whiteSpace = 'pre';
@@ -316,32 +321,47 @@ export class EditCodeDiffZones {
           });
 
           domNode.appendChild(linesContainer);
+          domNode.style.overflow = 'hidden';
+          domNode.style.height = `${heightInPx}px`;
 
-          // heightInLines по числу строк
-          const heightInLines = lines.length;
           const minWidthInPx = Math.max(
             ...lines.map((line) =>
               Math.ceil(renderOptions.fontInfo.typicalFullwidthCharacterWidth * line.length),
             ),
           );
 
+          const marginDomNode = document.createElement('div');
+          marginDomNode.className = 'sapphire-redBG';
+
           const viewZone: IViewZone = {
-            afterLineNumber: diff.startLine - 1,
-            heightInLines,
+            afterLineNumber: Math.max(0, diff.startLine - 1),
+            heightInPx,
             minWidthInPx,
             domNode,
-            marginDomNode: document.createElement('div'),
+            marginDomNode,
             suppressMouseDown: false,
-            showInHiddenAreas: false,
+            showInHiddenAreas: true,
           };
 
           let zoneId: string | null = null;
           editor.changeViewZones((accessor) => {
             zoneId = accessor.addZone(viewZone);
           });
+          // высота строки могла быть ещё не измерена в момент addZone
+          const relayoutZone = () => {
+            if (!zoneId) {
+              return;
+            }
+            editor.changeViewZones((accessor) => {
+              if (zoneId) {
+                accessor.layoutZone(zoneId);
+              }
+            });
+          };
+          queueMicrotask(relayoutZone);
           return () =>
             editor.changeViewZones((accessor) => {
-              if (zoneId) accessor.removeZone(zoneId);
+              if (zoneId) {accessor.removeZone(zoneId);}
             });
         },
       });
@@ -410,7 +430,7 @@ export class EditCodeDiffZones {
   // удалить из diffOfId и diffArea._diffOfId
   _deleteDiff(diff: Diff) {
     const diffArea = this._s.diffAreaOfId[diff.diffareaid];
-    if (diffArea.type !== 'DiffZone') return;
+    if (diffArea.type !== 'DiffZone') {return;}
     delete diffArea._diffOfId[diff.diffid];
     delete this._s.diffOfId[diff.diffid];
   }
@@ -424,7 +444,7 @@ export class EditCodeDiffZones {
 
   _clearAllDiffAreaEffects(diffArea: DiffArea) {
     // очистить diff и стили DiffZone
-    if (diffArea.type === 'DiffZone') this._deleteDiffs(diffArea);
+    if (diffArea.type === 'DiffZone') {this._deleteDiffs(diffArea);}
 
     diffArea._removeStylesFns?.forEach((removeStyles) => removeStyles());
     diffArea._removeStylesFns?.clear();
@@ -432,7 +452,7 @@ export class EditCodeDiffZones {
 
   // все diff и стили на uri
   _clearAllEffects(uri: URI) {
-    for (let diffareaid of this._s.diffAreasOfURI[uri.fsPath] || []) {
+    for (const diffareaid of this._s.diffAreasOfURI[uri.fsPath] || []) {
       const diffArea = this._s.diffAreaOfId[diffareaid];
       this._clearAllDiffAreaEffects(diffArea);
     }
@@ -462,20 +482,21 @@ export class EditCodeDiffZones {
     const diffAreas = this._s.diffAreasOfURI[uri.fsPath];
     diffAreas?.forEach((diffareaid) => {
       const diffArea = this._s.diffAreaOfId[diffareaid];
-      if (diffArea.type === 'DiffZone') this._deleteDiffZone(diffArea);
-      else if (diffArea.type === 'CtrlKZone') this._deleteCtrlKZone(diffArea);
+      if (diffArea.type === 'DiffZone') {this._deleteDiffZone(diffArea);}
+      else if (diffArea.type === 'CtrlKZone') {this._deleteCtrlKZone(diffArea);}
     });
     this._s.diffAreasOfURI[uri.fsPath]?.clear();
   }
 
   _addOrInitializeDiffAreaAtURI = (uri: URI, diffareaid: string | number) => {
-    if (!(uri.fsPath in this._s.diffAreasOfURI)) this._s.diffAreasOfURI[uri.fsPath] = new Set();
+    if (!Object.hasOwn(this._s.diffAreasOfURI, uri.fsPath)) {this._s.diffAreasOfURI[uri.fsPath] = new Set();}
     this._s.diffAreasOfURI[uri.fsPath]?.add(diffareaid.toString());
   };
 
   _addDiffArea<T extends DiffArea>(diffArea: Omit<T, 'diffareaid'>): T {
     const diffareaid = this._s._diffareaidPool++;
-    const diffArea2 = { ...diffArea, diffareaid } as T;
+    const created = { ...diffArea, diffareaid };
+    const diffArea2 = created as T;
     this._addOrInitializeDiffAreaAtURI(diffArea._URI, diffareaid);
     this._s.diffAreaOfId[diffareaid] = diffArea2;
     return diffArea2;
@@ -493,7 +514,7 @@ export class EditCodeDiffZones {
     };
 
     const fn = this._addDiffStylesToURI(uri, newDiff);
-    if (fn) diffZone._removeStylesFns.add(fn);
+    if (fn) {diffZone._removeStylesFns.add(fn);}
 
     this._s.diffOfId[diffid] = newDiff;
     diffZone._diffOfId[diffid] = newDiff;
@@ -567,7 +588,7 @@ export class EditCodeDiffZones {
   _fireChangeDiffsIfNotStreaming(uri: URI) {
     for (const diffareaid of this._s.diffAreasOfURI[uri.fsPath] || []) {
       const diffArea = this._s.diffAreaOfId[diffareaid];
-      if (diffArea?.type !== 'DiffZone') continue;
+      if (diffArea?.type !== 'DiffZone') {continue;}
       // единственное место добавления Diff — событие для UI
       if (!diffArea._streamState.isStreaming) {
         this._s._onDidChangeDiffsInDiffZoneNotStreaming.fire({

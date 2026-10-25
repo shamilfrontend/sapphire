@@ -308,6 +308,31 @@
 	display: none;
 }
 
+/* Sidebar toggle, Customize Layout, and Manage. order 1 keeps them after the app icon and before the menubar. */
+.monaco-workbench .part.titlebar > .titlebar-container > .titlebar-left > .sidebar-toggle-toolbar {
+	display: flex;
+	align-items: center;
+	flex-shrink: 0;
+	height: 100%;
+	order: 1;
+	z-index: 2500;
+	-webkit-app-region: no-drag;
+	padding-left: 16px;
+	color: var(--vscode-titleBar-activeForeground);
+}
+
+.monaco-workbench .part.titlebar.inactive > .titlebar-container > .titlebar-left > .sidebar-toggle-toolbar {
+	color: var(--vscode-titleBar-inactiveForeground);
+}
+
+.monaco-workbench .part.titlebar > .titlebar-container > .titlebar-left > .sidebar-toggle-toolbar.has-no-actions {
+	display: none;
+}
+
+.monaco-workbench .part.titlebar > .titlebar-container > .titlebar-left > .sidebar-toggle-toolbar .codicon {
+	color: inherit;
+}
+
 /* Window Controls Container */
 .monaco-workbench .part.titlebar .window-controls-container {
 	display: flex;
@@ -574,6 +599,28 @@
 .monaco-workbench .part.titlebar > .titlebar-container > .titlebar-right > .action-toolbar-container .codicon-sapphire-settings-gear-filled::before {
 	-webkit-mask-image: url('data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2016%2016%22%20fill%3D%22black%22%3E%3Cpath%20fill-rule%3D%22evenodd%22%20d%3D%22M6.9525%201c-.25688%200-.47196.19465-.49752.45025L6.26924%203.30766C5.73079%203.50634%205.23593%203.79505%204.80293%204.15552L3.09994%203.38698C2.8658%203.28131%202.58969%203.37025%202.46126%203.59272L1.41375%205.40705C1.28531%205.62951%201.34634%205.9131%201.55492%206.06304L3.07142%207.15318C3.02446%207.42843%203%207.71136%203%208s.02445.57142.07138.84661L1.55492%209.93673C1.34634%2010.0867%201.28531%2010.3703%201.41375%2010.5927L2.46126%2012.4071C2.58969%2012.6295%202.86581%2012.7185%203.09994%2012.6128L4.80275%2011.8443C5.23579%2012.2049%205.73071%2012.4936%206.26924%2012.6923L6.45498%2014.5498C6.48054%2014.8054%206.69562%2015%206.9525%2015h2.09501c.25688%200%20.47197-.1946.49753-.4502L9.73077%2012.6923C10.2692%2012.4937%2010.7641%2012.205%2011.1971%2011.8445L12.9001%2012.613C13.1342%2012.7187%2013.4103%2012.6297%2013.5387%2012.4073L14.5863%2010.5929C14.7147%2010.3705%2014.6537%2010.0869%2014.4451%209.93696L12.9286%208.84682C12.9755%208.57157%2013%208.28864%2013%208c0-.28857-.0244-.57142-.0714-.84661L14.4451%206.06327C14.6537%205.91334%2014.7147%205.62975%2014.5863%205.40728L13.5387%203.59295C13.4103%203.37049%2013.1342%203.28155%2012.9001%203.38721L11.1973%204.15568C10.7642%203.79513%2010.2693%203.50637%209.73077%203.30766L9.54503%201.45025C9.51947%201.19465%209.30438%201%209.04751%201H6.9525zM8%206a2%202%200%201%200%200%204%202%202%200%200%200%200-4z%22%2F%3E%3C%2Fsvg%3E');
 	mask-image: url('data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2016%2016%22%20fill%3D%22black%22%3E%3Cpath%20fill-rule%3D%22evenodd%22%20d%3D%22M6.9525%201c-.25688%200-.47196.19465-.49752.45025L6.26924%203.30766C5.73079%203.50634%205.23593%203.79505%204.80293%204.15552L3.09994%203.38698C2.8658%203.28131%202.58969%203.37025%202.46126%203.59272L1.41375%205.40705C1.28531%205.62951%201.34634%205.9131%201.55492%206.06304L3.07142%207.15318C3.02446%207.42843%203%207.71136%203%208s.02445.57142.07138.84661L1.55492%209.93673C1.34634%2010.0867%201.28531%2010.3703%201.41375%2010.5927L2.46126%2012.4071C2.58969%2012.6295%202.86581%2012.7185%203.09994%2012.6128L4.80275%2011.8443C5.23579%2012.2049%205.73071%2012.4936%206.26924%2012.6923L6.45498%2014.5498C6.48054%2014.8054%206.69562%2015%206.9525%2015h2.09501c.25688%200%20.47197-.1946.49753-.4502L9.73077%2012.6923C10.2692%2012.4937%2010.7641%2012.205%2011.1971%2011.8445L12.9001%2012.613C13.1342%2012.7187%2013.4103%2012.6297%2013.5387%2012.4073L14.5863%2010.5929C14.7147%2010.3705%2014.6537%2010.0869%2014.4451%209.93696L12.9286%208.84682C12.9755%208.57157%2013%208.28864%2013%208c0-.28857-.0244-.57142-.0714-.84661L14.4451%206.06327C14.6537%205.91334%2014.7147%205.62975%2014.5863%205.40728L13.5387%203.59295C13.4103%203.37049%2013.1342%203.28155%2012.9001%203.38721L11.1973%204.15568C10.7642%203.79513%2010.2693%203.50637%209.73077%203.30766L9.54503%201.45025C9.51947%201.19465%209.30438%201%209.04751%201H6.9525zM8%206a2%202%200%201%200%200%204%202%202%200%200%200%200-4z%22%2F%3E%3C%2Fsvg%3E');
+}
+
+/* Sapphire: settings gear + "Sapphire" label in the titlebar (distinct from Activity Bar Manage). */
+.monaco-workbench .part.titlebar > .titlebar-container > .titlebar-right > .action-toolbar-container .monaco-action-bar .action-item .action-label.codicon-sapphire-settings-titlebar,
+.monaco-workbench .part.titlebar > .titlebar-container > .titlebar-right > .action-toolbar-container .monaco-action-bar .action-item .action-label.codicon-sapphire-settings-gear-filled {
+	width: auto !important;
+	height: 22px !important;
+	padding: 0 6px 0 4px !important;
+	display: inline-flex !important;
+	align-items: center;
+	gap: 4px;
+	line-height: 22px !important;
+}
+
+.monaco-workbench .part.titlebar > .titlebar-container > .titlebar-right > .action-toolbar-container .monaco-action-bar .action-item .action-label.codicon-sapphire-settings-titlebar::after,
+.monaco-workbench .part.titlebar > .titlebar-container > .titlebar-right > .action-toolbar-container .monaco-action-bar .action-item .action-label.codicon-sapphire-settings-gear-filled::after {
+	content: 'Sapphire';
+	font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+	font-size: 12px;
+	font-weight: 500;
+	line-height: 22px;
+	color: currentColor;
 }
 
 /* allow-any-unicode-next-line */

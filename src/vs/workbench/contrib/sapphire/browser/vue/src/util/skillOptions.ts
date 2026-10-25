@@ -1,10 +1,9 @@
-/*--------------------------------------------------------------------------------------
- *  Copyright 2025 Glass Devtools, Inc. All rights reserved.
- *  Licensed under the Apache License, Version 2.0. See LICENSE.txt for more information.
- *--------------------------------------------------------------------------------------*/
+/*---------------------------------------------------------------------------------------------
+ *  Copyright (c) Microsoft Corporation. All rights reserved.
+ *  Licensed under the MIT License. See License.txt in the project root for license information.
+ *--------------------------------------------------------------------------------------------*/
 
-import type { LucideIcon } from 'lucide-vue-next';
-import { Folder, Sparkles } from 'lucide-vue-next';
+import { Folder, Sparkles, type LucideIcon } from 'lucide-vue-next';
 import { UserSkill } from '../../../../common/sapphireSettingsTypes.js';
 
 type Icon = LucideIcon;
@@ -21,12 +20,12 @@ export type SkillMenuOption = {
 const isSubsequence = (text: string, pattern: string): boolean => {
   text = text.toLowerCase();
   pattern = pattern.toLowerCase();
-  if (pattern === '') return true;
-  if (text === '') return false;
+  if (pattern === '') {return true;}
+  if (text === '') {return false;}
   let ti = 0;
   for (let pi = 0; pi < pattern.length; pi++) {
-    while (ti < text.length && text[ti] !== pattern[pi]) ti++;
-    if (ti >= text.length) return false;
+    while (ti < text.length && text[ti] !== pattern[pi]) {ti++;}
+    if (ti >= text.length) {return false;}
     ti++;
   }
   return true;
@@ -39,7 +38,7 @@ export const getSkillOptionsAtPath = (
   optionText: string,
 ): SkillMenuOption[] => {
   const usable = skills.filter((s) => s.slug?.trim() && s.content?.trim());
-  if (!usable.length) return [];
+  if (!usable.length) {return [];}
 
   const byCategory = new Map<string, UserSkill[]>();
   for (const s of usable) {
@@ -98,7 +97,7 @@ export const getSkillOptionsAtPath = (
   return list
     .map(skillLeaf)
     .filter((o) => {
-      if (!filter) return true;
+      if (!filter) {return true;}
       return isSubsequence(o.fullName.toLowerCase(), filter) || o.fullName.toLowerCase().includes(filter);
     });
 };

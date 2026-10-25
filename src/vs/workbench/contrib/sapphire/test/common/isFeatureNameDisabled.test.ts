@@ -1,7 +1,7 @@
-/*--------------------------------------------------------------------------------------
- *  Copyright 2025 Glass Devtools, Inc. All rights reserved.
- *  Licensed under the Apache License, Version 2.0. See LICENSE.txt for more information.
- *--------------------------------------------------------------------------------------*/
+/*---------------------------------------------------------------------------------------------
+ *  Copyright (c) Microsoft Corporation. All rights reserved.
+ *  Licensed under the MIT License. See License.txt in the project root for license information.
+ *--------------------------------------------------------------------------------------------*/
 
 import assert from 'assert';
 import { ensureNoDisposablesAreLeakedInTestSuite } from '../../../../../base/test/common/utils.js';
@@ -30,40 +30,77 @@ const baseState = (): SapphireSettingsState =>
     globalSettings: structuredClone(defaultGlobalSettings),
     mcpUserStateOfName: {},
     _modelOptions: [],
-  }) as SapphireSettingsState;
+  }) satisfies SapphireSettingsState;
+
+type ProviderName = keyof SapphireSettingsState['settingsOfProvider'];
+
+/** Фикстура с models: undefined — isProviderNameDisabled трактует это как пустой список. */
+function withModels(
+  state: SapphireSettingsState,
+  providerName: ProviderName,
+  models: SapphireSettingsState['settingsOfProvider'][ProviderName]['models'] | undefined,
+): SapphireSettingsState {
+  return {
+    ...state,
+    settingsOfProvider: {
+      ...state.settingsOfProvider,
+      [providerName]: {
+        ...state.settingsOfProvider[providerName],
+        models,
+      },
+    } as unknown as SapphireSettingsState['settingsOfProvider'],
+  };
+}
+
+function withoutProvider(state: SapphireSettingsState, providerName: ProviderName): SapphireSettingsState {
+  const settingsOfProvider: Partial<SapphireSettingsState['settingsOfProvider']> = {
+    ...state.settingsOfProvider,
+  };
+  delete settingsOfProvider[providerName];
+  return {
+    ...state,
+    settingsOfProvider: settingsOfProvider as SapphireSettingsState['settingsOfProvider'],
+  };
+}
+
+function withChatModel(
+  state: SapphireSettingsState,
+  modelName: string,
+): SapphireSettingsState {
+  return {
+    ...state,
+    modelSelectionOfFeature: {
+      ...state.modelSelectionOfFeature,
+      Chat: { providerName: 'openAI', modelName },
+    },
+  };
+}
 
 suite('isFeatureNameDisabled / isProviderNameDisabled', () => {
   ensureNoDisposablesAreLeakedInTestSuite();
 
   test('isProviderNameDisabled tolerates missing models array', () => {
-    const state = baseState();
-    (state.settingsOfProvider.openAI as any).models = undefined;
+    const state = withModels(baseState(), 'openAI', undefined);
 
     assert.strictEqual(isProviderNameDisabled('openAI', state), 'providerNotAutoDetected');
   });
 
   test('isProviderNameDisabled tolerates missing provider entry', () => {
-    const state = baseState();
-    delete (state.settingsOfProvider as any).openAI;
+    const state = withoutProvider(baseState(), 'openAI');
 
     assert.strictEqual(isProviderNameDisabled('openAI', state), 'providerNotAutoDetected');
   });
 
   test('isFeatureNameDisabled with selected provider and undefined models does not throw', () => {
-    const state = baseState();
-    (state as any).modelSelectionOfFeature = {
-      ...state.modelSelectionOfFeature,
-      Chat: { providerName: 'openAI', modelName: 'gpt-4o' },
-    };
-    (state.settingsOfProvider.openAI as any).models = undefined;
+    const state = withModels(withChatModel(baseState(), 'gpt-4o'), 'openAI', undefined);
 
     assert.strictEqual(isFeatureNameDisabled('Chat', state), 'providerNotAutoDetected');
   });
 
   test('isFeatureNameDisabled scans providers with missing models without throw', () => {
-    const state = baseState();
+    let state = baseState();
     for (const name of providerNames) {
-      (state.settingsOfProvider[name] as any).models = undefined;
+      state = withModels(state, name, undefined);
     }
 
     assert.strictEqual(isFeatureNameDisabled('Chat', state), 'addProvider');
@@ -85,11 +122,8 @@ suite('isFeatureNameDisabled / isProviderNameDisabled', () => {
     state.settingsOfProvider.openAI.models = [
       { modelName: 'gpt-4o', type: 'default', isHidden: false },
     ];
-    (state as any).modelSelectionOfFeature = {
-      ...state.modelSelectionOfFeature,
-      Chat: { providerName: 'openAI', modelName: 'gpt-4o' },
-    };
+    const selected = withChatModel(state, 'gpt-4o');
 
-    assert.strictEqual(isFeatureNameDisabled('Chat', state), 'providerDisabled');
+    assert.strictEqual(isFeatureNameDisabled('Chat', selected), 'providerDisabled');
   });
 });

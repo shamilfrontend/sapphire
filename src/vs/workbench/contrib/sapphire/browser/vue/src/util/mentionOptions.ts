@@ -1,10 +1,9 @@
-/*--------------------------------------------------------------------------------------
- *  Copyright 2025 Glass Devtools, Inc. All rights reserved.
- *  Licensed under the Apache License, Version 2.0. See LICENSE.txt for more information.
- *--------------------------------------------------------------------------------------*/
+/*---------------------------------------------------------------------------------------------
+ *  Copyright (c) Microsoft Corporation. All rights reserved.
+ *  Licensed under the MIT License. See License.txt in the project root for license information.
+ *--------------------------------------------------------------------------------------------*/
 
-import type { LucideIcon } from 'lucide-vue-next';
-import { File, Folder } from 'lucide-vue-next';
+import { File, Folder, type LucideIcon } from 'lucide-vue-next';
 import { useAccessor } from './services.js';
 import { URI } from '../../../../../../../base/common/uri.js';
 import { getBasename, uniquePathLabels } from '../../../../common/pathLabels.js';
@@ -30,9 +29,9 @@ const isSubsequence = (text: string, pattern: string): boolean => {
   text = text.toLowerCase();
   pattern = pattern.toLowerCase();
 
-  if (pattern === '') return true;
-  if (text === '') return false;
-  if (pattern.length > text.length) return false;
+  if (pattern === '') {return true;}
+  if (text === '') {return false;}
+  if (pattern.length > text.length) {return false;}
 
   const seq: boolean[][] = Array(pattern.length + 1)
     .fill(null)
@@ -55,7 +54,7 @@ const isSubsequence = (text: string, pattern: string): boolean => {
 };
 
 const scoreSubsequence = (text: string, pattern: string): number => {
-  if (pattern === '') return 0;
+  if (pattern === '') {return 0;}
 
   text = text.toLowerCase();
   pattern = pattern.toLowerCase();
@@ -162,7 +161,7 @@ export const getOptionsAtPath = async (
         const directoryMap = new Map<string, URI>();
 
         for (const uri of searchResults) {
-          if (!uri) continue;
+          if (!uri) {continue;}
 
           // Разбиваем относительный путь на сегменты каталогов
           const relativePath = getRelativeWorkspacePath(accessor, uri);
@@ -250,7 +249,7 @@ export const getOptionsAtPath = async (
       (o) => o.fullName.toLowerCase() === pn.toLowerCase(),
     );
 
-    if (!selectedOption) return [];
+    if (!selectedOption) {return [];}
 
     // В path нет terminal leaf — nextOptions всегда есть до generateNextOptions
     nextOptionsAtPath = selectedOption.nextOptions!;

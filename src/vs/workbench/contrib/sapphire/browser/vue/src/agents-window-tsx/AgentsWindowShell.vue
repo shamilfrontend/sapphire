@@ -14,9 +14,11 @@ import SidebarChatTabs from '../sidebar-tsx/SidebarChatTabs.vue';
 import Settings from '../void-settings-tsx/Settings.vue';
 import { provideAgentsReview } from './AgentsReviewContext.js';
 import { provideAgentsPlan } from './AgentsPlanContext.js';
+import { registerAgentsFileOpener, type AgentsFileTarget } from './agentsFileBridge.js';
 import { reviewFilesLabel } from './agentsReview.js';
 import AgentsReviewPane from './AgentsReviewPane.vue';
 import AgentsPlanPane from './AgentsPlanPane.vue';
+import AgentsFilePane from './AgentsFilePane.vue';
 import AgentsThreadTree from './AgentsThreadTree.vue';
 
 const SIDEBAR_KEY = 'sapphire.agentsSidebarCollapsed';
@@ -69,17 +71,9 @@ const workspace = ref(workspaceLabel(workspaceService));
 let workspaceDisposable: { dispose: () => void } | undefined;
 const reviewOpen = ref(false);
 const planFsPath = ref<string | null>(null);
+const fileFsPath = ref<string | null>(null);
+const fileRange = ref<[number, number] | null>(null);
 const selectedFsPath = ref<string | null>(null);
-onMounted(() => {
-  const update = () => {
-    workspace.value = workspaceLabel(workspaceService);
-  };
-  update();
-  workspaceDisposable = workspaceService.onDidChangeWorkspaceFolders(update);
-});
-onUnmounted(() => {
-  workspaceDisposable?.dispose();
-});
 
 // Панель review закрыта, пока пользователь не откроет; сбрасываем устаревший выбор при пустом списке.
 watch(
@@ -96,8 +90,14 @@ watch(
   { immediate: true },
 );
 
+const closeFile = () => {
+  fileFsPath.value = null;
+  fileRange.value = null;
+};
+
 const openReview = (fsPath?: string) => {
   planFsPath.value = null;
+  closeFile();
   reviewOpen.value = true;
   if (fsPath) {
     selectedFsPath.value = fsPath;
@@ -108,8 +108,34 @@ const openReview = (fsPath?: string) => {
 
 const openPlan = (fsPath: string) => {
   reviewOpen.value = false;
+  closeFile();
   planFsPath.value = fsPath;
 };
+
+const openFile = (target: AgentsFileTarget) => {
+  const hasPending = sortedURIs.value.some((uri) => uri.fsPath === target.fsPath);
+  if (hasPending) {
+    openReview(target.fsPath);
+    return;
+  }
+  reviewOpen.value = false;
+  planFsPath.value = null;
+  fileFsPath.value = target.fsPath;
+  fileRange.value = target.range ?? null;
+};
+
+onMounted(() => {
+  registerAgentsFileOpener(openFile);
+  const update = () => {
+    workspace.value = workspaceLabel(workspaceService);
+  };
+  update();
+  workspaceDisposable = workspaceService.onDidChangeWorkspaceFolders(update);
+});
+onUnmounted(() => {
+  registerAgentsFileOpener(null);
+  workspaceDisposable?.dispose();
+});
 
 const openFolder = () => {
   void commandService.executeCommand(
@@ -154,11 +180,12 @@ const leaveSettings = () => {
   settingsActive.value = false;
 };
 
-const showPlan = computed(() => !!planFsPath.value && !settingsActive.value);
+const showFile = computed(() => !!fileFsPath.value);
+const showPlan = computed(() => !!planFsPath.value && !settingsActive.value && !showFile.value);
 const showReview = computed(
-  () => reviewOpen.value && sortedURIs.value.length > 0 && !showPlan.value,
+  () => reviewOpen.value && sortedURIs.value.length > 0 && !showPlan.value && !showFile.value,
 );
-const showSidePane = computed(() => showReview.value || showPlan.value);
+const showSidePane = computed(() => showReview.value || showPlan.value || showFile.value);
 
 const reviewApi = reactive({
   openReview,
@@ -367,6 +394,12 @@ const toggleReview = () => {
         v-if="showPlan && planFsPath"
         :fsPath="planFsPath"
         @close="planFsPath = null"
+      />
+      <AgentsFilePane
+        v-if="showFile && fileFsPath"
+        :fsPath="fileFsPath"
+        :range="fileRange"
+        @close="closeFile"
       />
     </div>
   </main>

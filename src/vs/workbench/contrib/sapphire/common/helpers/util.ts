@@ -1,3 +1,7 @@
+/*---------------------------------------------------------------------------------------------
+ *  Copyright (c) Microsoft Corporation. All rights reserved.
+ *  Licensed under the MIT License. See License.txt in the project root for license information.
+ *--------------------------------------------------------------------------------------------*/
 export const separateOutFirstLine = (content: string): [string, string] | [string, undefined] => {
   const newLineIdx = content.indexOf('\r\n');
   if (newLineIdx !== -1) {

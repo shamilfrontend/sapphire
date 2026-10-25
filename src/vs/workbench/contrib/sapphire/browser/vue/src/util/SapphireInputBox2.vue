@@ -47,6 +47,8 @@ const props = withDefaults(
     onFocus?: (e: FocusEvent) => void;
     onBlur?: (e: FocusEvent) => void;
     onPaste?: (e: ClipboardEvent) => void;
+    /** Чат: без плашки input.background, текст лежит на фоне карточки. */
+    transparent?: boolean;
   }>(),
   {
     multiline: false,
@@ -665,11 +667,10 @@ const onTextAreaPaste = (e: ClipboardEvent) => {
   emit('paste', e);
 };
 
-const textAreaStyle = {
-  // defaultInputBoxStyles VS Code
-  background: asCssVariable(inputBackground),
+const textAreaStyle = computed(() => ({
+  background: props.transparent ? 'transparent' : asCssVariable(inputBackground),
   color: asCssVariable(inputForeground),
-};
+}));
 </script>
 
 <template>

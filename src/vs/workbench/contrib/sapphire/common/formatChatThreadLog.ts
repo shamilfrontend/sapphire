@@ -1,9 +1,10 @@
-/*--------------------------------------------------------------------------------------
- *  Copyright 2025 Glass Devtools, Inc. All rights reserved.
- *  Licensed under the Apache License, Version 2.0. See LICENSE.txt for more information.
- *--------------------------------------------------------------------------------------*/
+/*---------------------------------------------------------------------------------------------
+ *  Copyright (c) Microsoft Corporation. All rights reserved.
+ *  Licensed under the MIT License. See License.txt in the project root for license information.
+ *--------------------------------------------------------------------------------------------*/
 
 import { ChatMessage } from './chatThreadServiceTypes.js';
+import { hasKey } from '../../../../base/common/types.js';
 
 /** Лимит символов на один tool result / blob в экспортируемом логе. */
 export const CHAT_THREAD_LOG_RESULT_CAP = 50_000;
@@ -68,7 +69,7 @@ const formatOneMessage = (message: ChatMessage): string => {
       if (message.mcpServerName) {
         parts.push(`MCP: ${message.mcpServerName}`);
       }
-      if ('params' in message && message.params != null) {
+      if (hasKey(message, { params: true }) && message.params !== null && message.params !== undefined) {
         parts.push('', '### Параметры', '', '```json', formatJsonish(message.params), '```');
       } else if (message.rawParams && Object.keys(message.rawParams).length > 0) {
         parts.push('', '### Параметры (raw)', '', '```json', formatJsonish(message.rawParams), '```');
@@ -94,7 +95,7 @@ const formatOneMessage = (message: ChatMessage): string => {
         '## Сжатие контекста',
         '',
         message.displayContent || message.content || '(пусто)',
-        message.compactedFromTokens != null || message.compactedToTokens != null
+        (message.compactedFromTokens !== null && message.compactedFromTokens !== undefined) || (message.compactedToTokens !== null && message.compactedToTokens !== undefined)
           ? `\n_(~${message.compactedFromTokens ?? '?'} → ~${message.compactedToTokens ?? '?'} ток.)_`
           : '',
       ]

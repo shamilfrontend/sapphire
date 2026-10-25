@@ -231,6 +231,7 @@ export class SidebarPart extends AbstractPaneCompositePart {
 			compositeSize: 0,
 			iconSize: 16,
 			overflowActionSize: 30,
+			alwaysShowOverflow: this.configurationService.getValue<ActivityBarPosition>(LayoutSettings.ACTIVITY_BAR_LOCATION) === ActivityBarPosition.TOP,
 			colors: theme => ({
 				activeBackgroundColor: theme.getColor(SIDE_BAR_BACKGROUND),
 				inactiveBackgroundColor: theme.getColor(SIDE_BAR_BACKGROUND),
@@ -277,7 +278,7 @@ export class SidebarPart extends AbstractPaneCompositePart {
 	protected getCompositeBarPosition(): CompositeBarPosition {
 		const activityBarPosition = this.configurationService.getValue<ActivityBarPosition>(LayoutSettings.ACTIVITY_BAR_LOCATION);
 		switch (activityBarPosition) {
-			case ActivityBarPosition.TOP: return CompositeBarPosition.TOP;
+			case ActivityBarPosition.TOP: return CompositeBarPosition.TITLE;
 			case ActivityBarPosition.BOTTOM: return CompositeBarPosition.BOTTOM;
 			case ActivityBarPosition.HIDDEN:
 			case ActivityBarPosition.DEFAULT: // noop

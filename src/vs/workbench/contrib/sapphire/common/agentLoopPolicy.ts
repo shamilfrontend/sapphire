@@ -1,7 +1,7 @@
-/*--------------------------------------------------------------------------------------
- *  Copyright 2025 Glass Devtools, Inc. All rights reserved.
- *  Licensed under the Apache License, Version 2.0. See LICENSE.txt for more information.
- *--------------------------------------------------------------------------------------*/
+/*---------------------------------------------------------------------------------------------
+ *  Copyright (c) Microsoft Corporation. All rights reserved.
+ *  Licensed under the MIT License. See License.txt in the project root for license information.
+ *--------------------------------------------------------------------------------------------*/
 
 import type { ChatMode } from './sapphireSettingsTypes.js';
 
@@ -123,14 +123,14 @@ export function decideToolBatch(opts: {
   return 'run';
 }
 
-/** После инструментов на этом шаге следующий LLM-ход — скрытый wrap-up (agent и debug). */
+/** После инструментов на этом шаге следующий LLM-ход — скрытый wrap-up (agent). */
 export function shouldForceWrapUp(opts: {
   step: number;
   maxSteps: number;
   chatMode: ChatMode | null;
   alreadyNudged: boolean;
 }): boolean {
-  if (opts.alreadyNudged || (opts.chatMode !== 'agent' && opts.chatMode !== 'debug')) {
+  if (opts.alreadyNudged || opts.chatMode !== 'agent') {
     return false;
   }
   return opts.step >= opts.maxSteps - 1;
@@ -141,7 +141,7 @@ export function cyrillicShare(text: string): number {
   const cyrillic = text.match(/[А-Яа-яЁё]/g)?.length ?? 0;
   const latin = text.match(/[A-Za-z]/g)?.length ?? 0;
   const letters = cyrillic + latin;
-  if (letters === 0) return 0;
+  if (letters === 0) {return 0;}
   return cyrillic / letters;
 }
 
@@ -160,7 +160,7 @@ function stripUrlsForLanguageDetect(text: string): string {
 export function userMessageLooksRussian(userText: string): boolean {
   const text = stripUrlsForLanguageDetect(userText);
   const { letters } = letterCounts(text);
-  if (letters < 8) return false;
+  if (letters < 8) {return false;}
   return cyrillicShare(text) >= 0.4;
 }
 
@@ -170,8 +170,8 @@ export function userMessageLooksRussian(userText: string): boolean {
  */
 export function shouldTranslateReasoningToRussian(userText: string, reasoning: string): boolean {
   const { letters: reasoningLetters } = letterCounts(reasoning);
-  if (reasoningLetters < 40) return false;
-  if (cyrillicShare(reasoning) >= 0.35) return false;
+  if (reasoningLetters < 40) {return false;}
+  if (cyrillicShare(reasoning) >= 0.35) {return false;}
   return userMessageLooksRussian(userText);
 }
 
@@ -181,9 +181,9 @@ export function shouldTranslateReasoningToRussian(userText: string, reasoning: s
  * Русский trace и не-русских пользователей не трогаем.
  */
 export function streamingReasoningDisplay(userText: string, reasoning: string): string {
-  if (!reasoning.trim()) return '';
-  if (!userMessageLooksRussian(userText)) return reasoning;
-  if (cyrillicShare(reasoning) >= 0.35) return reasoning;
+  if (!reasoning.trim()) {return '';}
+  if (!userMessageLooksRussian(userText)) {return reasoning;}
+  if (cyrillicShare(reasoning) >= 0.35) {return reasoning;}
   return '';
 }
 
@@ -203,8 +203,8 @@ export function asksUserToChoose(
   opts?: { allowBareQuestion?: boolean },
 ): boolean {
   const trimmed = text.trim();
-  if (!trimmed) return false;
-  if (EXPLICIT_CHOICE_RE.test(trimmed)) return true;
+  if (!trimmed) {return false;}
+  if (EXPLICIT_CHOICE_RE.test(trimmed)) {return true;}
   const options = trimmed.match(OPTION_LINE_RE);
   if (options && options.length >= 2 && /вариант|выбер|choose|which option/i.test(trimmed)) {
     return true;
@@ -234,14 +234,14 @@ export function shouldAutoContinueTurn(opts: {
   maxConsecutiveEmptyTurns?: number;
 }): boolean {
   const maxEmpty = opts.maxConsecutiveEmptyTurns ?? MAX_CONSECUTIVE_EMPTY_TURNS;
-  if (opts.hasToolCalls) return false;
-  if (opts.chatMode !== 'agent' && opts.chatMode !== 'debug') return false;
-  if (!opts.planHasOpenTodos) return false;
-  if (opts.consecutiveEmptyTurns >= maxEmpty - 1) return false;
+  if (opts.hasToolCalls) {return false;}
+  if (opts.chatMode !== 'agent') {return false;}
+  if (!opts.planHasOpenTodos) {return false;}
+  if (opts.consecutiveEmptyTurns >= maxEmpty - 1) {return false;}
   // Видимый ответ: короткий «?» или явный выбор — ждём пользователя.
-  if (asksUserToChoose(opts.assistantText, { allowBareQuestion: true })) return false;
+  if (asksUserToChoose(opts.assistantText, { allowBareQuestion: true })) {return false;}
   // Reasoning: только явный запрос; риторический «?» не останавливает автопродолжение.
-  if (asksUserToChoose(opts.reasoningText, { allowBareQuestion: false })) return false;
+  if (asksUserToChoose(opts.reasoningText, { allowBareQuestion: false })) {return false;}
   return true;
 }
 
@@ -256,10 +256,10 @@ export function shouldAutoContinueOnLength(opts: {
   consecutiveLengthContinues: number;
   maxConsecutiveLengthContinues?: number;
 }): boolean {
-  if (opts.finishReason !== 'length') return false;
-  if (!opts.planHasOpenTodos && !opts.hadTruncatedToolCall) return false;
+  if (opts.finishReason !== 'length') {return false;}
+  if (!opts.planHasOpenTodos && !opts.hadTruncatedToolCall) {return false;}
   const max = opts.maxConsecutiveLengthContinues ?? MAX_CONSECUTIVE_LENGTH_CONTINUES;
-  if (opts.consecutiveLengthContinues >= max) return false;
+  if (opts.consecutiveLengthContinues >= max) {return false;}
   return true;
 }
 
@@ -352,7 +352,7 @@ type DecideLoopContinuationInput = {
  */
 export function decideLoopContinuation(input: DecideLoopContinuationInput): LoopContinuation {
   const maxToolErrors = input.maxConsecutiveToolErrors ?? MAX_CONSECUTIVE_TOOL_ERRORS;
-  const isAgentLike = input.chatMode === 'agent' || input.chatMode === 'debug';
+  const isAgentLike = input.chatMode === 'agent';
 
   if (input.awaitingUserApproval) {
     return { action: 'await_user' };

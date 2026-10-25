@@ -14,7 +14,6 @@ import ChatMarkdownRender from '../markdown/ChatMarkdownRender.vue';
 import ErrorBoundary from './ErrorBoundary.vue';
 import UserMessageComponent from './UserMessageComponent.vue';
 import AssistantMessageComponent from './AssistantMessageComponent.vue';
-import Checkpoint from './Checkpoint.vue';
 import ProseWrapper from './ProseWrapper.vue';
 import { formatTokenCount } from './ChatComposer.js';
 import {
@@ -158,14 +157,5 @@ const asComponent = (wrapper: ResultWrapper<ToolName> | null) => wrapper as unkn
         />
       </ProseWrapper>
     </div>
-
-    <Checkpoint
-      v-else-if="chatMessage.role === 'checkpoint'"
-      :threadId="threadId"
-      :message="chatMessage"
-      :messageIdx="messageIdx"
-      :isCheckpointGhost="isCheckpointGhost"
-      :threadIsRunning="!!chatIsRunning"
-    />
   </ErrorBoundary>
 </template>

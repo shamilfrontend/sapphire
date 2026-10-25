@@ -62,12 +62,24 @@ npm run buildvue
 Для ежедневной разработки:
 
 ```bash
+npm run dev
+```
+
+Команда параллельно поднимает `watch` и `watchvue`, на холодном старте ждёт `out/main.js` и Vue-бандл, затем запускает приложение. Аргументы после `--` передаются в `scripts/code.sh` (на Windows — `scripts\code.bat`). Закрытие окна и Ctrl+C останавливают вотчеры.
+
+```bash
+npm run dev -- --user-data-dir ./.tmp/user-data --extensions-dir ./.tmp/extensions
+```
+
+Вручную:
+
+```bash
 npm run watch
 npm run watchvue
 ./scripts/code.sh
 ```
 
-`npm run compile` собирает клиент. Перед запуском нужен `npm run buildvue`: Vue-бандлы лежат в `browser/vue/out` и не входят в компиляцию TypeScript.
+`npm run compile` собирает клиент. Vue-бандлы лежат в `browser/vue/out` и не входят в компиляцию TypeScript: их собирает `watchvue` внутри `npm run dev`, либо отдельно `npm run buildvue`.
 
 #### Production (executable)
 

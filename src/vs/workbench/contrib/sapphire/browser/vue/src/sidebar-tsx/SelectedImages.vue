@@ -24,6 +24,14 @@ const props = defineProps<
 >();
 
 const lightboxImage = ref<ChatImageAttachment | null>(null);
+
+const onImageClick = (event: MouseEvent, img: ChatImageAttachment) => {
+  const target = event.target instanceof Element ? event.target : null;
+  // #region agent log
+  fetch('http://127.0.0.1:7714/ingest/0d7d40a3-f671-45c9-9179-7225f077dfe2',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'22bbe4'},body:JSON.stringify({sessionId:'22bbe4',hypothesisId:'A',location:'SelectedImages.vue:onImageClick',message:'image thumbnail click',data:{type:props.type,tag:target?.tagName??null,className:target?.className??null,defaultPrevented:event.defaultPrevented},timestamp:Date.now()})}).catch(()=>{});
+  // #endregion
+  lightboxImage.value = img;
+};
 </script>
 
 <template>
@@ -33,7 +41,8 @@ const lightboxImage = ref<ChatImageAttachment | null>(null);
         v-for="img in images"
         :key="img.id"
         class="relative group rounded-md overflow-hidden border border-void-border-3 bg-void-bg-2 cursor-pointer"
-        @click="lightboxImage = img"
+        data-sapphire-image="1"
+        @click="onImageClick($event, img)"
       >
         <img
           :src="chatImageToDataUrl(img)"

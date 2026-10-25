@@ -40,7 +40,7 @@ class SelectionHelperContribution
   // React
   private _rootHTML: HTMLElement;
 
-  private _rerender: (props?: any) => void = () => {};
+  private _rerender: (props?: Record<string, unknown>) => void = () => {};
 
   private _rerenderKey: number = 0;
 
@@ -75,7 +75,7 @@ class SelectionHelperContribution
         this._reactComponentDisposable.dispose();
       }
       const res = mountSapphireSelectionHelper(content, accessor);
-      if (!res) return;
+      if (!res) {return;}
 
       this._reactComponentDisposable = res;
       this._rerender = res.rerender;
@@ -197,7 +197,7 @@ class SelectionHelperContribution
       let targetWidth = 0;
       for (let i = targetLine; i <= targetLine + 1; i++) {
         // вне viewport — skip
-        if (!(i >= 1) || !(i <= numLinesModel)) continue;
+        if (!(i >= 1) || !(i <= numLinesModel)) {continue;}
 
         const content = model.getLineContent(i);
         const currWidth = getLengthOfTextPx({

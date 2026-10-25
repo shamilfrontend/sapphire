@@ -40,7 +40,7 @@ export enum ThemeSettings {
 }
 
 export namespace ThemeSettingDefaults {
-	export const COLOR_THEME_DARK = 'Dark 2026';
+	export const COLOR_THEME_DARK = 'Sapphire UI';
 	export const COLOR_THEME_LIGHT = 'Light 2026';
 	export const COLOR_THEME_HC_DARK = 'Default High Contrast';
 	export const COLOR_THEME_HC_LIGHT = 'Default High Contrast Light';
@@ -210,6 +210,60 @@ export const COLOR_THEME_DARK_INITIAL_COLORS = {
 	'welcomePage.progress.foreground': '#0078D4',
 	'welcomePage.tileBackground': '#2B2B2B',
 	'widget.border': '#313131'
+};
+
+/** First paint for Sapphire UI, before the theme JSON loads. */
+export const COLOR_THEME_SAPPHIRE_INITIAL_COLORS = {
+	...COLOR_THEME_DARK_INITIAL_COLORS,
+	'activityBar.activeBackground': '#181818',
+	'activityBar.activeBorder': '#007ACC',
+	'activityBarBadge.background': '#007ACC',
+	'breadcrumb.background': '#1E1E1E',
+	'button.background': '#007ACC',
+	'button.border': '#007ACC',
+	'button.foreground': '#FFFFFF',
+	'button.hoverBackground': '#1A8AD4',
+	'commandCenter.activeBackground': '#333333',
+	'commandCenter.activeBorder': '#3C3C3C',
+	'commandCenter.activeForeground': '#FFFFFF',
+	'commandCenter.background': '#2A2A2A',
+	'commandCenter.border': '#3C3C3C',
+	'commandCenter.foreground': '#CCCCCC',
+	'commandCenter.inactiveBorder': '#3C3C3C',
+	'commandCenter.inactiveForeground': '#9D9D9D',
+	'editor.background': '#1E1E1E',
+	'editorGroup.border': '#2B2B2B',
+	'editorGroup.emptyBackground': '#1E1E1E',
+	'editorGroupHeader.noTabsBackground': '#181818',
+	'editorGutter.background': '#1E1E1E',
+	'editorStickyScroll.background': '#1E1E1E',
+	'focusBorder': '#007ACC',
+	'panelTitle.activeBorder': '#007ACC',
+	'progressBar.background': '#007ACC',
+	'statusBar.background': '#007ACC',
+	'statusBar.border': '#00000000',
+	'statusBar.focusBorder': '#FFFFFF',
+	'statusBar.foreground': '#FFFFFF',
+	'statusBar.inactiveBackground': '#007ACC',
+	'statusBar.noFolderBackground': '#007ACC',
+	'statusBar.noFolderBorder': '#00000000',
+	'statusBar.noFolderForeground': '#FFFFFF',
+	'statusBarItem.activeBackground': '#FFFFFF2E',
+	'statusBarItem.focusBorder': '#FFFFFF',
+	'statusBarItem.hoverBackground': '#FFFFFF1F',
+	'statusBarItem.hoverForeground': '#FFFFFF',
+	'statusBarItem.remoteBackground': '#1688D0',
+	'statusBarItem.remoteForeground': '#FFFFFF',
+	'tab.activeBackground': '#1E1E1E',
+	'tab.activeBorder': '#1E1E1E',
+	'tab.activeBorderTop': '#007ACC',
+	'tab.hoverBackground': '#1E1E1E',
+	'tab.unfocusedActiveBackground': '#1E1E1E',
+	'tab.unfocusedInactiveBackground': '#181818',
+	'textLink.activeForeground': '#6CB6FF',
+	'textLink.foreground': '#4DAAFC',
+	'titleBar.inactiveBackground': '#181818',
+	'welcomePage.progress.foreground': '#007ACC',
 };
 
 export const COLOR_THEME_LIGHT_INITIAL_COLORS = {

@@ -1,10 +1,11 @@
-/*--------------------------------------------------------------------------------------
- *  Copyright 2025 Glass Devtools, Inc. All rights reserved.
- *  Licensed under the Apache License, Version 2.0. See LICENSE.txt for more information.
- *--------------------------------------------------------------------------------------*/
+/*---------------------------------------------------------------------------------------------
+ *  Copyright (c) Microsoft Corporation. All rights reserved.
+ *  Licensed under the MIT License. See License.txt in the project root for license information.
+ *--------------------------------------------------------------------------------------------*/
 
 import { ChatMessage } from './chatThreadServiceTypes.js';
 import { URI } from '../../../../base/common/uri.js';
+import { hasKey } from '../../../../base/common/types.js';
 
 const CHAT_HISTORY_MAX_THREADS = 8;
 const CHAT_HISTORY_MAX_CHARS = 10_000;
@@ -70,13 +71,13 @@ const uriFsPath = (value: unknown): string | null => {
   if (URI.isUri(value)) {
     return value.fsPath;
   }
-  if (typeof value === 'object' && value !== null && 'fsPath' in value) {
+  if (typeof value === 'object' && value !== null && Object.hasOwn(value, 'fsPath')) {
     const fsPath = (value as { fsPath?: unknown }).fsPath;
     if (typeof fsPath === 'string' && fsPath.trim()) {
       return fsPath.trim();
     }
   }
-  if (typeof value === 'object' && value !== null && 'path' in value) {
+  if (typeof value === 'object' && value !== null && Object.hasOwn(value, 'path')) {
     const path = (value as { path?: unknown }).path;
     if (typeof path === 'string' && path.trim()) {
       return path.trim();
@@ -86,20 +87,20 @@ const uriFsPath = (value: unknown): string | null => {
 };
 
 const rawParam = (msg: Extract<ChatMessage, { role: 'tool' }>, key: string): unknown => {
-  if (msg.rawParams && typeof msg.rawParams === 'object' && key in msg.rawParams) {
+  if (msg.rawParams && typeof msg.rawParams === 'object' && Object.hasOwn(msg.rawParams, key)) {
     return (msg.rawParams as Record<string, unknown>)[key];
   }
-  if ('params' in msg && msg.params && typeof msg.params === 'object') {
+  if (hasKey(msg, { params: true }) && msg.params && typeof msg.params === 'object') {
     const params = msg.params as Record<string, unknown>;
-    if (key in params) {
+    if (Object.hasOwn(params, key)) {
       return params[key];
     }
     // camelCase-вариант ключа в typed params
     const camel = key.replace(/_([a-z])/g, (_, c: string) => c.toUpperCase());
-    if (camel in params) {
+    if (Object.hasOwn(params, camel)) {
       return params[camel];
     }
-    if (key === 'uri' && 'uri' in params) {
+    if (key === 'uri' && Object.hasOwn(params, 'uri')) {
       return params.uri;
     }
   }

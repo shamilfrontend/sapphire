@@ -1,7 +1,7 @@
-/*--------------------------------------------------------------------------------------
- *  Copyright 2025 Glass Devtools, Inc. All rights reserved.
- *  Licensed under the Apache License, Version 2.0. See LICENSE.txt for more information.
- *--------------------------------------------------------------------------------------*/
+/*---------------------------------------------------------------------------------------------
+ *  Copyright (c) Microsoft Corporation. All rights reserved.
+ *  Licensed under the MIT License. See License.txt in the project root for license information.
+ *--------------------------------------------------------------------------------------------*/
 
 import { TrimableChatMessage } from './trimChatContext.js';
 
@@ -39,11 +39,11 @@ const paramValue = (rawParams: unknown, key: string): unknown => {
   if (!rec) {
     return undefined;
   }
-  if (key in rec) {
+  if (Object.hasOwn(rec, key)) {
     return rec[key];
   }
   const camel = key.replace(/_([a-z])/g, (_, c: string) => c.toUpperCase());
-  if (camel !== key && camel in rec) {
+  if (camel !== key && Object.hasOwn(rec, camel)) {
     return rec[camel];
   }
   return undefined;

@@ -105,7 +105,11 @@ watch(supportsVision, (vision) => {
   }
 });
 
-const onOpenEdit = () => {
+const onOpenEdit = (source: string, event?: MouseEvent) => {
+  const target = event?.target instanceof Element ? event.target : null;
+  // #region agent log
+  fetch('http://127.0.0.1:7714/ingest/0d7d40a3-f671-45c9-9179-7225f077dfe2',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'22bbe4'},body:JSON.stringify({sessionId:'22bbe4',hypothesisId:source==='pencil'?'B':'A',location:'UserMessageComponent.vue:onOpenEdit',message:'open edit',data:{source,mode:mode.value,tag:target?.tagName??null,className:typeof target?.className==='string'?target.className:null,fromImage:!!target?.closest?.('[data-sapphire-image]'),imageCount:props.chatMessage.images?.length??0},timestamp:Date.now()})}).catch(()=>{});
+  // #endregion
   const text = messagePlainText();
   const images = props.chatMessage.images ?? [];
   editText.value = text;
@@ -269,10 +273,15 @@ const onEditFileInput = async (e: Event) => {
 };
 const onEditSymbolClick = () => {
   if (mode.value === 'display') {
-    onOpenEdit();
+    onOpenEdit('pencil');
   } else if (mode.value === 'edit') {
     onCloseEdit();
   }
+};
+
+const onDisplayBubbleClick = (event: MouseEvent) => {
+  if (mode.value !== 'display') return;
+  onOpenEdit('bubble', event);
 };
 </script>
 
@@ -301,11 +310,11 @@ const onEditSymbolClick = () => {
               mode === 'edit'
                 ? ''
                 : mode === 'display'
-                  ? 'p-2.5 flex flex-col bg-void-bg-1-alt text-void-fg-1 overflow-x-auto cursor-pointer'
+                  ? 'p-2.5 flex flex-col bg-void-bg-1-alt overflow-x-auto cursor-pointer'
                   : ''
             }
         `"
-      @click="mode === 'display' ? onOpenEdit() : undefined"
+      @click="onDisplayBubbleClick"
     >
       <template v-if="mode === 'display'">
         <SelectedFiles type="past" :messageIdx="messageIdx" :selections="chatMessage.selections || []" />
@@ -314,7 +323,7 @@ const onEditSymbolClick = () => {
           type="past"
           :images="chatMessage.images!"
         />
-        <span class="px-0.5 select-text cursor-text">{{ chatMessage.displayContent }}</span>
+        <span class="px-0.5 select-text cursor-text text-void-user-msg-fg">{{ chatMessage.displayContent }}</span>
       </template>
       <div
         v-else-if="mode === 'edit'"

@@ -134,7 +134,9 @@ MenuRegistry.appendMenuItems([
 		item: {
 			group: 'navigation',
 			command: {
-				id: ToggleAuxiliaryBarAction.ID,
+				// allow-any-unicode-next-line
+				// sapphire.toggleChat — всегда контейнер Sapphire, не last-active Auxiliary Bar.
+				id: 'sapphire.toggleChat',
 				title: localize('toggleSecondarySideBar', "Toggle Secondary Side Bar"),
 				toggled: { condition: AuxiliaryBarVisibleContext, icon: auxiliaryBarOnIcon },
 				icon: auxiliaryBarOffIcon,
@@ -153,7 +155,7 @@ MenuRegistry.appendMenuItems([
 		item: {
 			group: 'navigation',
 			command: {
-				id: ToggleAuxiliaryBarAction.ID,
+				id: 'sapphire.toggleChat',
 				title: localize('toggleSecondarySideBar', "Toggle Secondary Side Bar"),
 				toggled: { condition: AuxiliaryBarVisibleContext, icon: auxiliaryBarOnIcon },
 				icon: auxiliaryBarOffIcon,

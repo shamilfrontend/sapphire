@@ -1,11 +1,9 @@
-/*--------------------------------------------------------------------------------------
- *  Copyright 2025 Glass Devtools, Inc. All rights reserved.
- *  Licensed under the Apache License, Version 2.0. See LICENSE.txt for more information.
- *--------------------------------------------------------------------------------------*/
+/*---------------------------------------------------------------------------------------------
+ *  Copyright (c) Microsoft Corporation. All rights reserved.
+ *  Licensed under the MIT License. See License.txt in the project root for license information.
+ *--------------------------------------------------------------------------------------------*/
 
-/* eslint-disable */
 import OpenAI, { APIError } from 'openai';
-/* eslint-enable */
 
 import {
   LLMChatMessage,
@@ -18,6 +16,7 @@ import {
   OnText,
   RawToolCallObj,
   RawToolParamsObj,
+  GatewayModelResponse,
 } from '../../common/sendLLMMessageTypes.js';
 import {
   ChatMode,
@@ -131,18 +130,18 @@ const SAPPHIRE_GATEWAY_MAX_RETRY_MS = 30_000;
 
 const getGatewayErrorHeader = (error: APIError, name: string): string | undefined => {
   const headers = error.headers;
-  if (!headers) return undefined;
+  if (!headers) {return undefined;}
   const lower = name.toLowerCase();
   const value = headers[lower] ?? headers[name];
-  return value == null || value === '' ? undefined : value;
+  return (value === null || value === undefined) || value === '' ? undefined : value;
 };
 
 /** Секунды из `Retry-After` (число или HTTP-date). */
 const getRetryAfterSeconds = (error: APIError): number | undefined => {
   const raw = getGatewayErrorHeader(error, 'retry-after');
-  if (!raw) return undefined;
+  if (!raw) {return undefined;}
   const asNumber = Number(raw);
-  if (!Number.isNaN(asNumber) && asNumber >= 0) return Math.ceil(asNumber);
+  if (!Number.isNaN(asNumber) && asNumber >= 0) {return Math.ceil(asNumber);}
   const asDate = Date.parse(raw);
   if (!Number.isNaN(asDate)) {
     const sec = Math.ceil((asDate - Date.now()) / 1000);
@@ -152,8 +151,8 @@ const getRetryAfterSeconds = (error: APIError): number | undefined => {
 };
 
 const isRetryableProviderError = (error: unknown): error is APIError => {
-  if (!(error instanceof OpenAI.APIError)) return false;
-  if (error instanceof OpenAI.APIUserAbortError) return false;
+  if (!(error instanceof OpenAI.APIError)) {return false;}
+  if (error instanceof OpenAI.APIUserAbortError) {return false;}
   return error.status === 408 || error.status === 429;
 };
 
@@ -205,14 +204,14 @@ const withProviderRetries = async <T>(
 
       const retryAfterSec = getRetryAfterSeconds(error);
       const baseMs =
-        retryAfterSec != null ? retryAfterSec * 1000 : SAPPHIRE_GATEWAY_DEFAULT_RETRY_MS * 2 ** attempt;
+        (retryAfterSec !== null && retryAfterSec !== undefined) ? retryAfterSec * 1000 : SAPPHIRE_GATEWAY_DEFAULT_RETRY_MS * 2 ** attempt;
       const delayMs = Math.min(Math.max(baseMs, 0), SAPPHIRE_GATEWAY_MAX_RETRY_MS);
       // attempt — номер неудачной попытки (0-based); следующая — (attempt+2) из max.
       opts?.onRetry?.({
         attempt: attempt + 2,
         maxAttempts: SAPPHIRE_GATEWAY_MAX_ATTEMPTS,
         status: error.status,
-        ...(retryAfterSec != null ? { retryAfterSec } : {}),
+        ...((retryAfterSec !== null && retryAfterSec !== undefined) ? { retryAfterSec } : {}),
       });
 
       await new Promise<void>((resolve, reject) => {
@@ -259,7 +258,7 @@ const createStreamIdleWatchdog = (opts: {
  * с текстом `"Connection error."` (а не в сырой `TypeError: fetch failed`).
  */
 const humanizeGatewayError = (providerName: ProviderName, error: unknown): string | null => {
-  if (!(error instanceof OpenAI.APIError)) return null;
+  if (!(error instanceof OpenAI.APIError)) {return null;}
 
   // Сеть / DNS / TLS / proxy — до HTTP-статуса дело не дошло.
   if (error instanceof OpenAI.APIConnectionError) {
@@ -272,10 +271,10 @@ const humanizeGatewayError = (providerName: ProviderName, error: unknown): strin
     return null; // abort и прочие пути обрабатывает вызывающий код
   }
 
-  if (error.status === 401) return invalidApiKeyMessage(providerName);
+  if (error.status === 401) {return invalidApiKeyMessage(providerName);}
   if (error.status === 408) {
     const retryAfterSec = getRetryAfterSeconds(error);
-    return retryAfterSec != null
+    return (retryAfterSec !== null && retryAfterSec !== undefined)
       ? `${LLM_ERROR_HINTS.queueTimeout} Повторите через ~${retryAfterSec} с.`
       : LLM_ERROR_HINTS.queueTimeout;
   }
@@ -283,8 +282,8 @@ const humanizeGatewayError = (providerName: ProviderName, error: unknown): strin
     const retryAfterSec = getRetryAfterSeconds(error);
     const rateLimitType = getGatewayErrorHeader(error, 'rate_limit_type');
     const extras: string[] = [];
-    if (retryAfterSec != null) extras.push(`повторите через ~${retryAfterSec} с`);
-    if (rateLimitType) extras.push(`тип лимита: ${rateLimitType}`);
+    if ((retryAfterSec !== null && retryAfterSec !== undefined)) {extras.push(`повторите через ~${retryAfterSec} с`);}
+    if (rateLimitType) {extras.push(`тип лимита: ${rateLimitType}`);}
     return extras.length > 0
       ? `${LLM_ERROR_HINTS.rateLimited} (${extras.join(', ')})`
       : LLM_ERROR_HINTS.rateLimited;
@@ -319,11 +318,11 @@ const llmUsageFromGateway = (
     | null
     | undefined,
 ): LLMUsage | undefined => {
-  if (!usage) return undefined;
+  if (!usage) {return undefined;}
   const prompt_tokens = usage.prompt_tokens ?? 0;
   const completion_tokens = usage.completion_tokens ?? 0;
   const total_tokens = usage.total_tokens ?? prompt_tokens + completion_tokens;
-  if (prompt_tokens === 0 && completion_tokens === 0 && total_tokens === 0) return undefined;
+  if (prompt_tokens === 0 && completion_tokens === 0 && total_tokens === 0) {return undefined;}
   return { prompt_tokens, completion_tokens, total_tokens };
 };
 
@@ -331,14 +330,14 @@ const gatewayErrorHaystack = (error: APIError): string =>
   `${error.message} ${JSON.stringify(error.error ?? '')}`.toLowerCase();
 
 const isStreamOptionsRejected = (error: unknown): boolean => {
-  if (!(error instanceof APIError) || error.status !== 400) return false;
+  if (!(error instanceof APIError) || error.status !== 400) {return false;}
   return gatewayErrorHaystack(error).includes('stream_options');
 };
 
 /** 400: шлюз/модель не поддерживает `stream: true` на /v1/completions. */
 const isStreamUnsupported = (error: unknown): boolean => {
-  if (!(error instanceof APIError) || error.status !== 400) return false;
-  if (isStreamOptionsRejected(error)) return false;
+  if (!(error instanceof APIError) || error.status !== 400) {return false;}
+  if (isStreamOptionsRejected(error)) {return false;}
   return gatewayErrorHaystack(error).includes('stream');
 };
 
@@ -409,12 +408,12 @@ const _sendGatewayFIM = async ({
 
   if (!supportsFIM) {
     if (modelName === modelName_)
-      onError({ message: `Model ${modelName} does not support FIM.`, fullError: null });
+      {onError({ message: `Model ${modelName} does not support FIM.`, fullError: null });}
     else
-      onError({
+      {onError({
         message: `Model ${modelName_} (${modelName}) does not support FIM.`,
         fullError: null,
-      });
+      });}
     return;
   }
 
@@ -472,7 +471,7 @@ const _sendGatewayFIM = async ({
       let lastUsage: LLMUsage | undefined;
       for await (const chunk of response) {
         const fromChunk = llmUsageFromGateway(chunk.usage);
-        if (fromChunk) lastUsage = fromChunk;
+        if (fromChunk) {lastUsage = fromChunk;}
         fullText += chunk.choices[0]?.text ?? '';
         onText({ fullText, fullReasoning: '' });
       }
@@ -483,7 +482,7 @@ const _sendGatewayFIM = async ({
       });
     })
     .catch((error) => {
-      if (error instanceof OpenAI.APIUserAbortError) return;
+      if (error instanceof OpenAI.APIUserAbortError) {return;}
       const humanized = humanizeGatewayError(providerName, error);
       const gatewayRetryExhausted =
         error instanceof OpenAI.APIError && (error.status === 408 || error.status === 429);
@@ -535,7 +534,7 @@ const gatewayTools = (
     allowedToolNames,
     disableAllTools,
   });
-  if (!allowedTools || allowedTools.length === 0) return null;
+  if (!allowedTools || allowedTools.length === 0) {return null;}
 
   const tools: OpenAI.Chat.Completions.ChatCompletionTool[] = [];
   for (const t in allowedTools ?? {}) {
@@ -557,8 +556,8 @@ const rawToolCallObjOfParamsStr = (
     return null;
   }
 
-  if (input === null) return null;
-  if (typeof input !== 'object') return null;
+  if (input === null) {return null;}
+  if (typeof input !== 'object') {return null;}
 
   const rawParams: RawToolParamsObj = input;
   return { id, name, rawParams, doneParams: Object.keys(rawParams), isDone: true };
@@ -621,7 +620,7 @@ const _sendGatewayChat = async ({
   const maxTokens =
     (reasoningInfo &&
     reasoningCapabilities &&
-    reasoningCapabilities.reasoningReservedOutputTokenSpace != null
+    (reasoningCapabilities.reasoningReservedOutputTokenSpace !== null && reasoningCapabilities.reasoningReservedOutputTokenSpace !== undefined)
       ? reasoningCapabilities.reasoningReservedOutputTokenSpace
       : reservedOutputTokenSpace) ?? 4_096;
 
@@ -632,7 +631,7 @@ const _sendGatewayChat = async ({
   });
   const options: OpenAI.Chat.Completions.ChatCompletionCreateParamsStreaming = {
     model: modelName,
-    messages: messages as any,
+    messages: messages as OpenAI.Chat.Completions.ChatCompletionMessageParam[],
     stream: true,
     ...nativeToolsObj,
     max_tokens: maxTokens,
@@ -651,7 +650,7 @@ const _sendGatewayChat = async ({
   const toolBuckets = new Map<number, { name: string; id: string; paramsStr: string }>();
 
   const toolCallsSoFarFromBuckets = (): RawToolCallObj[] | undefined => {
-    if (toolBuckets.size === 0) return undefined;
+    if (toolBuckets.size === 0) {return undefined;}
     return [...toolBuckets.entries()]
       .sort(([a], [b]) => a - b)
       .filter(([, b]) => !!b.name)
@@ -723,12 +722,12 @@ const _sendGatewayChat = async ({
       let lastUsage: LLMUsage | undefined;
       try {
         for await (const chunk of response) {
-          if (idleTimedOut) break;
+          if (idleTimedOut) {break;}
           idle.poke();
           const fromChunk = llmUsageFromGateway(chunk.usage);
-          if (fromChunk) lastUsage = fromChunk;
+          if (fromChunk) {lastUsage = fromChunk;}
           const finishReason = chunk.choices[0]?.finish_reason;
-          if (finishReason) lastFinishReason = finishReason;
+          if (finishReason) {lastFinishReason = finishReason;}
           const newText = chunk.choices[0]?.delta?.content ?? '';
           fullTextSoFar += newText;
 
@@ -777,8 +776,8 @@ const _sendGatewayChat = async ({
           .sort(([a], [b]) => a - b)
           .map(([, b]) => {
             const parsed = rawToolCallObjOfParamsStr(b.name, b.paramsStr, b.id);
-            if (parsed) return parsed;
-            if (b.name) truncatedToolNames.push(b.name);
+            if (parsed) {return parsed;}
+            if (b.name) {truncatedToolNames.push(b.name);}
             return null;
           })
           .filter((tc): tc is RawToolCallObj => tc !== null && !!tc.name);
@@ -794,7 +793,7 @@ const _sendGatewayChat = async ({
     })
     // Ошибки и .create(), и for-await внутри .then
     .catch((error) => {
-      if (error instanceof OpenAI.APIUserAbortError) return;
+      if (error instanceof OpenAI.APIUserAbortError) {return;}
       if (error instanceof LLMConnectTimeoutError) {
         onError({ message: LLM_ERROR_HINTS.connectTimeout, fullError: error });
         return;
@@ -806,8 +805,8 @@ const _sendGatewayChat = async ({
         onError({ message: humanized, fullError: error, gatewayRetryExhausted });
       } else {
         const status =
-          error instanceof OpenAI.APIError && error.status != null ? error.status : undefined;
-        const message = status != null ? `${error} (код ${status})` : `${error}`;
+          error instanceof OpenAI.APIError && (error.status !== null && error.status !== undefined) ? error.status : undefined;
+        const message = (status !== null && status !== undefined) ? `${error} (код ${status})` : `${error}`;
         onError({ message, fullError: error, gatewayRetryExhausted });
       }
     });
@@ -860,7 +859,7 @@ type CallFnOfProvider = {
   [providerName in ProviderName]: {
     sendChat: (params: SendChatParams_Internal) => Promise<void>;
     sendFIM: ((params: SendFIMParams_Internal) => void) | null;
-    list: ((params: ListParams_Internal<any>) => void) | null;
+    list: ((params: ModelListParams<GatewayModelResponse>) => void) | null;
   };
 };
 

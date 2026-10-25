@@ -177,6 +177,8 @@ export default defineConfig(
 			'**/scripts/**',
 			'**/script/**',
 			'**/build/**',
+			'src/vs/workbench/contrib/sapphire/browser/vue/build.js',
+			'src/vs/workbench/contrib/sapphire/browser/vue/prefixVueClasses.js',
 			'extensions/vscode-test-resolver/**',
 			'extensions/vscode-api-tests/**',
 			// These isolated CLI/askpass processes do not share the application's event loop.
@@ -1635,6 +1637,11 @@ export default defineConfig(
 					'when': 'hasNode',
 					'allow': [
 						'@github/copilot-sdk',
+						'@anthropic-ai/sdk',
+						'@google/generative-ai',
+						'openai',
+						'@modelcontextprotocol/sdk',
+						'@modelcontextprotocol/sdk/**',
 						'zod',
 						'@microsoft/dev-tunnels-contracts',
 						'@microsoft/dev-tunnels-management',
@@ -3100,4 +3107,16 @@ export default defineConfig(
 		rules: {
 			'local/code-no-new-javascript-files': 'error',
 		},
-	});
+	},
+	// allow-any-unicode-next-line
+	// Vue UI собирается tsup, а не AMD-загрузчиком workbench.
+	{
+		files: [
+			'src/vs/workbench/contrib/sapphire/browser/vue/**/*.{ts,tsx,js}',
+		],
+		rules: {
+			'local/code-import-patterns': 'off',
+			'local/code-amd-node-module': 'off',
+		},
+	},
+);

@@ -1,7 +1,7 @@
-/*--------------------------------------------------------------------------------------
- *  Copyright 2025 Glass Devtools, Inc. All rights reserved.
- *  Licensed under the Apache License, Version 2.0. See LICENSE.txt for more information.
- *--------------------------------------------------------------------------------------*/
+/*---------------------------------------------------------------------------------------------
+ *  Copyright (c) Microsoft Corporation. All rights reserved.
+ *  Licensed under the MIT License. See License.txt in the project root for license information.
+ *--------------------------------------------------------------------------------------------*/
 
 import { KeyCode, KeyMod } from '../../../../base/common/keyCodes.js';
 import { Action2, registerAction2 } from '../../../../platform/actions/common/actions.js';
@@ -49,13 +49,13 @@ registerAction2(
       const editorService = accessor.get(ICodeEditorService);
 
       const editor = editorService.getActiveCodeEditor();
-      if (!editor) return;
+      if (!editor) {return;}
       const model = editor.getModel();
-      if (!model) return;
+      if (!model) {return;}
       const selection = roundRangeToLines(editor.getSelection(), {
         emptySelectionBehavior: 'line',
       });
-      if (!selection) return;
+      if (!selection) {return;}
 
       const { startLineNumber: startLine, endLineNumber: endLine } = selection;
 

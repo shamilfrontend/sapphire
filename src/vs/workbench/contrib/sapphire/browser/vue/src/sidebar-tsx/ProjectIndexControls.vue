@@ -230,9 +230,7 @@ const tourRunning = computed(() => !!status.value.tourRunning);
 const tour = computed(() => status.value.tour);
 const tourStale = computed(() => !!status.value.tourStale);
 const tourError = computed(() => status.value.tourError);
-const showTourCta = computed(
-  () => status.value.isIndexed && !localIndexing.value && !tourRunning.value,
-);
+const showTourStatus = computed(() => tourRunning.value || !!tour.value || !!tourError.value);
 
 function formatTourDate(ts: number | undefined): string {
   if (!ts) {
@@ -243,10 +241,6 @@ function formatTourDate(ts: number | undefined): string {
   } catch {
     return '—';
   }
-}
-
-async function onGenerateTour() {
-  await projectIndexService.generateTour();
 }
 
 const iconBtnClass =
@@ -459,8 +453,8 @@ function onPlayPause() {
         class="mb-3 rounded-md border border-void-border-2 bg-void-bg-2 px-2.5 py-2"
       >
         <div class="text-[11px] text-void-fg-2 leading-snug mb-1.5">
-          Можно улучшить поиск: запустить LLM-описания ({{ purposeWorkCount }} файлов). Токены
-          списываются только после запуска.
+          LLM-описания ({{ purposeWorkCount }} файлов). Если настройка включена, очередь стартует
+          сама, когда в чате нет активных запросов.
         </div>
         <button
           type="button"
@@ -472,29 +466,17 @@ function onPlayPause() {
       </div>
 
       <div
-        v-if="showTourCta || tourRunning"
+        v-if="showTourStatus"
         class="mb-3 rounded-md border border-void-border-2 bg-void-bg-2 px-2.5 py-2"
       >
-        <div class="text-[11px] text-void-fg-2 leading-snug mb-1.5">
+        <div class="text-[11px] text-void-fg-2 leading-snug">
           <template v-if="tourRunning">Генерация тура онбординга…</template>
           <template v-else-if="tour">
             Тур: {{ tour.steps?.length ?? 0 }} шагов · {{ formatTourDate(tour.generatedAt) }}
-            <span v-if="tourStale" class="text-amber-400"> · устарел — пересоздайте</span>
-          </template>
-          <template v-else>
-            Тур онбординга: один LLM-запрос по графу индекса. Агент читает его через
-            get_project_tour.
+            <span v-if="tourStale" class="text-amber-400"> · устарел — обновится с индексом</span>
           </template>
         </div>
-        <div v-if="tourError" class="text-[11px] text-red-400 mb-1.5">{{ tourError }}</div>
-        <button
-          v-if="!tourRunning"
-          type="button"
-          class="text-xs bg-void-bg-1 text-void-fg-1 rounded px-2 py-1.5 text-left font-medium border border-void-border-1 hover:brightness-110 w-full"
-          @click="void onGenerateTour()"
-        >
-          {{ tour ? 'Пересоздать тур онбординга' : 'Сгенерировать тур онбординга' }}
-        </button>
+        <div v-if="tourError" class="text-[11px] text-red-400 mt-1.5">{{ tourError }}</div>
       </div>
 
       <div class="grid grid-cols-2 gap-x-2 gap-y-1 text-[11px] text-void-fg-3 mb-3">

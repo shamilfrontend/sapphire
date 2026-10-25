@@ -1,7 +1,7 @@
-/*--------------------------------------------------------------------------------------
- *  Copyright 2025 Glass Devtools, Inc. All rights reserved.
- *  Licensed under the Apache License, Version 2.0. See LICENSE.txt for more information.
- *--------------------------------------------------------------------------------------*/
+/*---------------------------------------------------------------------------------------------
+ *  Copyright (c) Microsoft Corporation. All rights reserved.
+ *  Licensed under the MIT License. See License.txt in the project root for license information.
+ *--------------------------------------------------------------------------------------------*/
 
 import { ChatThreadCollaboratorHost, ThreadType } from './chatThreadTypes.js';
 import { URI } from '../../../../base/common/uri.js';
@@ -25,7 +25,7 @@ export class ChatThreadCheckpoints {
   _editMessageInThread(threadId: string, messageIdx: number, newMessage: ChatMessage) {
     const { allThreads } = this._s.state;
     const oldThread = allThreads[threadId];
-    if (!oldThread) return; // не должно случаться
+    if (!oldThread) {return;} // не должно случаться
     // обновляем state и persist
     const newThreads = {
       ...allThreads,
@@ -57,7 +57,7 @@ export class ChatThreadCheckpoints {
     }
 
     const userModifiedVoidFileSnapshot =
-      fsPath in checkpointMessage.userModifications.sapphireFileSnapshotOfURI
+      Object.hasOwn(checkpointMessage.userModifications.sapphireFileSnapshotOfURI, fsPath)
         ? (checkpointMessage.userModifications.sapphireFileSnapshotOfURI[fsPath] ?? null)
         : null;
     return { sapphireFileSnapshot: userModifiedVoidFileSnapshot ?? sapphireFileSnapshot };
@@ -65,7 +65,7 @@ export class ChatThreadCheckpoints {
 
   _computeNewCheckpointInfo({ threadId }: { threadId: string }) {
     const thread = this._s.state.allThreads[threadId];
-    if (!thread) return;
+    if (!thread) {return;}
 
     const lastCheckpointIdx = findLastIdx(thread.messages, (m) => m.role === 'checkpoint') ?? -1;
 
@@ -74,22 +74,22 @@ export class ChatThreadCheckpoints {
     // снимок для всех URI из истории checkpoint до последнего
     const { lastIdxOfURI } =
       lastCheckpointIdx === -1
-        ? { lastIdxOfURI: {} as { [fsPath: string]: number } }
+        ? { lastIdxOfURI: {} }
         : (this._getCheckpointsBetween({ threadId, loIdx: 0, hiIdx: lastCheckpointIdx }) ?? {});
     for (const fsPath in lastIdxOfURI ?? {}) {
       const { model } = this._s._sapphireModelService.getModelFromFsPath(fsPath);
-      if (!model) continue;
+      if (!model) {continue;}
       const checkpoint2 = thread.messages[lastIdxOfURI[fsPath]] || null;
-      if (!checkpoint2) continue;
-      if (checkpoint2.role !== 'checkpoint') continue;
+      if (!checkpoint2) {continue;}
+      if (checkpoint2.role !== 'checkpoint') {continue;}
       const res = this._getCheckpointInfo(checkpoint2, fsPath, {
         includeUserModifiedChanges: false,
       });
-      if (!res) continue;
+      if (!res) {continue;}
       const { sapphireFileSnapshot: oldVoidFileSnapshot } = res;
 
       const sapphireFileSnapshot = this._s._editCodeService.getVoidFileSnapshot(URI.file(fsPath));
-      if (oldVoidFileSnapshot?.entireFileCode === sapphireFileSnapshot.entireFileCode) continue;
+      if (oldVoidFileSnapshot?.entireFileCode === sapphireFileSnapshot.entireFileCode) {continue;}
       sapphireFileSnapshotOfURI[fsPath] = sapphireFileSnapshot;
     }
 
@@ -97,12 +97,12 @@ export class ChatThreadCheckpoints {
     const beforeEntries: [string, string][] = [];
     for (const fsPath of this._s._userModifiedFilesToCheckInCheckpoints.keys()) {
       const before = this._s._userModifiedFilesToCheckInCheckpoints.get(fsPath);
-      if (typeof before !== 'string') continue;
+      if (typeof before !== 'string') {continue;}
       beforeEntries.push([fsPath, before]);
     }
     const baselines = manualEditBaselinesForCheckpoint(beforeEntries, lastIdxOfURI ?? {});
     for (const fsPath in baselines) {
-      if (fsPath in sapphireFileSnapshotOfURI) continue;
+      if (Object.hasOwn(sapphireFileSnapshotOfURI, fsPath)) {continue;}
       sapphireFileSnapshotOfURI[fsPath] = baselines[fsPath];
     }
 
@@ -123,9 +123,9 @@ export class ChatThreadCheckpoints {
   // вызывать сразу после правки файла tool/LLM
   _addToolEditCheckpoint({ threadId, uri }: { threadId: string; uri: URI }) {
     const thread = this._s.state.allThreads[threadId];
-    if (!thread) return;
+    if (!thread) {return;}
     const { model } = this._s._sapphireModelService.getModel(uri);
-    if (!model) return; // не должно случаться
+    if (!model) {return;} // не должно случаться
     const diffAreasSnapshot = this._s._editCodeService.getVoidFileSnapshot(uri);
     this._addCheckpoint(threadId, {
       role: 'checkpoint',
@@ -143,7 +143,7 @@ export class ChatThreadCheckpoints {
     messageIdx: number;
   }): [CheckpointEntry, number] | undefined => {
     const thread = this._s.state.allThreads[threadId];
-    if (!thread) return undefined;
+    if (!thread) {return undefined;}
     for (let i = messageIdx; i >= 0; i--) {
       const message = thread.messages[i];
       if (message.role === 'checkpoint') {
@@ -163,11 +163,11 @@ export class ChatThreadCheckpoints {
     hiIdx: number;
   }) {
     const thread = this._s.state.allThreads[threadId];
-    if (!thread) return { lastIdxOfURI: {} }; // не должно случаться
+    if (!thread) {return { lastIdxOfURI: {} };} // не должно случаться
     const lastIdxOfURI: { [fsPath: string]: number } = {};
     for (let i = loIdx; i <= hiIdx; i += 1) {
       const message = thread.messages[i];
-      if (message?.role !== 'checkpoint') continue;
+      if (message?.role !== 'checkpoint') {continue;}
       for (const fsPath in message.sapphireFileSnapshotOfURI) {
         // userModified.beforeStrOfURI сюда не включаем — jump не откатывает эти правки
         lastIdxOfURI[fsPath] = i;
@@ -178,21 +178,21 @@ export class ChatThreadCheckpoints {
 
   _readCurrentCheckpoint(threadId: string): [CheckpointEntry, number] | undefined {
     const thread = this._s.state.allThreads[threadId];
-    if (!thread) return;
+    if (!thread) {return;}
 
     const { currCheckpointIdx } = thread.state;
-    if (currCheckpointIdx === null) return;
+    if (currCheckpointIdx === null) {return;}
 
     const checkpoint = thread.messages[currCheckpointIdx];
-    if (!checkpoint) return;
-    if (checkpoint.role !== 'checkpoint') return;
+    if (!checkpoint) {return;}
+    if (checkpoint.role !== 'checkpoint') {return;}
     return [checkpoint, currCheckpointIdx];
   }
 
   _addUserModificationsToCurrCheckpoint({ threadId }: { threadId: string }) {
     const { sapphireFileSnapshotOfURI } = this._computeNewCheckpointInfo({ threadId }) ?? {};
     const res = this._readCurrentCheckpoint(threadId);
-    if (!res) return;
+    if (!res) {return;}
     const [checkpoint, checkpointIdx] = res;
     this._editMessageInThread(threadId, checkpointIdx, {
       ...checkpoint,
@@ -202,10 +202,10 @@ export class ChatThreadCheckpoints {
 
   _makeUsStandOnCheckpoint({ threadId }: { threadId: string }) {
     const thread = this._s.state.allThreads[threadId];
-    if (!thread) return;
+    if (!thread) {return;}
     if (thread.state.currCheckpointIdx === null) {
       const lastMsg = thread.messages[thread.messages.length - 1];
-      if (lastMsg?.role !== 'checkpoint') this._addUserCheckpoint({ threadId });
+      if (lastMsg?.role !== 'checkpoint') {this._addUserCheckpoint({ threadId });}
       this._s._setThreadState(threadId, { currCheckpointIdx: thread.messages.length - 1 });
     }
   }
@@ -223,17 +223,17 @@ export class ChatThreadCheckpoints {
     this._makeUsStandOnCheckpoint({ threadId });
 
     const thread = this._s.state.allThreads[threadId];
-    if (!thread) return;
-    if (this._s.streamState[threadId]?.isRunning) return;
+    if (!thread) {return;}
+    if (this._s.streamState[threadId]?.isRunning) {return;}
 
     const c = this._getCheckpointBeforeMessage({ threadId, messageIdx });
-    if (c === undefined) return; // не должно случаться
+    if (c === undefined) {return;} // не должно случаться
 
     const fromIdx = thread.state.currCheckpointIdx;
-    if (fromIdx === null) return; // не должно случаться
+    if (fromIdx === null) {return;} // не должно случаться
 
     const [_, toIdx] = c;
-    if (toIdx === fromIdx) return;
+    if (toIdx === fromIdx) {return;}
 
     // console.log(`going from ${fromIdx} to ${toIdx}`)
 
@@ -281,13 +281,13 @@ A B C D E F G H I
         // первый checkpoint с этим файлом от toIdx (сначала вверх, иначе вниз)
         for (const k of idxes()) {
           const message = thread.messages[k];
-          if (message.role !== 'checkpoint') continue;
+          if (message.role !== 'checkpoint') {continue;}
           const res = this._getCheckpointInfo(message, fsPath, {
             includeUserModifiedChanges: jumpToUserModified,
           });
-          if (!res) continue;
+          if (!res) {continue;}
           const { sapphireFileSnapshot } = res;
-          if (!sapphireFileSnapshot) continue;
+          if (!sapphireFileSnapshot) {continue;}
           this._s._editCodeService.restoreVoidFileSnapshot(URI.file(fsPath), sapphireFileSnapshot);
           break;
         }
@@ -320,13 +320,13 @@ A B C D E F G H I J
         // для каждого uri — содержимое с наименьшим k (ближе к to)
         for (let k = toIdx; k >= fromIdx + 1; k -= 1) {
           const message = thread.messages[k];
-          if (message.role !== 'checkpoint') continue;
+          if (message.role !== 'checkpoint') {continue;}
           const res = this._getCheckpointInfo(message, fsPath, {
             includeUserModifiedChanges: jumpToUserModified,
           });
-          if (!res) continue;
+          if (!res) {continue;}
           const { sapphireFileSnapshot } = res;
-          if (!sapphireFileSnapshot) continue;
+          if (!sapphireFileSnapshot) {continue;}
           this._s._editCodeService.restoreVoidFileSnapshot(URI.file(fsPath), sapphireFileSnapshot);
           break;
         }
@@ -338,7 +338,7 @@ A B C D E F G H I J
 
   _threadIdFromApplyBoxId(applyBoxId: string): string | undefined {
     const parts = applyBoxId.split('-');
-    if (parts.length < 3) return undefined;
+    if (parts.length < 3) {return undefined;}
     parts.pop(); // tokenIdx
     parts.pop(); // messageIdx
     const threadId = parts.join('-');
@@ -347,16 +347,16 @@ A B C D E F G H I J
 
   _messageIdxFromApplyBoxId(applyBoxId: string): number | undefined {
     const parts = applyBoxId.split('-');
-    if (parts.length < 3) return undefined;
+    if (parts.length < 3) {return undefined;}
     const messageIdx = Number(parts[parts.length - 2]);
     return Number.isFinite(messageIdx) ? messageIdx : undefined;
   }
 
   setApplyBoxUri(applyBoxId: string, uri: URI | undefined): void {
     const threadId = this._threadIdFromApplyBoxId(applyBoxId);
-    if (!threadId) return;
+    if (!threadId) {return;}
     const thread = this._s.state.allThreads[threadId];
-    if (!thread) return;
+    if (!thread) {return;}
     const prev = thread.state.applyBoxState ?? {};
     let next: ThreadType['state']['applyBoxState'];
     if (uri) {
@@ -371,7 +371,7 @@ A B C D E F G H I J
 
   getApplyBoxUri(applyBoxId: string): URI | undefined {
     const threadId = this._threadIdFromApplyBoxId(applyBoxId);
-    if (!threadId) return undefined;
+    if (!threadId) {return undefined;}
     const entry = this._s.state.allThreads[threadId]?.state.applyBoxState?.[applyBoxId];
     return entry?.uri;
   }
@@ -379,7 +379,7 @@ A B C D E F G H I J
   /** Удалить applyBox, если сообщение обрезали при truncate. */
   _pruneApplyBoxStateAfterTruncate(threadId: string, lastKeptMessageIdx: number): void {
     const thread = this._s.state.allThreads[threadId];
-    if (!thread?.state.applyBoxState) return;
+    if (!thread?.state.applyBoxState) {return;}
     const prev = thread.state.applyBoxState;
     const next: { [applyBoxId: string]: { uri: URI } } = {};
     let changed = false;

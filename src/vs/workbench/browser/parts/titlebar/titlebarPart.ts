@@ -50,7 +50,7 @@ import { ResolvedKeybinding } from '../../../../base/common/keybindings.js';
 import { EditorCommandsContextActionRunner } from '../editor/editorTabsControl.js';
 import { IEditorCommandsContext, IEditorPartOptionsChangeEvent, IToolbarActions } from '../../../common/editor.js';
 import { CodeWindow, mainWindow } from '../../../../base/browser/window.js';
-import { ACCOUNTS_ACTIVITY_TILE_ACTION, GLOBAL_ACTIVITY_TITLE_ACTION, TitleBarLeadingActionsGroup } from './titlebarActions.js';
+import { ACCOUNTS_ACTIVITY_TILE_ACTION, TitleBarLeadingActionsGroup } from './titlebarActions.js';
 import { IView } from '../../../../base/browser/ui/grid/grid.js';
 import { createInstantHoverDelegate } from '../../../../base/browser/ui/hover/hoverDelegateFactory.js';
 import { IBaseActionViewItemOptions } from '../../../../base/browser/ui/actionbar/actionViewItems.js';
@@ -282,6 +282,7 @@ export class BrowserTitlebarPart extends Part implements ITitlebarPart {
 	private centerAdjacentToolBarElement: HTMLElement | undefined;
 	private readonly updateToolBarDisposable = this._register(new DisposableStore());
 	private updateToolBarElement: HTMLElement | undefined;
+	private readonly sidebarToggleToolBarDisposable = this._register(new DisposableStore());
 	private titleBarToolBarOverflowScheduler!: AnimationFrameScheduler;
 
 	private globalToolbarMenu: IMenu | undefined;
@@ -492,6 +493,27 @@ export class BrowserTitlebarPart extends Part implements ITitlebarPart {
 			this.currentMenubarVisibility !== 'compact'
 		) {
 			this.installMenubar();
+		}
+
+		// Left of the title bar, after the macOS traffic lights:
+		// Toggle Primary Side Bar, then Customize Layout and Manage.
+		if (!this.isAuxiliary && hasCustomTitlebar(this.configurationService, this.titleBarStyle)) {
+			const sidebarToggleToolBarElement = append(this.leftContent, $('div.sidebar-toggle-toolbar'));
+			sidebarToggleToolBarElement.style.paddingLeft = '16px';
+			this.sidebarToggleToolBarDisposable.add(this.instantiationService.createInstance(MenuWorkbenchToolBar, sidebarToggleToolBarElement, MenuId.TitleBarLeft, {
+				contextMenu: MenuId.TitleBarContext,
+				hiddenItemStrategy: HiddenItemStrategy.NoHide,
+				toolbarOptions: {
+					primaryGroup: () => true,
+				},
+				actionViewItemProvider: (action, options) => {
+					if (action.id === GLOBAL_ACTIVITY_ID) {
+						return this.instantiationService.createInstance(SimpleGlobalActivityActionViewItem, { position: () => HoverPosition.BELOW }, options);
+					}
+					return createActionViewItem(this.instantiationService, action, options);
+				},
+				hoverDelegate: this.hoverDelegate
+			}));
 		}
 
 		// Title
@@ -767,16 +789,14 @@ export class BrowserTitlebarPart extends Part implements ITitlebarPart {
 				);
 			}
 
-			// --- Activity Actions (always at the end)
+			// --- Activity Actions (always at the end). Manage lives in TitleBarLeft.
 			if (this.activityActionsEnabled) {
 				if (isAccountsActionVisible(this.storageService)) {
 					actions.primary.push(ACCOUNTS_ACTIVITY_TILE_ACTION);
 				}
-
-				actions.primary.push(GLOBAL_ACTIVITY_TITLE_ACTION);
 			}
 
-			// «Режим Агент» — последний элемент справа, после шестерёнки.
+			// «Режим Агент» — последний элемент справа.
 			const sapphireAgentsWindowActionId = 'sapphire.setLayoutMode';
 			const agentsWindowActionIndex = actions.primary.findIndex(action => action.id === sapphireAgentsWindowActionId);
 			if (agentsWindowActionIndex >= 0) {

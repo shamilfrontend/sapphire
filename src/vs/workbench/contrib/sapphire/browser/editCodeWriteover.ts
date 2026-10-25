@@ -1,7 +1,7 @@
-/*--------------------------------------------------------------------------------------
- *  Copyright 2025 Glass Devtools, Inc. All rights reserved.
- *  Licensed under the Apache License, Version 2.0. See LICENSE.txt for more information.
- *--------------------------------------------------------------------------------------*/
+/*---------------------------------------------------------------------------------------------
+ *  Copyright (c) Microsoft Corporation. All rights reserved.
+ *  Licensed under the MIT License. See License.txt in the project root for license information.
+ *--------------------------------------------------------------------------------------------*/
 
 import { EndOfLinePreference } from '../../../../editor/common/model.js';
 import { URI } from '../../../../base/common/uri.js';
@@ -35,7 +35,7 @@ export class EditCodeWriteover {
     // await this._s._ensureModelExists(uri)
 
     const uri = editor.getModel()?.uri;
-    if (!uri) return;
+    if (!uri) {return;}
 
     // Пересечение с другой CtrlKZone — фокус на неё
     const overlappingCtrlKZone = this._findOverlappingDiffArea({
@@ -59,7 +59,7 @@ export class EditCodeWriteover {
       uri,
       filter: (diffArea) => diffArea.type === 'DiffZone',
     });
-    if (overlappingDiffZone) return;
+    if (overlappingDiffZone) {return;}
 
     editor.revealLine(startLine);
     editor.setSelection({
@@ -91,8 +91,8 @@ export class EditCodeWriteover {
   // remove = удаление + запись в undo-историю
   public removeCtrlKZone({ diffareaid }: { diffareaid: number }) {
     const ctrlKZone = this._s.diffAreaOfId[diffareaid];
-    if (!ctrlKZone) return;
-    if (ctrlKZone.type !== 'CtrlKZone') return;
+    if (!ctrlKZone) {return;}
+    if (ctrlKZone.type !== 'CtrlKZone') {return;}
 
     const uri = ctrlKZone._URI;
     const { onFinishEdit } = this._s._addToHistory(uri);
@@ -105,13 +105,13 @@ export class EditCodeWriteover {
     // Search/Replace (ClickApply)
     if (opts.from === 'ClickApply') {
       const uri = this._uriOfGivenURI(opts.uri);
-      if (!uri) return;
+      if (!uri) {return;}
       return uri;
     }
     if (opts.from === 'QuickEdit') {
       const { diffareaid } = opts;
       const ctrlKZone = this._s.diffAreaOfId[diffareaid];
-      if (ctrlKZone?.type !== 'CtrlKZone') return;
+      if (ctrlKZone?.type !== 'CtrlKZone') {return;}
       const { _URI: uri } = ctrlKZone;
       return uri;
     }
@@ -120,7 +120,7 @@ export class EditCodeWriteover {
 
   public async callBeforeApplyOrEdit(givenURI: URI | 'current') {
     const uri = this._uriOfGivenURI(givenURI);
-    if (!uri) return;
+    if (!uri) {return;}
     await this._s._sapphireModelService.initializeModel(uri);
     await this._s._sapphireModelService.saveModel(uri); // сохранить файл
   }
@@ -134,7 +134,7 @@ export class EditCodeWriteover {
     } else if (opts.from === 'ClickApply') {
       if (this._s._settingsService.state.globalSettings.enableFastApply) {
         const numCharsInFile = this._fileLengthOfGivenURI(opts.uri);
-        if (numCharsInFile === null) return null;
+        if (numCharsInFile === null) {return null;}
         if (numCharsInFile < 1000) {
           // Медленный apply для коротких файлов (важно для пустых)
           res = this._initializeWriteoverStream(opts);
@@ -146,7 +146,7 @@ export class EditCodeWriteover {
       }
     }
 
-    if (!res) return null;
+    if (!res) {return null;}
     const [diffZone, applyDonePromise] = res;
     return [diffZone._URI, applyDonePromise];
   }
@@ -191,8 +191,8 @@ export class EditCodeWriteover {
     // Пересечение diff-областей — вернуть найденную
     for (const diffareaid of this._s.diffAreasOfURI[uri.fsPath] || []) {
       const diffArea = this._s.diffAreaOfId[diffareaid];
-      if (!diffArea) continue;
-      if (!filter?.(diffArea)) continue;
+      if (!diffArea) {continue;}
+      if (!filter?.(diffArea)) {continue;}
       const noOverlap = diffArea.startLine > endLine || diffArea.endLine < startLine;
       if (!noOverlap) {
         return diffArea;
@@ -215,7 +215,7 @@ export class EditCodeWriteover {
     onWillUndo: () => void;
   }) {
     const { model } = this._s._sapphireModelService.getModel(uri);
-    if (!model) return;
+    if (!model) {return;}
 
     // Как весь файл, либо диапазон linked CtrlKZone
 
@@ -287,11 +287,11 @@ export class EditCodeWriteover {
 
   private _uriIsStreaming(uri: URI) {
     const diffAreas = this._s.diffAreasOfURI[uri.fsPath];
-    if (!diffAreas) return false;
+    if (!diffAreas) {return false;}
     for (const diffareaid of diffAreas) {
       const diffArea = this._s.diffAreaOfId[diffareaid];
-      if (diffArea?.type !== 'DiffZone') continue;
-      if (diffArea._streamState.isStreaming) return true;
+      if (diffArea?.type !== 'DiffZone') {continue;}
+      if (diffArea._streamState.isStreaming) {return true;}
     }
     return false;
   }
@@ -310,7 +310,7 @@ export class EditCodeWriteover {
       : undefined;
 
     const uri = this._getURIBeforeStartApplying(opts);
-    if (!uri) return;
+    if (!uri) {return;}
 
     let startRange: 'fullFile' | [number, number];
     let ctrlKZoneIfQuickEdit: CtrlKZone | null = null;
@@ -320,7 +320,7 @@ export class EditCodeWriteover {
     } else if (from === 'QuickEdit') {
       const { diffareaid } = opts;
       const ctrlKZone = this._s.diffAreaOfId[diffareaid];
-      if (ctrlKZone?.type !== 'CtrlKZone') return;
+      if (ctrlKZone?.type !== 'CtrlKZone') {return;}
       ctrlKZoneIfQuickEdit = ctrlKZone;
       const { startLine: startLine_, endLine: endLine_ } = ctrlKZone;
       startRange = [startLine_, endLine_];
@@ -329,9 +329,9 @@ export class EditCodeWriteover {
     }
 
     const { model } = this._s._sapphireModelService.getModel(uri);
-    if (!model) return;
+    if (!model) {return;}
 
-    let streamRequestIdRef: { current: string | null } = { current: null }; // ref для streamRequestId DiffZone
+    const streamRequestIdRef: { current: string | null } = { current: null }; // ref для streamRequestId DiffZone
 
     // Сбор сообщений LLM
     const quickEditFIMTags = this._s._getQuickEditFimTags();
@@ -359,7 +359,7 @@ export class EditCodeWriteover {
       messages = a;
       separateSystemMessage = b;
     } else if (from === 'QuickEdit') {
-      if (!ctrlKZoneIfQuickEdit) return;
+      if (!ctrlKZoneIfQuickEdit) {return;}
       const { _mountInfo } = ctrlKZoneIfQuickEdit;
       const instructions = _mountInfo?.textAreaRef.current?.value ?? '';
 
@@ -393,7 +393,7 @@ export class EditCodeWriteover {
     }
 
     // uri уже стримится — выход (проверяет вызывающий)
-    if (this._uriIsStreaming(uri)) return;
+    if (this._uriIsStreaming(uri)) {return;}
 
     // Создать DiffZone
     const res = this._startStreamingDiffZone({
@@ -407,7 +407,7 @@ export class EditCodeWriteover {
         }
       },
     });
-    if (!res) return;
+    if (!res) {return;}
     const { diffZone, onFinishEdit } = res;
 
     // колбэки завершения / ошибки стрима
@@ -479,7 +479,7 @@ export class EditCodeWriteover {
         let fullTextSoFar = ''; // включая ранее отброшенный суффикс ```
         let prevIgnoredSuffix = '';
         let aborted = false;
-        let weAreAborting = false;
+        const weAreAborting = false;
 
         streamRequestIdRef.current = this._s._llmMessageService.sendLLMMessage({
           messagesType: 'chatMessages',
@@ -539,7 +539,7 @@ export class EditCodeWriteover {
             onError(e);
           },
           onAbort: () => {
-            if (weAreAborting) return;
+            if (weAreAborting) {return;}
             // Выход из цикла без смены state (abort уже обработан)
             aborted = true;
             resMessageDonePromise();
@@ -566,7 +566,7 @@ export class EditCodeWriteover {
   _uriOfGivenURI(givenURI: URI | 'current') {
     if (givenURI === 'current') {
       const uri_ = this._s._getActiveEditorURI();
-      if (!uri_) return;
+      if (!uri_) {return;}
       return uri_;
     }
     return givenURI;
@@ -574,9 +574,9 @@ export class EditCodeWriteover {
 
   _fileLengthOfGivenURI(givenURI: URI | 'current') {
     const uri = this._uriOfGivenURI(givenURI);
-    if (!uri) return null;
+    if (!uri) {return null;}
     const { model } = this._s._sapphireModelService.getModel(uri);
-    if (!model) return null;
+    if (!model) {return null;}
     const numCharsInFile = model.getValueLength(EndOfLinePreference.LF);
     return numCharsInFile;
   }

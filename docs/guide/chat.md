@@ -25,8 +25,8 @@
 ## Что умеет чат
 
 - Отвечать с учётом прикреплённого контекста (`@`, активный файл, heuristic «Найдено»)
-- Режимы **Chat / Plan / Agent / Debug** — см. [режимы](/guide/modes)
-- Tools в Plan/Agent/Debug (поиск, правки, терминал, web, memory, subagents, MCP) — [tools](/guide/tools)
+- Режимы **Chat / Plan / Agent** — см. [режимы](/guide/modes)
+- Tools в Plan/Agent (поиск, правки, терминал, web, memory, subagents, MCP) — [tools](/guide/tools)
 - Reasoning модели, если шлюз отдаёт `reasoning_content` и у модели включён reasoning
 - Codeblock’и с **Apply**; в Plan — карточка плана «Сделать по плану»
 - Картинки (paste/attach) при `supportsVision` — [Vision](/architecture/chat-image-attach)

@@ -100,7 +100,7 @@ import { NativeURLService } from '../../platform/url/common/urlService.js';
 import { ElectronURLListener } from '../../platform/url/electron-main/electronUrlListener.js';
 import { IWebviewManagerService } from '../../platform/webview/common/webviewManagerService.js';
 import { WebviewMainService } from '../../platform/webview/electron-main/webviewMainService.js';
-import { AgentsWindowOpenSource, isFolderToOpen, isWorkspaceToOpen, IWindowOpenable, parseExternalAgentsWindowNewSessionLinkUri } from '../../platform/window/common/window.js';
+import { isFolderToOpen, isWorkspaceToOpen, IWindowOpenable, parseExternalAgentsWindowNewSessionLinkUri } from '../../platform/window/common/window.js';
 import { getAllWindowsExcludingOffscreen, IWindowsMainService, OpenContext } from '../../platform/windows/electron-main/windows.js';
 import { ICodeWindow } from '../../platform/window/electron-main/window.js';
 import { WindowsMainService } from '../../platform/windows/electron-main/windowsMainService.js';
@@ -135,8 +135,6 @@ import { createLocalPtyChannel } from '../../platform/terminal/common/localPtyCh
 import { ElectronPtyHostStarter } from '../../platform/terminal/electron-main/electronPtyHostStarter.js';
 import { PtyHostService } from '../../platform/terminal/node/ptyHostService.js';
 import { parseExternalOpenSessionLinkUri } from '../../platform/agentHost/common/openSessionLink.js';
-import { ElectronAgentHostStarter } from '../../platform/agentHost/electron-main/electronAgentHostStarter.js';
-import { AgentHostProcessManager } from '../../platform/agentHost/node/agentHostService.js';
 import { NODE_REMOTE_RESOURCE_CHANNEL_NAME, NODE_REMOTE_RESOURCE_IPC_METHOD_NAME, NodeRemoteResourceResponse, NodeRemoteResourceRouter } from '../../platform/remote/common/electronRemoteResources.js';
 import { Lazy } from '../../base/common/lazy.js';
 import { IAuxiliaryWindowsMainService } from '../../platform/auxiliaryWindow/electron-main/auxiliaryWindows.js';
@@ -767,16 +765,8 @@ export class CodeApplication extends Disposable {
 		// Error telemetry
 		appInstantiationService.invokeFunction(accessor => this._register(new ErrorTelemetry(accessor.get(ILogService), accessor.get(ITelemetryService))));
 
-		// Agent Host
-		// Always instantiate the starter + manager. They are cheap (the
-		// constructors only register an IPC listener and emitters) and the agent
-		// host utility process is spawned lazily on the first window connection
-		// request. The renderer only requests a connection when the runtime is
-		// available and AI features are enabled there, which the main process
-		// cannot fully observe.
-		const agentHostStarter = appInstantiationService.createInstance(ElectronAgentHostStarter, { machineId, sqmId, devDeviceId });
-		// This manager self-disposes after its lifecycle join; CodeApplication disposes before later shutdown listeners run.
-		const agentHostProcessManager = appInstantiationService.createInstance(AgentHostProcessManager, agentHostStarter, process.platform);
+		// Sapphire: do not start upstream Agent Host (GitHub Copilot / Claude agent SDK).
+		// Product AI runs through contrib/sapphire LLM IPC instead.
 
 		// Metered connection telemetry
 		appInstantiationService.invokeFunction(accessor => {
@@ -820,7 +810,6 @@ export class CodeApplication extends Disposable {
 				...windows.map(window => window.ready()),
 				sharedProcessReady,
 				appInstantiationService.invokeFunction(accessor => accessor.get(ILocalPtyService).getLatency()),
-				agentHostProcessManager.start()
 			]);
 		}
 
@@ -1083,22 +1072,11 @@ export class CodeApplication extends Disposable {
 	private async handleProtocolUrl(windowsMainService: IWindowsMainService, dialogMainService: IDialogMainService, urlService: IURLService, uri: URI, options?: IOpenURLOptions): Promise<boolean> {
 		this.logService.trace('app#handleProtocolUrl():', uri.toString(true), options);
 
-		const agentSessionLink = parseExternalOpenSessionLinkUri(uri, this.productService.urlProtocol);
-		if (agentSessionLink) {
-			const windows = await windowsMainService.openAgentsWindow({
-				context: OpenContext.LINK,
-				cli: { ...this.environmentMainService.args },
-			}, undefined, agentSessionLink, AgentsWindowOpenSource.Link);
-			return windows.length > 0;
-		}
-
-		const newSessionLink = parseExternalAgentsWindowNewSessionLinkUri(uri, this.productService.urlProtocol);
-		if (newSessionLink) {
-			const windows = await windowsMainService.openAgentsWindow({
-				context: OpenContext.LINK,
-				cli: { ...this.environmentMainService.args },
-			}, newSessionLink.workspaceUri, undefined, AgentsWindowOpenSource.Link, false, newSessionLink.draft);
-			return windows.length > 0;
+		// Sapphire: ignore upstream Agent Host / Sessions deep links (no Agent Host runtime).
+		if (parseExternalOpenSessionLinkUri(uri, this.productService.urlProtocol)
+			|| parseExternalAgentsWindowNewSessionLinkUri(uri, this.productService.urlProtocol)) {
+			this.logService.trace('app#handleProtocolUrl(): ignoring agents/session deep link (Agent Host disabled)');
+			return false;
 		}
 
 		// Support 'workspace' URLs (https://github.com/microsoft/vscode/issues/124263)
@@ -1570,13 +1548,9 @@ export class CodeApplication extends Disposable {
 		const context = isLaunchedFromCli(process.env) ? OpenContext.CLI : OpenContext.DESKTOP;
 		const args = this.environmentMainService.args;
 
-		// Handle agents window first based on context
+		// Sapphire: --agents / Sessions protocol links are ignored (Agent Host disabled).
 		if (args['agents']) {
-			return windowsMainService.openAgentsWindow({
-				context,
-				cli: args,
-				initialStartup: true
-			});
+			this.logService.trace('app#openFirstWindow(): ignoring --agents (Agent Host disabled)');
 		}
 
 		// Then check for windows from protocol links to open
@@ -1585,14 +1559,8 @@ export class CodeApplication extends Disposable {
 				parseExternalOpenSessionLinkUri(protocolUrl.uri, this.productService.urlProtocol)
 				|| parseExternalAgentsWindowNewSessionLinkUri(protocolUrl.uri, this.productService.urlProtocol));
 			if (agentsWindowProtocolUrlIndex >= 0) {
-				const [agentsWindowProtocolUrl] = initialProtocolUrls.urls.splice(agentsWindowProtocolUrlIndex, 1);
-				const agentSessionLink = parseExternalOpenSessionLinkUri(agentsWindowProtocolUrl.uri, this.productService.urlProtocol);
-				const newSessionLink = parseExternalAgentsWindowNewSessionLinkUri(agentsWindowProtocolUrl.uri, this.productService.urlProtocol);
-				return windowsMainService.openAgentsWindow({
-					context: OpenContext.LINK,
-					cli: args,
-					initialStartup: true,
-				}, newSessionLink?.workspaceUri, agentSessionLink, AgentsWindowOpenSource.Link, false, newSessionLink?.draft);
+				initialProtocolUrls.urls.splice(agentsWindowProtocolUrlIndex, 1);
+				this.logService.trace('app#openFirstWindow(): ignoring agents/session protocol URL (Agent Host disabled)');
 			}
 
 			// Openables can open as windows directly

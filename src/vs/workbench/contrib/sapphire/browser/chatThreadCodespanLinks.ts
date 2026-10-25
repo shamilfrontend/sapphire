@@ -1,7 +1,7 @@
-/*--------------------------------------------------------------------------------------
- *  Copyright 2025 Glass Devtools, Inc. All rights reserved.
- *  Licensed under the Apache License, Version 2.0. See LICENSE.txt for more information.
- *--------------------------------------------------------------------------------------*/
+/*---------------------------------------------------------------------------------------------
+ *  Copyright (c) Microsoft Corporation. All rights reserved.
+ *  Licensed under the MIT License. See License.txt in the project root for license information.
+ *--------------------------------------------------------------------------------------------*/
 
 import { CancellationToken } from '../../../../base/common/cancellation.js';
 import { URI } from '../../../../base/common/uri.js';
@@ -16,12 +16,12 @@ export class ChatThreadCodespanLinks {
 
   private _getAllSeenFileURIs(threadId: string) {
     const thread = this._s.state.allThreads[threadId];
-    if (!thread) return [];
+    if (!thread) {return [];}
 
     const fsPathsSet = new Set<string>();
     const uris: URI[] = [];
     const addURI = (uri: URI) => {
-      if (fsPathsSet.has(uri.fsPath)) return;
+      if (fsPathsSet.has(uri.fsPath)) {return;}
       fsPathsSet.add(uri.fsPath);
       uris.push(uri);
     };
@@ -112,7 +112,7 @@ export class ChatThreadCodespanLinks {
         }
         const modelRef = await this._s._sapphireModelService.getModelSafe(uri);
         const { model } = modelRef;
-        if (!model) continue;
+        if (!model) {continue;}
 
         const matches = model.findMatches(
           target,
@@ -138,7 +138,7 @@ export class ChatThreadCodespanLinks {
               CancellationToken.None,
             );
 
-            if (!_definitions) continue;
+            if (!_definitions) {continue;}
 
             const definitions = Array.isArray(_definitions) ? _definitions : [_definitions];
 
@@ -174,10 +174,10 @@ export class ChatThreadCodespanLinks {
     threadId: string;
   }): CodespanLocationLink | undefined {
     const thread = this._s.state.allThreads[threadId];
-    if (!thread) return undefined;
+    if (!thread) {return undefined;}
 
     const links = thread.state.linksOfMessageIdx?.[messageIdx];
-    if (!links) return undefined;
+    if (!links) {return undefined;}
 
     const link = links[codespanStr];
 
@@ -196,7 +196,7 @@ export class ChatThreadCodespanLinks {
     threadId: string;
   }) {
     const thread = this._s.state.allThreads[threadId];
-    if (!thread) return;
+    if (!thread) {return;}
 
     this._s._setState({
       allThreads: {

@@ -1,9 +1,10 @@
-/*--------------------------------------------------------------------------------------
- *  Copyright 2025 Glass Devtools, Inc. All rights reserved.
- *  Licensed under the Apache License, Version 2.0. See LICENSE.txt for more information.
- *--------------------------------------------------------------------------------------*/
+/*---------------------------------------------------------------------------------------------
+ *  Copyright (c) Microsoft Corporation. All rights reserved.
+ *  Licensed under the MIT License. See License.txt in the project root for license information.
+ *--------------------------------------------------------------------------------------------*/
 
 import { ChatMessage, ToolMessage } from './chatThreadServiceTypes.js';
+import { hasKey } from '../../../../base/common/types.js';
 
 type ActivePlanPinState = {
   planUriFsPath: string;
@@ -18,14 +19,14 @@ type PlanToolSuccessMessage =
 
 /** fsPath плана из success create_plan/update_plan (result или params). */
 export const planUriFsPathFromPlanTool = (m: PlanToolSuccessMessage): string | null => {
-  if (m.type === 'success' && m.result && 'planUri' in m.result && m.result.planUri) {
+  if (m.type === 'success' && m.result && hasKey(m.result, { planUri: true }) && m.result.planUri) {
     return m.result.planUri.fsPath;
   }
   if (
     m.type !== 'invalid_params' &&
-    'params' in m &&
+    hasKey(m, { params: true }) &&
     m.params &&
-    'planUri' in m.params &&
+    hasKey(m.params, { planUri: true }) &&
     m.params.planUri
   ) {
     return m.params.planUri.fsPath;

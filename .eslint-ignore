@@ -73,3 +73,7 @@ src/vs/workbench/contrib/sapphire/browser/sapphireUpdateActions.ts
 src/vs/workbench/contrib/sapphire/browser/toolsService.ts
 src/vs/workbench/contrib/sapphire/common/refreshModelService.ts
 src/vs/workbench/contrib/sapphire/electron-main/llmMessage/systemCertificatesFetch.ts
+
+# Generated Vue bundle input. Edit src/ only; build.js recopies it into src2/.
+src/vs/workbench/contrib/sapphire/browser/vue/src2/**
+src/vs/workbench/contrib/sapphire/browser/vue/out/**

@@ -1,6 +1,6 @@
 # Tools и approvals
 
-В режимах **Plan**, **Agent** и **Debug** модель вызывает builtin tools (openai-style function calling). Полная таблица — [справка](/reference/tools).
+В режимах **Plan** и **Agent** модель вызывает builtin tools (openai-style function calling). Полная таблица — [справка](/reference/tools).
 
 ## Категории
 
@@ -10,7 +10,7 @@
 | Планы | `create_plan`, `update_plan` | не требуется |
 | Правки | `edit_file`, `rewrite_file`, `create_*`, `delete_*`, `rename_symbol` | edits |
 | Терминал | `run_command`, persistent terminal | terminal |
-| Сеть (только Agent/Debug) | `web_search`, `browse_url` | не требуется (трафик вне шлюза) |
+| Сеть (только Agent) | `web_search`, `browse_url` | не требуется (трафик вне шлюза) |
 | Память / subagents | `save_memory`, `run_subagent`, `run_parallel_subagents` | не требуется |
 | MCP | `enable_mcp_server` + tools серверов | MCP tools |
 
@@ -18,7 +18,7 @@
 
 - **Chat** — без builtin tools.
 - **Plan** — read/search + `create_plan` / `update_plan` (без правок, терминала, web, memory, subagents, MCP).
-- **Agent / Debug** — все builtin кроме `create_plan`; MCP после deferred enable. `update_plan` только во время «Сделать по плану» (build утверждённого плана).
+- **Agent** — все builtin кроме `create_plan`; MCP после deferred enable. `update_plan` только во время «Сделать по плану» (build утверждённого плана).
 
 Соседние read-only tools из одного ответа выполняются параллельно. Правки, терминал, MCP, планы, web и subagents — по одному.
 

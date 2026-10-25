@@ -1,7 +1,7 @@
-/*--------------------------------------------------------------------------------------
- *  Copyright 2025 Glass Devtools, Inc. All rights reserved.
- *  Licensed under the Apache License, Version 2.0. See LICENSE.txt for more information.
- *--------------------------------------------------------------------------------------*/
+/*---------------------------------------------------------------------------------------------
+ *  Copyright (c) Microsoft Corporation. All rights reserved.
+ *  Licensed under the MIT License. See License.txt in the project root for license information.
+ *--------------------------------------------------------------------------------------------*/
 
 import { ChatThreadCollaboratorHost, defaultMessageState } from './chatThreadTypes.js';
 import {
@@ -33,10 +33,17 @@ import {
   RawToolCallObj,
   RawToolParamsObj,
 } from '../common/sendLLMMessageTypes.js';
-import { FeatureName, ModelSelection, ModelSelectionOptions, ChatMode } from '../common/sapphireSettingsTypes.js';
+import {
+  FeatureName,
+  ModelSelection,
+  ModelSelectionOptions,
+  ChatMode,
+  resolveThreadChatMode,
+} from '../common/sapphireSettingsTypes.js';
 import {
   approvalTypeOfBuiltinToolName,
   BuiltinToolCallParams,
+  BuiltinToolName,
   BuiltinToolResultType,
   ToolCallParams,
   ToolName,
@@ -101,6 +108,41 @@ const REPEAT_TOOL_BATCHES = 3;
 
 const SUBAGENT_EXCLUDED_TOOLS = ['run_subagent', 'run_parallel_subagents'] as const;
 
+type CollaboratorTools = ChatThreadCollaboratorHost['_toolsService'];
+
+type BuiltinToolCallReturn = Promise<{
+  result: BuiltinToolResultType[BuiltinToolName] | Promise<BuiltinToolResultType[BuiltinToolName]>;
+  interruptTool?: () => void;
+}>;
+
+/** Индекс callTool — объединение функций; вызов остаётся тем же, что и прямой index. */
+function callBuiltinTool(
+  tools: CollaboratorTools,
+  toolName: BuiltinToolName,
+  params: ToolCallParams<ToolName>,
+): BuiltinToolCallReturn {
+  const call = tools.callTool[toolName] as (
+    p: ToolCallParams<ToolName>,
+  ) => BuiltinToolCallReturn;
+  return call(params);
+}
+
+function stringifyBuiltinToolResult(
+  tools: CollaboratorTools,
+  toolName: BuiltinToolName,
+  params: ToolCallParams<ToolName>,
+  result: ToolResult<ToolName>,
+): string {
+  const stringify = tools.stringOfResult[toolName] as (
+    p: BuiltinToolCallParams[BuiltinToolName],
+    result: Awaited<BuiltinToolResultType[BuiltinToolName]>,
+  ) => string;
+  return stringify(
+    params as BuiltinToolCallParams[BuiltinToolName],
+    result as Awaited<BuiltinToolResultType[BuiltinToolName]>,
+  );
+}
+
 type AgentRunContext = {
   isSubagent?: boolean;
   chatModeOverride?: ChatMode;
@@ -134,7 +176,7 @@ export class ChatThreadAgentLoop {
 
   _findToolMessageIndex(threadId: string, toolId: string): number {
     const messages = this._s.state.allThreads[threadId]?.messages;
-    if (!messages) return -1;
+    if (!messages) {return -1;}
     for (let i = messages.length - 1; i >= 0; i--) {
       const message = messages[i];
       if (message.role === 'tool' && message.id === toolId && message.type !== 'invalid_params') {
@@ -305,7 +347,7 @@ export class ChatThreadAgentLoop {
   /** При abort: все running_now → rejected с единым сообщением interrupted. */
   _rejectRunningTools(threadId: string) {
     const thread = this._s.state.allThreads[threadId];
-    if (!thread) return 0;
+    if (!thread) {return 0;}
     const runningIds = thread.messages
       .filter((message) => message.role === 'tool' && message.type === 'running_now')
       .map((message) => message.id);
@@ -320,7 +362,7 @@ export class ChatThreadAgentLoop {
           break;
         }
       }
-      if (!running || running.type !== 'running_now') continue;
+      if (!running || running.type !== 'running_now') {continue;}
       this._updateToolById(threadId, {
         role: 'tool',
         type: 'rejected',
@@ -338,7 +380,7 @@ export class ChatThreadAgentLoop {
 
   approveLatestToolRequest(threadId: string) {
     const thread = this._s.state.allThreads[threadId];
-    if (!thread) return; // invariant
+    if (!thread) {return;} // invariant
 
     // Двойной Approve не должен запускать два agent loop параллельно.
     const running = this._s.streamState[threadId]?.isRunning;
@@ -347,7 +389,7 @@ export class ChatThreadAgentLoop {
     }
 
     const lastMsg = thread.messages[thread.messages.length - 1];
-    if (!(lastMsg.role === 'tool' && lastMsg.type === 'tool_request')) return; // invariant
+    if (!(lastMsg.role === 'tool' && lastMsg.type === 'tool_request')) {return;} // invariant
 
     const callThisToolFirst: ToolMessage<ToolName> = lastMsg;
 
@@ -377,14 +419,14 @@ export class ChatThreadAgentLoop {
 
   rejectLatestToolRequest(threadId: string) {
     const thread = this._s.state.allThreads[threadId];
-    if (!thread) return; // invariant
+    if (!thread) {return;} // invariant
 
     const lastMsg = thread.messages[thread.messages.length - 1];
 
     let params: ToolCallParams<ToolName>;
     if (lastMsg.role === 'tool' && lastMsg.type !== 'invalid_params') {
       params = lastMsg.params;
-    } else return;
+    } else {return;}
 
     const { name, id, rawParams, mcpServerName } = lastMsg;
 
@@ -406,9 +448,9 @@ export class ChatThreadAgentLoop {
 
   async buildActivePlan(threadId: string) {
     const thread = this._s.state.allThreads[threadId];
-    if (!thread) return;
+    if (!thread) {return;}
     const activePlan = thread.state.activePlan;
-    if (!activePlan) return;
+    if (!activePlan) {return;}
     // «Сделать по плану» из ready/built или продолжение building после паузы.
     if (
       activePlan.status !== 'ready' &&
@@ -417,10 +459,10 @@ export class ChatThreadAgentLoop {
     ) {
       return;
     }
-    if (this._s.streamState[threadId]?.isRunning) return;
+    if (this._s.streamState[threadId]?.isRunning) {return;}
 
     this._s._setThreadState(threadId, { activePlan: { ...activePlan, status: 'building' } });
-    await this._s._settingsService.setGlobalSetting('chatMode', 'agent');
+    this._s.setThreadChatMode(threadId, 'agent');
 
     let planBody = '';
     try {
@@ -488,7 +530,7 @@ ${planBody}`;
     await this._interruptChildThreads(threadId);
 
     const thread = this._s.state.allThreads[threadId];
-    if (!thread) return; // invariant
+    if (!thread) {return;} // invariant
 
     chatTrace(
       threadId,
@@ -568,7 +610,7 @@ ${planBody}`;
     this._s._addUserCheckpoint({ threadId });
 
     const interrupt = await interruptPromise;
-    if (typeof interrupt === 'function') interrupt();
+    if (typeof interrupt === 'function') {interrupt();}
 
     if (!opts?.skipFlush) {
       void this._s._flushMessageQueue(threadId);
@@ -578,7 +620,7 @@ ${planBody}`;
   readonly toolErrMsgs = {
     rejected: 'Tool call was rejected by the user.',
     interrupted: 'Tool call was interrupted by the user.',
-    errWhenStringifying: (error: any) =>
+    errWhenStringifying: (error: unknown) =>
       `Tool call succeeded, but there was an error stringifying the output.\n${getErrorMessage(error)}`,
   };
 
@@ -635,10 +677,10 @@ ${planBody}`;
       if (!message || message.role !== 'tool') {
         return 'other';
       }
-      if (message.type === 'success') return 'success';
-      if (message.type === 'tool_error') return 'tool_error';
-      if (message.type === 'invalid_params') return 'invalid_params';
-      if (message.type === 'rejected') return 'rejected';
+      if (message.type === 'success') {return 'success';}
+      if (message.type === 'tool_error') {return 'tool_error';}
+      if (message.type === 'invalid_params') {return 'invalid_params';}
+      if (message.type === 'rejected') {return 'rejected';}
       return 'other';
     });
   }
@@ -714,9 +756,9 @@ ${planBody}`;
     const messages = this._s.state.allThreads[threadId]?.messages ?? [];
     for (let i = messages.length - 1; i >= 0; i--) {
       const message = messages[i];
-      if (message.role !== 'user') continue;
+      if (message.role !== 'user') {continue;}
       const visible = message.displayContent?.trim();
-      if (visible) return visible;
+      if (visible) {return visible;}
     }
     return '';
   }
@@ -746,7 +788,7 @@ ${planBody}`;
     isActive: () => boolean,
   ): Promise<string | undefined> {
     const { modelSelection, modelSelectionOptions } = this._currentModelSelectionProps();
-    if (!modelSelection) return Promise.resolve(undefined);
+    if (!modelSelection) {return Promise.resolve(undefined);}
     const { overridesOfModel } = this._s._settingsService.state;
     return new Promise((resolve) => {
       const requestId = this._s._llmMessageService.sendLLMMessage({
@@ -778,7 +820,7 @@ ${planBody}`;
         onError: () => resolve(undefined),
         onAbort: () => resolve(undefined),
       });
-      if (!requestId || !isActive()) resolve(undefined);
+      if (!requestId || !isActive()) {resolve(undefined);}
     });
   }
 
@@ -791,7 +833,7 @@ ${planBody}`;
   /** Подпись текущего открытого шага плана или undefined. */
   async _planProgressLabel(threadId: string): Promise<string | undefined> {
     const fromState = this._s.state.allThreads[threadId]?.state.activePlan?.progressLabel;
-    if (fromState) return fromState;
+    if (fromState) {return fromState;}
     const todos = await this._readActivePlanTodos(threadId);
     return todos ? planProgressLabel(todos) : undefined;
   }
@@ -802,7 +844,7 @@ ${planBody}`;
    */
   async _readActivePlanTodos(threadId: string) {
     const activePlan = this._s.state.allThreads[threadId]?.state.activePlan;
-    if (!activePlan || activePlan.status !== 'building') return null;
+    if (!activePlan || activePlan.status !== 'building') {return null;}
     try {
       const planUri = URI.file(activePlan.planUriFsPath);
       await this._s._sapphireModelService.initializeModel(planUri);
@@ -957,9 +999,9 @@ ${planBody}`;
 
     // Результат tool не пишем, если abort/Stop или карточка уже rejected/tool_error.
     const isStaleToolResult = () => {
-      if (interrupted || group?.isInterrupted()) return true;
+      if (interrupted || group?.isInterrupted()) {return true;}
       const stream = this._s.streamState[threadId];
-      if (!stream || stream.isRunning !== 'tool') return true;
+      if (!stream || stream.isRunning !== 'tool') {return true;}
       const idx = this._findToolMessageIndex(threadId, toolId);
       const message = idx >= 0 ? this._s.state.allThreads[threadId]?.messages[idx] : undefined;
       if (
@@ -1045,8 +1087,10 @@ ${planBody}`;
         }
 
         if (isBuiltInTool) {
-          const { result, interruptTool } = await this._s._toolsService.callTool[toolName](
-            toolParams as any,
+          const { result, interruptTool } = await callBuiltinTool(
+            this._s._toolsService,
+            toolName,
+            toolParams,
           );
           interruptToolFn = interruptTool;
           if (interrupted) {
@@ -1120,9 +1164,11 @@ ${planBody}`;
         return { interrupted: true };
       }
       if (isBuiltInTool) {
-        toolResultStr = this._s._toolsService.stringOfResult[toolName](
-          toolParams as any,
-          toolResult as any,
+        toolResultStr = stringifyBuiltinToolResult(
+          this._s._toolsService,
+          toolName,
+          toolParams,
+          toolResult,
         );
       }
       // MCP: stringify через mcpService
@@ -1223,7 +1269,7 @@ ${planBody}`;
     const mcpTools = this._s._mcpService.getMCPTools();
 
     for (const tc of toolCalls) {
-      if (!isActive()) return { interrupted: true, ranAny };
+      if (!isActive()) {return { interrupted: true, ranAny };}
       const mcpServerName = mcpTools?.find(
         (t: { name: string; mcpServerName?: string }) => t.name === tc.name,
       )?.mcpServerName;
@@ -1262,14 +1308,14 @@ ${planBody}`;
       prepared.push({ tc, toolParams, mcpServerName });
     }
 
-    if (!prepared.length) return { ranAny };
-    if (!isActive()) return { interrupted: true, ranAny: true };
+    if (!prepared.length) {return { ranAny };}
+    if (!isActive()) {return { interrupted: true, ranAny: true };}
 
     const cancelers: (() => void)[] = [];
     let groupInterrupted = false;
     const interruptAll = () => {
       groupInterrupted = true;
-      for (const cancel of cancelers) cancel();
+      for (const cancel of cancelers) {cancel();}
     };
     const first = prepared[0];
     this._s._setStreamState(threadId, {
@@ -1289,7 +1335,7 @@ ${planBody}`;
       isInterrupted: () => groupInterrupted,
       addCancel: (cancel: () => void) => {
         cancelers.push(cancel);
-        if (groupInterrupted) cancel();
+        if (groupInterrupted) {cancel();}
       },
     };
 
@@ -1327,14 +1373,14 @@ ${planBody}`;
     let ranAny = false;
     let offset = 0;
     for (const segment of segmentToolCalls(toolCalls)) {
-      if (!isActive()) return { interrupted: true, ranAny };
+      if (!isActive()) {return { interrupted: true, ranAny };}
       if (segment.kind === 'parallel') {
         const { interrupted, ranAny: groupRan } = await this._runReadOnlyToolGroup(
           threadId,
           segment.calls,
           isActive,
         );
-        if (groupRan) ranAny = true;
+        if (groupRan) {ranAny = true;}
         if (!isActive() || interrupted) {
           this._s._setThreadState(threadId, { pendingToolCalls: undefined });
           return { interrupted: true, ranAny };
@@ -1356,7 +1402,7 @@ ${planBody}`;
         mcpTool?.mcpServerName,
         { preapproved: false, unvalidatedToolParams: tc.rawParams },
       );
-      if (!isActive()) return { interrupted: true, ranAny };
+      if (!isActive()) {return { interrupted: true, ranAny };}
       if (interrupted) {
         this._s._setThreadState(threadId, { pendingToolCalls: undefined });
         return { interrupted: true, ranAny };
@@ -1380,7 +1426,7 @@ ${planBody}`;
     isActive: () => boolean,
   ): Promise<{ awaitingUserApproval?: boolean; interrupted?: boolean; ranAny?: boolean }> {
     const pending = this._s.state.allThreads[threadId]?.state.pendingToolCalls;
-    if (!pending?.length) return {};
+    if (!pending?.length) {return {};}
     // Очищаем pending до run — вложенная пауза перезапишет очередь предсказуемо.
     this._s._setThreadState(threadId, { pendingToolCalls: undefined });
     return this._runToolCallsSequential(threadId, pending, isActive);
@@ -1568,7 +1614,11 @@ ${planBody}`;
     // idleInterruptor: отмена LLM между ходами (compaction подменяет interrupt — восстанавливаем ниже)
 
     const chatMode =
-      runCtx?.chatModeOverride ?? this._s._settingsService.state.globalSettings.chatMode; // фиксируем на прогон, даже если пользователь сменил режим в UI
+      runCtx?.chatModeOverride ??
+      resolveThreadChatMode(
+        this._s.state.allThreads[threadId]?.state.chatMode,
+        this._s._settingsService.state.globalSettings.chatMode,
+      ); // фиксируем на прогон, даже если пользователь сменил режим в UI
     const isSubagent = !!runCtx?.isSubagent;
     const excludedToolNames = isSubagent && !runCtx?.allowedToolNames
       ? SUBAGENT_EXCLUDED_TOOLS
@@ -1604,7 +1654,7 @@ ${planBody}`;
             validatedParams: callThisToolFirst.params,
           },
         );
-        if (!isActive()) return;
+        if (!isActive()) {return;}
         if (interrupted) {
           this._s._setStreamState(threadId, undefined);
           this._s._setThreadState(threadId, { pendingToolCalls: undefined });
@@ -1613,7 +1663,7 @@ ${planBody}`;
         }
         toolsRanInRun = true;
         const drain = await this._drainPendingToolCalls(threadId, isActive);
-        if (!isActive()) return;
+        if (!isActive()) {return;}
         if (drain.interrupted) {
           this._s._setStreamState(threadId, undefined);
           this._s._addUserCheckpoint({ threadId });
@@ -1628,12 +1678,12 @@ ${planBody}`;
           toolsRanInRun = true;
         }
       }
-      if (!isActive()) return;
+      if (!isActive()) {return;}
       this._s._setStreamState(threadId, { isRunning: 'idle', interrupt: 'not_needed' });
 
       // Цикл LLM ↔ инструменты до natural_end / pause / await_user
       while (shouldSendAnotherMessage) {
-        if (!isActive()) return;
+        if (!isActive()) {return;}
         // shouldSendAnotherMessage выставляет decideLoopContinuation
         shouldSendAnotherMessage = false;
         isRunningWhenEnd = undefined;
@@ -1648,7 +1698,7 @@ ${planBody}`;
           chatMode,
           isActive,
         });
-        if (!isActive()) return;
+        if (!isActive()) {return;}
         // Compaction мог подменить idle interrupt — возвращаем хук отмены цикла.
         this._s._setStreamState(threadId, { isRunning: 'idle', interrupt: idleInterruptor });
 
@@ -1656,7 +1706,7 @@ ${planBody}`;
         const allowUpdatePlan =
           this._s.state.allThreads[threadId]?.state.activePlan?.status === 'building';
         const enabledMcpServerNames =
-          chatMode === 'agent' || chatMode === 'debug'
+          chatMode === 'agent'
             ? this._syncEnabledMcpServers(threadId)
             : undefined;
         const { messages, separateSystemMessage } =
@@ -1666,7 +1716,7 @@ ${planBody}`;
             chatMode,
           });
 
-        if (!isActive()) return;
+        if (!isActive()) {return;}
         if (interruptedWhenIdle) {
           this._s._setStreamState(threadId, undefined);
           return;
@@ -1675,7 +1725,7 @@ ${planBody}`;
         let shouldRetryLLM = true;
         let nAttempts = 0;
         while (shouldRetryLLM) {
-          if (!isActive()) return;
+          if (!isActive()) {return;}
           shouldRetryLLM = false;
           nAttempts += 1;
 
@@ -1735,9 +1785,9 @@ ${planBody}`;
             separateSystemMessage,
             onText: ({ fullText, fullReasoning, toolCalls }: Parameters<OnText>[0]) => {
               // Поздние IPC-чанки после abort/Steer игнорируем — иначе «оживёт» спиннер LLM.
-              if (!isActive()) return;
+              if (!isActive()) {return;}
               const running = this._s.streamState[threadId]?.isRunning;
-              if (running !== 'LLM' && running !== 'idle') return;
+              if (running !== 'LLM' && running !== 'idle') {return;}
               const stream = this._s.streamState[threadId];
               const prevFirst =
                 stream?.isRunning === 'LLM' ? stream.llmInfo.firstTokenAt : undefined;
@@ -1757,15 +1807,15 @@ ${planBody}`;
                   ...(firstTokenAt !== undefined ? { firstTokenAt } : {}),
                 },
                 interrupt: Promise.resolve(() => {
-                  if (llmCancelToken) this._s._llmMessageService.abort(llmCancelToken);
+                  if (llmCancelToken) {this._s._llmMessageService.abort(llmCancelToken);}
                 }),
                 // statusHint gateway-retry сбрасывается при появлении токенов (ниже merge в setStreamState).
               });
             },
             onRetry: ({ attempt, maxAttempts, status, retryAfterSec }: Parameters<OnRetry>[0]) => {
-              if (!isActive()) return;
+              if (!isActive()) {return;}
               const stream = this._s.streamState[threadId];
-              if (stream?.isRunning !== 'LLM' && stream?.isRunning !== 'idle') return;
+              if (stream?.isRunning !== 'LLM' && stream?.isRunning !== 'idle') {return;}
               const statusHint = formatGatewayRetryStatusHint({
                 attempt,
                 maxAttempts,
@@ -1810,7 +1860,7 @@ ${planBody}`;
 
           // Переход в isRunning LLM
           if (!llmCancelToken) {
-            if (!isActive()) return;
+            if (!isActive()) {return;}
             this._s._setStreamState(threadId, {
               isRunning: undefined,
               error: {
@@ -1821,7 +1871,7 @@ ${planBody}`;
             break;
           }
 
-          if (!isActive()) return;
+          if (!isActive()) {return;}
           this._s._setStreamState(threadId, {
             isRunning: 'LLM',
             llmInfo: { displayContentSoFar: '', reasoningSoFar: '', toolCallsSoFar: null },
@@ -1829,7 +1879,7 @@ ${planBody}`;
           });
           const llmRes = await messageIsDonePromise;
 
-          if (!isActive()) return; // superseded — не трогаем streamState
+          if (!isActive()) {return;} // superseded — не трогаем streamState
 
           if (llmRes.type === 'llmAborted') {
             return;
@@ -1875,7 +1925,7 @@ ${planBody}`;
                 statusHint,
               });
               await timeout(RETRY_DELAY);
-              if (!isActive()) return;
+              if (!isActive()) {return;}
               if (interruptedWhenIdle) {
                 this._s._setStreamState(threadId, undefined);
                 return;
@@ -1921,7 +1971,6 @@ ${planBody}`;
           // Калибровка локальных оценок токенов по usage.prompt_tokens шлюза
           if (info.usage?.prompt_tokens) {
             try {
-              const chatMode = this._s._settingsService.state.globalSettings.chatMode;
               const { modelSelection } = this._currentModelSelectionProps();
               const est = await this._s._convertToLLMMessagesService.estimateChatContextUsage({
                 chatMessages: this._s.state.allThreads[threadId]?.messages ?? [],
@@ -1958,8 +2007,8 @@ ${planBody}`;
               });
             }
             const translated = await this._translateReasoningToRussian(reasoning, isActive);
-            if (!isActive()) return;
-            if (translated) reasoning = translated;
+            if (!isActive()) {return;}
+            if (translated) {reasoning = translated;}
           }
           const visibleTurn = promoteEmptyDisplayFromReasoning(info.fullText, reasoning);
           const assistantDisplayContent = visibleTurn.displayContent;
@@ -1976,7 +2025,7 @@ ${planBody}`;
 
           const hadTruncatedToolCall = !!(info.truncatedToolNames?.length);
           const planHasOpenTodos = await this._planHasOpenTodos(threadId);
-          if (!isActive()) return;
+          if (!isActive()) {return;}
 
           const wantsLengthContinue = shouldAutoContinueOnLength({
             finishReason: info.finishReason,
@@ -2037,7 +2086,7 @@ ${planBody}`;
             recentToolSignatures.push(toolBatchSignature(toolCalls));
             const { awaitingUserApproval, interrupted, ranAny } =
               await this._runToolCallsSequential(threadId, toolCalls, isActive);
-            if (!isActive()) return;
+            if (!isActive()) {return;}
             if (interrupted) {
               this._s._setStreamState(threadId, undefined);
               return;
@@ -2101,7 +2150,7 @@ ${planBody}`;
             const progressLabel = needsProgress
               ? await this._planProgressLabel(threadId)
               : undefined;
-            if (!isActive()) return;
+            if (!isActive()) {return;}
             this._appendAgentPauseMessage(threadId, decision.reason, progressLabel);
             this._s._setStreamState(threadId, { isRunning: 'idle', interrupt: 'not_needed' });
           } else {
@@ -2111,7 +2160,7 @@ ${planBody}`;
         } // while retry LLM
       } // while shouldSendAnotherMessage
 
-      if (!isActive()) return;
+      if (!isActive()) {return;}
 
       // awaiting_user оставляем; иначе снимаем isRunning
       this._s._setStreamState(
@@ -2124,18 +2173,18 @@ ${planBody}`;
       if (!isSubagent) {
         this._playChatSound(isRunningWhenEnd === 'awaiting_user' ? 'confirm' : 'done');
 
-        if (!isRunningWhenEnd) this._s._addUserCheckpoint({ threadId });
+        if (!isRunningWhenEnd) {this._s._addUserCheckpoint({ threadId });}
 
         // activePlan: built только когда todo закрыты; иначе остаёмся building
         if (!isRunningWhenEnd) {
           const activePlan = this._s.state.allThreads[threadId]?.state.activePlan;
           if (activePlan?.status === 'building') {
             const stillOpen = await this._planHasOpenTodos(threadId);
-            if (!isActive()) return;
+            if (!isActive()) {return;}
             const progressLabel = stillOpen
               ? ((await this._planProgressLabel(threadId)) ?? activePlan.progressLabel)
               : undefined;
-            if (!isActive()) return;
+            if (!isActive()) {return;}
             this._s._setThreadState(threadId, {
               activePlan: {
                 ...activePlan,
@@ -2152,7 +2201,7 @@ ${planBody}`;
         }
       }
     } catch (error) {
-      if (!isActive()) return;
+      if (!isActive()) {return;}
       this._clearStuckAgentStreamState(threadId, {
         message: getErrorMessage(error),
         fullError: error instanceof Error ? error : null,
@@ -2162,31 +2211,28 @@ ${planBody}`;
       }
       throw error;
     } finally {
-      if (isSubagent) {
-        return;
-      }
-      const running = this._s.streamState[threadId]?.isRunning;
-      if (isActive()) {
-        // Живой прогон: снять залипший preparing|idle|LLM|tool и flush очереди.
-        if (shouldClearStuckStream(running)) {
-          chatTrace(threadId, 'agent.finally-clear', String(running));
+      if (!isSubagent) {
+        const running = this._s.streamState[threadId]?.isRunning;
+        if (isActive()) {
+          // Живой прогон: снять залипший preparing|idle|LLM|tool и flush очереди.
+          if (shouldClearStuckStream(running)) {
+            chatTrace(threadId, 'agent.finally-clear', String(running));
+            this._clearStuckAgentStreamState(threadId);
+            void this._s._flushMessageQueue(threadId);
+          }
+        } else if (shouldClearStuckStreamOnStaleEpoch(running)) {
+          // Stale epoch: только idle, оставленный умирающим loop после abort (не трогаем preparing/LLM/tool нового прогона).
+          chatTrace(threadId, 'agent.finally-clear-stale', String(running));
           this._clearStuckAgentStreamState(threadId);
+          // Очередь, поставленная в залипший idle, иначе не всплывёт: цикл уже мёртв.
           void this._s._flushMessageQueue(threadId);
         }
-        return;
-      }
-      // Stale epoch: только idle, оставленный умирающим loop после abort (не трогаем preparing/LLM/tool нового прогона).
-      if (shouldClearStuckStreamOnStaleEpoch(running)) {
-        chatTrace(threadId, 'agent.finally-clear-stale', String(running));
-        this._clearStuckAgentStreamState(threadId);
-        // Очередь, поставленная в залипший idle, иначе не всплывёт: цикл уже мёртв.
-        void this._s._flushMessageQueue(threadId);
       }
     }
   }
 
   _playChatSound(kind: 'done' | 'confirm') {
-    if (!this._s._settingsService.state.globalSettings.playChatNotificationSound) return;
+    if (!this._s._settingsService.state.globalSettings.playChatNotificationSound) {return;}
     const volume = this._s._configurationService.getValue(
       'accessibility.signalOptions.volume',
     );
@@ -2196,7 +2242,7 @@ ${planBody}`;
       );
       return;
     }
-    const sound = kind === 'confirm' ? Sound.warning : Sound.taskCompleted;
+    const sound = kind === 'confirm' ? Sound.warning : Sound.ohOhIcq;
     void this._s._accessibilitySignalService
       .playSound(sound, true, AcknowledgeDocCommentsToken)
       .catch((err: unknown) => {

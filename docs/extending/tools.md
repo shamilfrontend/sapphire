@@ -11,7 +11,7 @@ Builtin tools объявляются в `common/prompt/prompts.ts` и испол
 5. **`toolsService.ts`** — validate + execute (или обработка в agent loop для subagents).
 6. **Промпт** — при необходимости system / tool-calling instructions.
 7. **Документация** — строка в [`reference/tools.md`](/reference/tools).
-8. **Проверка** — Plan без edit/terminal/web; Agent/Debug — approvals и deferred MCP.
+8. **Проверка** — Plan без edit/terminal/web; Agent — approvals и deferred MCP.
 
 ## Режимы и availableTools
 
@@ -19,7 +19,7 @@ Builtin tools объявляются в `common/prompt/prompts.ts` и испол
 // упрощённо из availableTools()
 normal  → нет builtin tools
 plan    → read/search (без AGENT_ONLY) + create_plan + update_plan
-agent|debug → все builtin кроме create_plan
+agent → все builtin кроме create_plan
             + update_plan только если allowUpdatePlan (build плана)
             + enable_mcp_server если есть online MCP
             + MCP tools только для enabledMcpServerNames

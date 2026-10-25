@@ -6,8 +6,7 @@
 
 import { nextTick, onMounted, onUnmounted, ref, watch, type VNodeChild } from 'vue';
 import { Paperclip } from 'lucide-vue-next';
-import { useSettingsState } from '../util/services.js';
-import ModelDropdown from '../void-settings-tsx/ModelDropdown.vue';
+import ModelSettingsMenu from './ModelSettingsMenu.vue';
 import {
   FeatureName,
 } from '../../../../../../../workbench/contrib/sapphire/common/sapphireSettingsTypes.js';
@@ -19,8 +18,7 @@ import type { ChatContextUsage } from '../../../convertToLLMMessageService.js';
 import IconX from './IconX.vue';
 import SelectedFiles from './SelectedFiles.vue';
 import SelectedImages from './SelectedImages.vue';
-import { accentOfChatMode, nameOfChatMode } from './ChatComposer.js';
-import ReasoningOptionSlider from './ReasoningOptionSlider.vue';
+import { accentOfChatMode, nameOfChatMode, useCurrentThreadChatMode } from './ChatComposer.js';
 import ChatModeDropdown from './ChatModeDropdown.vue';
 import ContextUsageIndicator from './ContextUsageIndicator.vue';
 import ButtonSubmit from './ButtonSubmit.vue';
@@ -57,7 +55,7 @@ const props = withDefaults(
   },
 );
 
-const settingsState = useSettingsState();
+const chatMode = useCurrentThreadChatMode();
 const toolbarRef = ref<HTMLDivElement | null>(null);
 const actionsRef = ref<HTMLDivElement | null>(null);
 const modeMeasureRef = ref<HTMLDivElement | null>(null);
@@ -108,7 +106,7 @@ const bindToolbar = () => {
 onMounted(bindToolbar);
 watch(
   () =>
-    [props.featureName, settingsState.value.globalSettings.chatMode, props.isStreaming] as const,
+    [props.featureName, chatMode.value, props.isStreaming] as const,
   () => {
     void nextTick(() => bindToolbar());
   },
@@ -168,23 +166,16 @@ onUnmounted(() => toolbarObserver?.disconnect());
         aria-hidden="true"
       >
         <span class="size-3.5 shrink-0 mr-1" />
-        <span class="mr-1">{{ nameOfChatMode[settingsState.globalSettings.chatMode] }}</span>
+        <span class="mr-1">{{ nameOfChatMode[chatMode] }}</span>
         <span class="size-3 shrink-0" />
       </div>
 
-      <div v-if="showModelDropdown" class="flex flex-col gap-y-1 min-w-0 flex-1">
-        <ReasoningOptionSlider :featureName="featureName" />
+      <div v-if="showModelDropdown" class="flex items-center flex-nowrap min-w-0 flex-1">
+        <ChatModeDropdown v-if="featureName === 'Chat'" :iconOnly="compactMode" />
+      </div>
 
-        <div class="flex items-center flex-nowrap gap-x-2 min-w-0">
-          <ChatModeDropdown v-if="featureName === 'Chat'" :iconOnly="compactMode" />
-          <div class="min-w-0 shrink">
-            <ModelDropdown
-              :featureName="featureName"
-              class="text-xs text-void-fg-3 rounded"
-            />
-          </div>
-          <div class="flex-1" />
-        </div>
+      <div v-if="showModelDropdown" class="min-w-0 max-w-[240px] shrink">
+        <ModelSettingsMenu :featureName="featureName" />
       </div>
 
       <div ref="actionsRef" class="flex items-center gap-2 shrink-0">
@@ -211,18 +202,18 @@ onUnmounted(() => toolbarObserver?.disconnect());
             v-if="!isDisabled"
             @click="onSubmit()"
             :disabled="isDisabled"
-            :accentColor="featureName === 'Chat' ? accentOfChatMode[settingsState.globalSettings.chatMode].fg : undefined"
+            :accentColor="featureName === 'Chat' ? accentOfChatMode[chatMode].fg : undefined"
           />
           <ButtonStop
             @click="onAbort()"
-            :accentColor="featureName === 'Chat' ? accentOfChatMode[settingsState.globalSettings.chatMode].fg : undefined"
+            :accentColor="featureName === 'Chat' ? accentOfChatMode[chatMode].fg : undefined"
           />
         </template>
         <ButtonSubmit
-          v-else
+          v-else-if="!isDisabled"
           @click="onSubmit()"
           :disabled="isDisabled"
-          :accentColor="featureName === 'Chat' ? accentOfChatMode[settingsState.globalSettings.chatMode].fg : undefined"
+          :accentColor="featureName === 'Chat' ? accentOfChatMode[chatMode].fg : undefined"
         />
       </div>
     </div>

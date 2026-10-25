@@ -482,7 +482,7 @@ export const ACTIVITY_BAR_TOP_ACTIVE_BACKGROUND = registerColor('activityBarTop.
 
 export const ACTIVITY_BAR_TOP_INACTIVE_FOREGROUND = registerColor('activityBarTop.inactiveForeground', {
 	dark: transparent(ACTIVITY_BAR_TOP_FOREGROUND, 0.6),
-	light: transparent(ACTIVITY_BAR_TOP_FOREGROUND, 0.75),
+	light: transparent(ACTIVITY_BAR_TOP_FOREGROUND, 0.9),
 	hcDark: Color.white,
 	hcLight: editorForeground
 }, localize('activityBarTopInActiveForeground', "Inactive foreground color of the item in the Activity bar when it is on top / bottom. The activity allows to switch between views of the side bar."));

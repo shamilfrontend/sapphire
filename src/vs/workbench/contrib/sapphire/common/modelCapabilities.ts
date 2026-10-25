@@ -1,7 +1,7 @@
-/*--------------------------------------------------------------------------------------
- *  Copyright 2025 Glass Devtools, Inc. All rights reserved.
- *  Licensed under the Apache License, Version 2.0. See LICENSE.txt for more information.
- *--------------------------------------------------------------------------------------*/
+/*---------------------------------------------------------------------------------------------
+ *  Copyright (c) Microsoft Corporation. All rights reserved.
+ *  Licensed under the MIT License. See License.txt in the project root for license information.
+ *--------------------------------------------------------------------------------------------*/
 
 import {
 	FeatureName,
@@ -92,7 +92,7 @@ export const defaultModelsOfProvider = {
 		'gemini-2.0-flash-lite',
 		'gemini-2.5-pro-preview-05-06',
 	],
-	deepseek: ['deepseek-chat', 'deepseek-reasoner'],
+	deepseek: ['deepseek-flash', 'deepseek-v4-pro', 'deepseek-chat', 'deepseek-reasoner'],
 	ollama: [],
 	vLLM: [],
 	lmStudio: [],
@@ -134,6 +134,9 @@ type SapphireStaticModelInfo = {
 
 	/** Chat Completions может включать image_url. */
 	supportsVision?: boolean;
+
+	/** Человекочитаемое имя с версией в UI; в API уходит model id. */
+	displayName?: string;
 
 	/** Доп. поля, мержатся в body OpenAI-совместимого запроса. */
 	additionalGatewayPayload?: { [key: string]: string };
@@ -180,7 +183,7 @@ type SendableReasoningInfo =
 
 type ProviderReasoningIOSettings = {
 	input?: {
-		includeInPayload?: (reasoningState: SendableReasoningInfo) => null | { [key: string]: any };
+		includeInPayload?: (reasoningState: SendableReasoningInfo) => null | { [key: string]: unknown };
 	};
 	output?: { nameOfFieldInDelta?: string };
 };
@@ -242,7 +245,7 @@ const reasoningOn = (
 	supportsReasoning: true,
 	canTurnOffReasoning: opts.canTurnOff ?? true,
 	canIOReasoning: true,
-	...(opts.reserved != null ? { reasoningReservedOutputTokenSpace: opts.reserved } : {}),
+	...((opts.reserved !== null && opts.reserved !== undefined) ? { reasoningReservedOutputTokenSpace: opts.reserved } : {}),
 	...(opts.slider ? { reasoningSlider: opts.slider } : {}),
 });
 
@@ -412,7 +415,34 @@ const xAIModelOptions = {
 	}),
 } as const satisfies { [s: string]: SapphireStaticModelInfo };
 
+const deepseekFlashDisplayName = 'DeepSeek V4.1 Flash 1017';
+const deepseekFlashCapabilities = {
+	displayName: deepseekFlashDisplayName,
+	contextWindow: 1_048_576,
+	reservedOutputTokenSpace: 32_768,
+	supportsVision: true,
+	reasoningCapabilities: reasoningOn({
+		canTurnOff: true,
+		reserved: 32_768,
+		slider: { type: 'effort_slider' as const, values: ['low', 'high', 'max'], default: 'high' },
+	}),
+} satisfies Partial<SapphireStaticModelInfo> & Pick<SapphireStaticModelInfo, 'contextWindow'>;
+
 const deepseekModelOptions = {
+	'deepseek-flash': model(deepseekFlashCapabilities),
+	'deepseek-v4-flash': model(deepseekFlashCapabilities),
+	'deepseek-v4-flash-vision-exp': model(deepseekFlashCapabilities),
+	'deepseek-v4-pro': model({
+		displayName: 'DeepSeek V4 Pro',
+		contextWindow: 1_048_576,
+		reservedOutputTokenSpace: 32_768,
+		supportsVision: true,
+		reasoningCapabilities: reasoningOn({
+			canTurnOff: true,
+			reserved: 32_768,
+			slider: { type: 'effort_slider' as const, values: ['low', 'high', 'max'], default: 'high' },
+		}),
+	}),
 	'deepseek-chat': model({
 		contextWindow: 128_000,
 		reservedOutputTokenSpace: 8_192,
@@ -527,55 +557,55 @@ const extensiveModelOptionsFallback: SapphireStaticProviderInfo['modelOptionsFal
 	};
 
 	if (lower.includes('gemini') && (lower.includes('2.5') || lower.includes('2-5')))
-		return toFallback(geminiModelOptions, 'gemini-2.5-pro-exp-03-25');
-	if (lower.includes('gemini')) return toFallback(geminiModelOptions, 'gemini-2.0-flash');
+		{return toFallback(geminiModelOptions, 'gemini-2.5-pro-exp-03-25');}
+	if (lower.includes('gemini')) {return toFallback(geminiModelOptions, 'gemini-2.0-flash');}
 
 	if (lower.includes('claude-3-5') || lower.includes('claude-3.5'))
-		return toFallback(anthropicModelOptions, 'claude-3-5-sonnet-20241022');
+		{return toFallback(anthropicModelOptions, 'claude-3-5-sonnet-20241022');}
 	if (lower.includes('claude') && (lower.includes('opus') || lower.includes('sonnet') || lower.includes('3-7') || lower.includes('3.7')))
-		return toFallback(anthropicModelOptions, 'claude-3-7-sonnet-20250219');
-	if (lower.includes('claude')) return toFallback(anthropicModelOptions, 'claude-3-5-sonnet-20241022');
+		{return toFallback(anthropicModelOptions, 'claude-3-7-sonnet-20250219');}
+	if (lower.includes('claude')) {return toFallback(anthropicModelOptions, 'claude-3-5-sonnet-20241022');}
 
-	if (lower.includes('grok')) return toFallback(xAIModelOptions, 'grok-3');
+	if (lower.includes('grok')) {return toFallback(xAIModelOptions, 'grok-3');}
 
 	if (lower.includes('deepseek') && (lower.includes('reasoner') || lower.includes('r1')))
-		return toFallback(openSourceProfiles, 'deepseekR1');
-	if (lower.includes('deepseek')) return toFallback(openSourceProfiles, 'deepseekChat');
+		{return toFallback(openSourceProfiles, 'deepseekR1');}
+	if (lower.includes('deepseek')) {return toFallback(openSourceProfiles, 'deepseekChat');}
 
-	if (lower.includes('llama')) return toFallback(openSourceProfiles, 'llama3');
-	if (lower.includes('qwen') && lower.includes('coder')) return toFallback(openSourceProfiles, 'qwen2_5coder');
-	if (lower.includes('qwen') || lower.includes('glm')) return toFallback(openSourceProfiles, 'qwen3');
-	if (lower.includes('qwq')) return toFallback(openSourceProfiles, 'qwq');
-	if (lower.includes('codestral')) return toFallback(openSourceProfiles, 'codestral');
-	if (lower.includes('devstral')) return toFallback(openSourceProfiles, 'devstral');
-	if (lower.includes('gemma')) return toFallback(openSourceProfiles, 'gemma');
+	if (lower.includes('llama')) {return toFallback(openSourceProfiles, 'llama3');}
+	if (lower.includes('qwen') && lower.includes('coder')) {return toFallback(openSourceProfiles, 'qwen2_5coder');}
+	if (lower.includes('qwen') || lower.includes('glm')) {return toFallback(openSourceProfiles, 'qwen3');}
+	if (lower.includes('qwq')) {return toFallback(openSourceProfiles, 'qwq');}
+	if (lower.includes('codestral')) {return toFallback(openSourceProfiles, 'codestral');}
+	if (lower.includes('devstral')) {return toFallback(openSourceProfiles, 'devstral');}
+	if (lower.includes('gemma')) {return toFallback(openSourceProfiles, 'gemma');}
 
 	if (lower.includes('gpt') && lower.includes('nano') && (lower.includes('4.1') || lower.includes('4-1')))
-		return toFallback(openAIModelOptions, 'gpt-4.1-nano');
+		{return toFallback(openAIModelOptions, 'gpt-4.1-nano');}
 	if (lower.includes('gpt') && lower.includes('mini') && (lower.includes('4.1') || lower.includes('4-1')))
-		return toFallback(openAIModelOptions, 'gpt-4.1-mini');
+		{return toFallback(openAIModelOptions, 'gpt-4.1-mini');}
 	if (lower.includes('gpt') && (lower.includes('4.1') || lower.includes('4-1')))
-		return toFallback(openAIModelOptions, 'gpt-4.1');
-	if (lower.includes('4o') && lower.includes('mini')) return toFallback(openAIModelOptions, 'gpt-4o-mini');
-	if (lower.includes('4o')) return toFallback(openAIModelOptions, 'gpt-4o');
-	if (lower.includes('o1') && lower.includes('mini')) return toFallback(openAIModelOptions, 'o1-mini');
-	if (lower.includes('o1')) return toFallback(openAIModelOptions, 'o1');
-	if (lower.includes('o3') && lower.includes('mini')) return toFallback(openAIModelOptions, 'o3-mini');
-	if (lower.includes('o3')) return toFallback(openAIModelOptions, 'o3');
-	if (lower.includes('o4') && lower.includes('mini')) return toFallback(openAIModelOptions, 'o4-mini');
+		{return toFallback(openAIModelOptions, 'gpt-4.1');}
+	if (lower.includes('4o') && lower.includes('mini')) {return toFallback(openAIModelOptions, 'gpt-4o-mini');}
+	if (lower.includes('4o')) {return toFallback(openAIModelOptions, 'gpt-4o');}
+	if (lower.includes('o1') && lower.includes('mini')) {return toFallback(openAIModelOptions, 'o1-mini');}
+	if (lower.includes('o1')) {return toFallback(openAIModelOptions, 'o1');}
+	if (lower.includes('o3') && lower.includes('mini')) {return toFallback(openAIModelOptions, 'o3-mini');}
+	if (lower.includes('o3')) {return toFallback(openAIModelOptions, 'o3');}
+	if (lower.includes('o4') && lower.includes('mini')) {return toFallback(openAIModelOptions, 'o4-mini');}
 
 	if (
 		Object.keys(openSourceProfiles)
 			.map((k) => k.toLowerCase())
 			.includes(lower)
 	)
-		return toFallback(openSourceProfiles, lower as keyof typeof openSourceProfiles);
+		{return toFallback(openSourceProfiles, lower as keyof typeof openSourceProfiles);}
 
 	return null;
 };
 
 const gatewayIncludeInPayloadReasoning = (reasoningInfo: SendableReasoningInfo) => {
-	if (!reasoningInfo?.isReasoningEnabled) return null;
+	if (!reasoningInfo?.isReasoningEnabled) {return null;}
 	if (reasoningInfo.type === 'effort_slider_value') {
 		return { reasoning_effort: reasoningInfo.reasoningEffort };
 	}
@@ -656,6 +686,13 @@ export const getProviderCapabilities = (providerName: ProviderName) => {
 	return { providerReasoningIOSettings };
 };
 
+/** Подпись в UI: displayName из каталога или сырой model id. */
+export const getModelDisplayName = (
+	providerName: ProviderName,
+	modelName: string,
+	overridesOfModel?: OverridesOfModel,
+): string => getModelCapabilities(providerName, modelName, overridesOfModel).displayName ?? modelName;
+
 export const getIsReasoningEnabledState = (
 	featureName: FeatureName,
 	providerName: ProviderName,
@@ -665,7 +702,7 @@ export const getIsReasoningEnabledState = (
 ) => {
 	const { supportsReasoning, canTurnOffReasoning } =
 		getModelCapabilities(providerName, modelName, overridesOfModel).reasoningCapabilities || {};
-	if (!supportsReasoning) return false;
+	if (!supportsReasoning) {return false;}
 
 	const defaultEnabledVal = featureName === 'Chat' || !canTurnOffReasoning;
 
@@ -710,7 +747,7 @@ export const getSendableReasoningInfo = (
 		modelSelectionOptions,
 		overridesOfModel,
 	);
-	if (!isReasoningEnabled) return null;
+	if (!isReasoningEnabled) {return null;}
 
 	if (reasoningBudgetSlider?.type === 'effort_slider') {
 		const reasoningEffort = modelSelectionOptions?.reasoningEffort ?? reasoningBudgetSlider.default;
@@ -723,7 +760,7 @@ export const getSendableReasoningInfo = (
 
 	if (reasoningBudgetSlider?.type === 'budget_slider') {
 		const reasoningBudget = modelSelectionOptions?.reasoningBudget ?? reasoningBudgetSlider.default;
-		if (reasoningBudget <= 0) return null;
+		if (reasoningBudget <= 0) {return null;}
 		return {
 			type: 'budget_slider_value',
 			isReasoningEnabled: true,

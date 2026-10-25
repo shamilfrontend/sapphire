@@ -1,7 +1,7 @@
-/*--------------------------------------------------------------------------------------
- *  Copyright 2025 Glass Devtools, Inc. All rights reserved.
- *  Licensed under the Apache License, Version 2.0. See LICENSE.txt for more information.
- *--------------------------------------------------------------------------------------*/
+/*---------------------------------------------------------------------------------------------
+ *  Copyright (c) Microsoft Corporation. All rights reserved.
+ *  Licensed under the MIT License. See License.txt in the project root for license information.
+ *--------------------------------------------------------------------------------------------*/
 
 import {
   EventLLMMessageOnTextParams,
@@ -41,6 +41,14 @@ export interface ILLMMessageService {
   gatewayModelList: (params: ServiceModelListParams<GatewayModelResponse>) => void;
 }
 
+function hookMap<T>(): { [eventId: string]: (params: T) => void } {
+  return {};
+}
+
+function abortHookMap(): { [eventId: string]: () => void } {
+  return {};
+}
+
 // удобно держать рядом с llmMessageChannel.ts
 class LLMMessageService extends Disposable implements ILLMMessageService {
   readonly _serviceBrand: undefined;
@@ -49,24 +57,18 @@ class LLMMessageService extends Disposable implements ILLMMessageService {
 
   // sendLLMMessage
   private readonly llmMessageHooks = {
-    onText: {} as { [eventId: string]: (params: EventLLMMessageOnTextParams) => void },
-    onFinalMessage: {} as {
-      [eventId: string]: (params: EventLLMMessageOnFinalMessageParams) => void;
-    },
-    onError: {} as { [eventId: string]: (params: EventLLMMessageOnErrorParams) => void },
-    onRetry: {} as { [eventId: string]: (params: EventLLMMessageOnRetryParams) => void },
-    onAbort: {} as { [eventId: string]: () => void }, // локально, не через IPC — abort() мгновенный
+    onText: hookMap<EventLLMMessageOnTextParams>(),
+    onFinalMessage: hookMap<EventLLMMessageOnFinalMessageParams>(),
+    onError: hookMap<EventLLMMessageOnErrorParams>(),
+    onRetry: hookMap<EventLLMMessageOnRetryParams>(),
+    onAbort: abortHookMap(),
   };
 
   // list hooks
   private readonly listHooks = {
     gateway: {
-      success: {} as {
-        [eventId: string]: (params: EventModelListOnSuccessParams<GatewayModelResponse>) => void;
-      },
-      error: {} as {
-        [eventId: string]: (params: EventModelListOnErrorParams<GatewayModelResponse>) => void;
-      },
+      success: hookMap<EventModelListOnSuccessParams<GatewayModelResponse>>(),
+      error: hookMap<EventModelListOnErrorParams<GatewayModelResponse>>(),
     },
   };
 

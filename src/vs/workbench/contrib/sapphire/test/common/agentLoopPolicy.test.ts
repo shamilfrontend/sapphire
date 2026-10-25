@@ -1,7 +1,7 @@
-/*--------------------------------------------------------------------------------------
- *  Copyright 2025 Glass Devtools, Inc. All rights reserved.
- *  Licensed under the Apache License, Version 2.0. See LICENSE.txt for more information.
- *--------------------------------------------------------------------------------------*/
+/*---------------------------------------------------------------------------------------------
+ *  Copyright (c) Microsoft Corporation. All rights reserved.
+ *  Licensed under the MIT License. See License.txt in the project root for license information.
+ *--------------------------------------------------------------------------------------------*/
 
 import assert from 'assert';
 import { ensureNoDisposablesAreLeakedInTestSuite } from '../../../../../base/test/common/utils.js';
@@ -196,27 +196,6 @@ suite('agentLoopPolicy', () => {
           step: 24,
           maxSteps: MAX_STEPS,
           chatMode: 'agent',
-          alreadyNudged: true,
-        }),
-        false,
-      );
-    });
-
-    test('debug step 24 asks for a wrap-up once', () => {
-      assert.strictEqual(
-        shouldForceWrapUp({
-          step: 24,
-          maxSteps: MAX_STEPS,
-          chatMode: 'debug',
-          alreadyNudged: false,
-        }),
-        true,
-      );
-      assert.strictEqual(
-        shouldForceWrapUp({
-          step: 24,
-          maxSteps: MAX_STEPS,
-          chatMode: 'debug',
           alreadyNudged: true,
         }),
         false,

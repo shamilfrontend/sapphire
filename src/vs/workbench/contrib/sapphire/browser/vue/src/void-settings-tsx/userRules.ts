@@ -1,12 +1,13 @@
-/*--------------------------------------------------------------------------------------
- *  Copyright 2025 Glass Devtools, Inc. All rights reserved.
- *  Licensed under the Apache License, Version 2.0. See LICENSE.txt for more information.
- *--------------------------------------------------------------------------------------*/
+/*---------------------------------------------------------------------------------------------
+ *  Copyright (c) Microsoft Corporation. All rights reserved.
+ *  Licensed under the MIT License. See License.txt in the project root for license information.
+ *--------------------------------------------------------------------------------------------*/
 
 import { URI } from '../../../../../../../base/common/uri.js';
 import { VSBuffer } from '../../../../../../../base/common/buffer.js';
 import Severity from '../../../../../../../base/common/severity.js';
 import { useAccessor } from '../util/services.js';
+import { openAgentsFile } from '../agents-window-tsx/agentsFileBridge.js';
 
 export type UserRuleDraft = {
   id: string | null; // null — создание нового правила, не редактирование
@@ -46,5 +47,7 @@ export const revealSapphireRulesFile = async (accessor: ReturnType<typeof useAcc
     console.error('Error ensuring .rules exists:', e);
   }
   await sapphireModelService.initializeModel(uri);
-  await commandService.executeCommand('vscode.open', uri);
+  if (!openAgentsFile({ fsPath: uri.fsPath })) {
+    await commandService.executeCommand('vscode.open', uri);
+  }
 };

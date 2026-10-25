@@ -1,7 +1,7 @@
-/*--------------------------------------------------------------------------------------
- *  Copyright 2025 Glass Devtools, Inc. All rights reserved.
- *  Licensed under the Apache License, Version 2.0. See LICENSE.txt for more information.
- *--------------------------------------------------------------------------------------*/
+/*---------------------------------------------------------------------------------------------
+ *  Copyright (c) Microsoft Corporation. All rights reserved.
+ *  Licensed under the MIT License. See License.txt in the project root for license information.
+ *--------------------------------------------------------------------------------------------*/
 
 import { Disposable, toDisposable } from '../../../../base/common/lifecycle.js';
 import { IInstantiationService } from '../../../../platform/instantiation/common/instantiation.js';
@@ -12,27 +12,25 @@ import {
 } from '../../../common/contributions.js';
 import { ServicesAccessor } from '../../../../editor/browser/editorExtensions.js';
 import { mountSapphireOnboarding } from './vue/out/void-onboarding/index.js';
-import { h, getActiveWindow } from '../../../../base/browser/dom.js';
+import { h } from '../../../../base/browser/dom.js';
+import { IWorkbenchLayoutService } from '../../../services/layout/browser/layoutService.js';
 
 // Contribution: монтирует onboarding при старте workbench
 class OnboardingContribution extends Disposable implements IWorkbenchContribution {
   static readonly ID = 'workbench.contrib.sapphireOnboarding';
 
-  constructor(@IInstantiationService private readonly instantiationService: IInstantiationService) {
+  constructor(
+    @IInstantiationService private readonly instantiationService: IInstantiationService,
+    @IWorkbenchLayoutService private readonly layoutService: IWorkbenchLayoutService,
+  ) {
     super();
     this.initialize();
   }
 
   private initialize(): void {
-    // Активное окно — поддержка нескольких окон
-    const targetWindow = getActiveWindow();
-
-    // .monaco-workbench в контексте этого окна
-    const workbench = targetWindow.document.querySelector('.monaco-workbench');
-
-    if (workbench) {
-      const onboardingContainer = h('div.sapphire-onboarding-container').root;
-      workbench.appendChild(onboardingContainer);
+    const workbench = this.layoutService.activeContainer;
+    const onboardingContainer = h('div.sapphire-onboarding-container').root;
+    workbench.appendChild(onboardingContainer);
       this.instantiationService.invokeFunction((accessor: ServicesAccessor) => {
         const result = mountSapphireOnboarding(onboardingContainer, accessor);
         if (result && typeof result.dispose === 'function') {
@@ -47,7 +45,6 @@ class OnboardingContribution extends Disposable implements IWorkbenchContributio
           }
         }),
       );
-    }
   }
 }
 

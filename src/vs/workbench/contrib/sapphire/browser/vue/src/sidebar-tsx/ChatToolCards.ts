@@ -1,12 +1,13 @@
-/*--------------------------------------------------------------------------------------
- *  Copyright 2025 Glass Devtools, Inc. All rights reserved.
- *  Licensed under the Apache License, Version 2.0. See LICENSE.txt for more information.
- *--------------------------------------------------------------------------------------*/
+/*---------------------------------------------------------------------------------------------
+ *  Copyright (c) Microsoft Corporation. All rights reserved.
+ *  Licensed under the MIT License. See License.txt in the project root for license information.
+ *--------------------------------------------------------------------------------------------*/
 
 import { defineComponent, h, onMounted, onUnmounted, onWatcherCleanup, ref, watch, type PropType, type VNodeChild } from 'vue';
 import { ChevronRight, Hammer } from 'lucide-vue-next';
 import { useAccessor, useChatThreadsState, useChatThreadsStreamState, useSettingsState } from '../util/services.js';
 import { URI } from '../../../../../../../base/common/uri.js';
+import { getActiveWindow } from '../../../../../../../base/browser/dom.js';
 import ChatMarkdownRender from '../markdown/ChatMarkdownRender.vue';
 import { getApplyBoxId } from '../markdown/ChatMarkdownRender.js';
 import BlockCode from '../util/BlockCode.vue';
@@ -17,6 +18,7 @@ import { useEditToolStreamState } from '../markdown/ApplyBlockHoverButtons.js';
 import { ChatMessage, ToolMessage } from '../../../../common/chatThreadServiceTypes.js';
 import { approvalTypeOfBuiltinToolName, BuiltinToolCallParams, BuiltinToolName, BuiltinToolResultType, LintErrorItem, ToolName } from '../../../../common/toolsServiceTypes.js';
 import { builtinToolNames, isABuiltinToolName, MAX_FILE_CHARS_PAGE } from '../../../../common/prompt/prompts.js';
+import { resolveThreadChatMode } from '../../../../common/sapphireSettingsTypes.js';
 import { RawToolCallObj } from '../../../../common/sendLLMMessageTypes.js';
 import ToolApprovalTypeSwitch from '../void-settings-tsx/ToolApprovalTypeSwitch.vue';
 import { persistentTerminalNameOfId } from '../../../terminalToolService.js';
@@ -90,7 +92,7 @@ const EditTool = ({
   const editToolType = toolMessage.name === 'edit_file' ? 'diff' : 'rewrite';
   if (toolMessage.type === 'running_now' || toolMessage.type === 'tool_request') {
     componentParams.children = h(ToolChildrenWrapper, {
-      class: "bg-void-bg-3"
+      class: 'bg-void-bg-3'
     }, h(EditToolChildren, {
       uri: params.uri,
       code: content,
@@ -113,7 +115,7 @@ const EditTool = ({
 
     // дочерние элементы карточки
     componentParams.children = h(ToolChildrenWrapper, {
-      class: "bg-void-bg-3"
+      class: 'bg-void-bg-3'
     }, h(EditToolChildren, {
       uri: params.uri,
       code: content,
@@ -124,35 +126,35 @@ const EditTool = ({
         result
       } = toolMessage;
       componentParams.bottomChildren = h(BottomChildren, {
-        title: "Ошибки линтера"
-      }, result?.lintErrors?.map((error, i) => h("div", {
+        title: 'Ошибки линтера'
+      }, result?.lintErrors?.map((error, i) => h('div', {
         key: i,
-        class: "whitespace-nowrap"
-      }, "\n              Строки ", error.startLineNumber, "-", error.endLineNumber, ": ", error.message)));
+        class: 'whitespace-nowrap'
+      }, '\n              Строки ', error.startLineNumber, '-', error.endLineNumber, ': ', error.message)));
     } else if (toolMessage.type === 'tool_error') {
       // ветка ошибки
       const {
         result
       } = toolMessage;
       componentParams.bottomChildren = h(BottomChildren, {
-        title: "Ошибка"
+        title: 'Ошибка'
       }, h(CodeChildren, null, result));
     }
   }
   return toolHeader(componentParams);
 };
 const formatDurationMs = (ms: number): string => {
-  if (ms < 1000) return `${(ms / 1000).toFixed(1)}с`;
+  if (ms < 1000) {return `${(ms / 1000).toFixed(1)}с`;}
   const sec = Math.floor(ms / 1000);
-  if (sec < 60) return `${sec}с`;
+  if (sec < 60) {return `${sec}с`;}
   const m = Math.floor(sec / 60);
   const s = sec % 60;
   return `${m}м ${String(s).padStart(2, '0')}с`;
 };
-const loadingTitleWrapper = (item: VNodeChild): VNodeChild => h("span", {
-  class: "flex items-center flex-nowrap"
+const loadingTitleWrapper = (item: VNodeChild): VNodeChild => h('span', {
+  class: 'flex items-center flex-nowrap'
 }, item, h(IconLoading, {
-  class: "w-3 text-sm"
+  class: 'w-3 text-sm'
 }));
 const TerminalRunningTitle = defineComponent({
   name: 'TerminalRunningTitle',
@@ -163,11 +165,11 @@ const TerminalRunningTitle = defineComponent({
     const now = ref(Date.now());
     let id = 0;
     onMounted(() => {
-      id = window.setInterval(() => {
+      id = getActiveWindow().setInterval(() => {
         now.value = Date.now();
       }, 250);
     });
-    onUnmounted(() => window.clearInterval(id));
+    onUnmounted(() => getActiveWindow().clearInterval(id));
     return () => loadingTitleWrapper(`Выполнение в терминале · ${formatDurationMs(now.value - props.startedAt)}`);
   },
 });
@@ -357,7 +359,7 @@ const getTitle = (toolMessage: Pick<ChatMessage & {
     // подпись «Выполняется» / «Выполнено» и т.п.
     const descriptor = t.type === 'success' ? 'Вызван' : t.type === 'running_now' ? 'Вызов' : t.type === 'tool_request' ? 'Вызов' : t.type === 'rejected' ? 'Вызов' : t.type === 'invalid_params' ? 'Вызов' : t.type === 'tool_error' ? 'Вызов' : 'Вызов';
     const title = `${descriptor} ${toolMessage.mcpServerName || 'MCP'}`;
-    if (t.type === 'running_now' || t.type === 'tool_request') return loadingTitleWrapper(title);
+    if (t.type === 'running_now' || t.type === 'tool_request') {return loadingTitleWrapper(title);}
     return title;
   }
 
@@ -372,19 +374,19 @@ const getTitle = (toolMessage: Pick<ChatMessage & {
   }
   if (t.type === 'success') {
     const done = titleOfBuiltinToolName[toolName].done;
-    if (isTerminal && t.durationMs != null) {
+    if (isTerminal && (t.durationMs !== null && t.durationMs !== undefined)) {
       return `${done} · ${formatDurationMs(t.durationMs)}`;
     }
     return done;
   }
   if (t.type === 'tool_error') {
     const proposed = titleOfBuiltinToolName[toolName].proposed;
-    if (isTerminal && t.durationMs != null) {
+    if (isTerminal && (t.durationMs !== null && t.durationMs !== undefined)) {
       return `${proposed} · ${formatDurationMs(t.durationMs)}`;
     }
     return proposed;
   }
-  if (t.type === 'running_now') return titleOfBuiltinToolName[toolName].running;
+  if (t.type === 'running_now') {return titleOfBuiltinToolName[toolName].running;}
   return titleOfBuiltinToolName[toolName].proposed;
 };
 const toolNameToDesc = (toolName: BuiltinToolName, _toolParams: BuiltinToolCallParams[BuiltinToolName] | undefined, accessor: ReturnType<typeof useAccessor>): {
@@ -669,7 +671,7 @@ export const ToolRequestAcceptRejectButtons = ({
       console.error('Error while approving message in chat:', e);
     }
   };
-  const approveButton = h("button", {
+  const approveButton = h('button', {
     onClick: onAccept,
     class: `
                 px-2 py-1
@@ -679,8 +681,8 @@ export const ToolRequestAcceptRejectButtons = ({
                 rounded-sm
                 text-sm font-medium
             `
-  }, "\n      Одобрить\n    ");
-  const cancelButton = h("button", {
+  }, '\n      Одобрить\n    ');
+  const cancelButton = h('button', {
     onClick: onReject,
     class: `
                 px-2 py-1
@@ -691,7 +693,7 @@ export const ToolRequestAcceptRejectButtons = ({
                 rounded-sm
                 text-sm font-medium
             `
-  }, "\n      Отмена\n    ");
+  }, '\n      Отмена\n    ');
   const approvalType = isABuiltinToolName(toolName) ? approvalTypeOfBuiltinToolName[toolName] : 'MCP tools';
   const approvalDesc =
     approvalType === 'edits'
@@ -702,16 +704,16 @@ export const ToolRequestAcceptRejectButtons = ({
           ? 'сеть'
           : 'MCP';
 
-  const approvalToggle = approvalType ? h("div", {
+  const approvalToggle = approvalType ? h('div', {
     key: approvalType,
-    class: "flex items-center ml-2 gap-x-1"
+    class: 'flex items-center ml-2 gap-x-1'
   }, h(ToolApprovalTypeSwitch, {
-    size: "xs",
+    size: 'xs',
     approvalType: approvalType,
     desc: `Автоодобрение: ${approvalDesc}`
   })) : null;
-  return h("div", {
-    class: "flex gap-2 mx-0.5 items-center"
+  return h('div', {
+    class: 'flex gap-2 mx-0.5 items-center'
   }, approveButton, cancelButton, approvalToggle);
 };
 export { findPinnedPlanToolMessage, planUriFsPathFromPlanTool, planUriFsPathToCollapseInThread, shouldCollapsePlanToolInThread } from '../../../../common/planToolPin.js';
@@ -722,7 +724,7 @@ export const PlanToolInlinePlaceholder = ({
 }: {
   toolMessage: ToolMessage<'create_plan'> | ToolMessage<'update_plan'>;
 }) => {
-  const name = toolMessage.type === 'success' && toolMessage.result && 'name' in toolMessage.result ? toolMessage.result.name : toolMessage.params && 'name' in toolMessage.params ? toolMessage.params.name : undefined;
+  const name = toolMessage.type === 'success' && toolMessage.result && Object.hasOwn(toolMessage.result, 'name') ? toolMessage.result.name : toolMessage.params && Object.hasOwn(toolMessage.params, 'name') ? toolMessage.params.name : undefined;
   return h(ToolHeaderWrapper, {
     title: getTitle(toolMessage),
     desc1: name ?? (toolMessage.name === 'update_plan' ? 'План обновлён' : 'План создан'),
@@ -756,19 +758,19 @@ export const PlanToolCard = defineComponent({
   if (toolMessage.type === 'invalid_params' || toolMessage.type === 'tool_error') {
     return h(ToolHeaderWrapper, {
       title: title,
-      desc1: "Ошибка",
+      desc1: 'Ошибка',
       isError: true,
       icon: null,
       isRejected: false,
       bottomChildren: h(BottomChildren, {
-        title: "Ошибка"
+        title: 'Ошибка'
       }, h(CodeChildren, null, toolMessage.content))
     });
   }
   const result = toolMessage.type === 'success' ? toolMessage.result as BuiltinToolResultType['create_plan'] : null;
-  const name = result?.name ?? (toolMessage.params && 'name' in toolMessage.params ? (toolMessage.params as BuiltinToolCallParams['create_plan']).name : 'План');
-  const overview = result?.overview ?? (toolMessage.params && 'overview' in toolMessage.params ? (toolMessage.params as BuiltinToolCallParams['create_plan']).overview : '');
-  const planUri = result?.planUri ?? (toolMessage.params && 'planUri' in toolMessage.params ? (toolMessage.params as BuiltinToolCallParams['update_plan']).planUri : null);
+  const name = result?.name ?? (toolMessage.params && Object.hasOwn(toolMessage.params, 'name') ? (toolMessage.params as BuiltinToolCallParams['create_plan']).name : 'План');
+  const overview = result?.overview ?? (toolMessage.params && Object.hasOwn(toolMessage.params, 'overview') ? (toolMessage.params as BuiltinToolCallParams['create_plan']).overview : '');
+  const planUri = result?.planUri ?? (toolMessage.params && Object.hasOwn(toolMessage.params, 'planUri') ? (toolMessage.params as BuiltinToolCallParams['update_plan']).planUri : null);
   const threads = chatThreadsState.value;
   const activePlan = threads.allThreads[threads.currentThreadId]?.state.activePlan;
   const isThisActivePlan = !!(planUri && activePlan?.planUriFsPath === planUri.fsPath);
@@ -778,7 +780,7 @@ export const PlanToolCard = defineComponent({
   // обычные функции (не useCallback), чтобы число хуков не менялось при
   // переходах running_now → success после ранних return выше
   const onViewPlan = () => {
-    if (!planUri) return;
+    if (!planUri) {return;}
     if (agentsPlan) {
       agentsPlan.openPlan(planUri.fsPath);
       return;
@@ -792,26 +794,26 @@ export const PlanToolCard = defineComponent({
   const buildLabel = planStatus === 'building' && isRunning ? 'Выполняется…' : planStatus === 'building' && !isRunning ? 'Продолжить' : planStatus === 'built' ? 'Выполнить снова' : 'Сделать по плану';
   const canBuild = isThisActivePlan && (planStatus === 'ready' || planStatus === 'built' || planStatus === 'building' && !isRunning) && !isRunning && !isRejected;
   const progressLabel = isThisActivePlan ? activePlan?.progressLabel : undefined;
-  return h("div", {
-    class: "mx-0.5 my-1 rounded-md border border-void-border-2 bg-void-bg-2 overflow-hidden"
-  }, h("div", {
-    class: "px-3 pt-2.5 pb-1 text-[11px] uppercase tracking-wide text-void-fg-3"
-  }, toolMessage.name === 'update_plan' ? 'План обновлён' : 'План создан'), h("div", {
-    class: "px-3 pb-2"
-  }, h("div", {
-    class: "text-sm font-medium text-void-fg-1"
-  }, name), overview ? h("div", {
-    class: "mt-1 text-xs text-void-fg-3 leading-relaxed"
-  }, overview) : null, progressLabel && (planStatus === 'building' || planStatus === 'built') ? h("div", {
-    class: "mt-1.5 text-xs text-void-fg-2"
-  }, progressLabel) : null), h("div", {
-    class: "flex items-center justify-end gap-3 px-3 py-2 border-t border-void-border-1 bg-void-bg-1/50"
-  }, planUri ? h("button", {
-    type: "button",
+  return h('div', {
+    class: 'mx-0.5 my-1 rounded-md border border-void-border-2 bg-void-bg-2 overflow-hidden'
+  }, h('div', {
+    class: 'px-3 pt-2.5 pb-1 text-[11px] uppercase tracking-wide text-void-fg-3'
+  }, toolMessage.name === 'update_plan' ? 'План обновлён' : 'План создан'), h('div', {
+    class: 'px-3 pb-2'
+  }, h('div', {
+    class: 'text-sm font-medium text-void-fg-1'
+  }, name), overview ? h('div', {
+    class: 'mt-1 text-xs text-void-fg-3 leading-relaxed'
+  }, overview) : null, progressLabel && (planStatus === 'building' || planStatus === 'built') ? h('div', {
+    class: 'mt-1.5 text-xs text-void-fg-2'
+  }, progressLabel) : null), h('div', {
+    class: 'flex items-center justify-end gap-3 px-3 py-2 border-t border-void-border-1 bg-void-bg-1/50'
+  }, planUri ? h('button', {
+    type: 'button',
     onClick: onViewPlan,
-    class: "text-xs text-void-fg-3 hover:text-void-fg-1 underline-offset-2 hover:underline"
-  }, "\n            Открыть план\n          ") : null, h("button", {
-    type: "button",
+    class: 'text-xs text-void-fg-3 hover:text-void-fg-1 underline-offset-2 hover:underline'
+  }, '\n            Открыть план\n          ') : null, h('button', {
+    type: 'button',
     disabled: !canBuild,
     onClick: onBuild,
     class: `
@@ -819,16 +821,16 @@ export const PlanToolCard = defineComponent({
 						${canBuild ? 'bg-void-success text-white hover:opacity-90' : 'opacity-50 cursor-not-allowed bg-void-bg-3 text-void-fg-3'}
 					`
   }, h(Hammer, {
-    class: "w-3.5 h-3.5"
-  }), buildLabel)), isRejected ? h("div", {
-    class: "px-3 py-1 text-xs text-void-fg-3"
-  }, "Отклонено") : null);
+    class: 'w-3.5 h-3.5'
+  }), buildLabel)), isRejected ? h('div', {
+    class: 'px-3 py-1 text-xs text-void-fg-3'
+  }, 'Отклонено') : null);
     };
   },
 });
 
 
-/** В agent/debug — однострочная строка инструмента; в plan — карточка с подтверждением. */
+/** В agent — однострочная строка инструмента; в plan — карточка с подтверждением. */
 export const UpdatePlanToolCard = defineComponent({
   name: 'UpdatePlanToolCard',
   props: {
@@ -836,12 +838,17 @@ export const UpdatePlanToolCard = defineComponent({
   },
   setup(props) {
     const settingsState = useSettingsState();
+    const threadsState = useChatThreadsState();
     const accessor = useAccessor();
     const agentsPlan = useAgentsPlan();
     return () => {
       const toolMessage = props.toolMessage;
-      const chatMode = settingsState.value.globalSettings.chatMode;
-  if (chatMode !== 'agent' && chatMode !== 'debug') {
+      const threads = threadsState.value;
+      const chatMode = resolveThreadChatMode(
+        threads.allThreads[threads.currentThreadId]?.state.chatMode,
+        settingsState.value.globalSettings.chatMode,
+      );
+  if (chatMode !== 'agent') {
     return h(PlanToolCard, {
       toolMessage: toolMessage
     });
@@ -852,8 +859,8 @@ export const UpdatePlanToolCard = defineComponent({
   const {
     desc1,
     desc1Info
-  } = toolNameToDesc(toolMessage.name, 'params' in toolMessage ? toolMessage.params : undefined, accessor);
-  const planUri = toolMessage.type !== 'invalid_params' && toolMessage.params && 'planUri' in toolMessage.params ? toolMessage.params.planUri : undefined;
+  } = toolNameToDesc(toolMessage.name, Object.hasOwn(toolMessage, 'params') ? toolMessage.params : undefined, accessor);
+  const planUri = toolMessage.type !== 'invalid_params' && toolMessage.params && Object.hasOwn(toolMessage.params, 'planUri') ? toolMessage.params.planUri : undefined;
   const componentParams: ToolHeaderParams = {
     title,
     desc1,
@@ -873,7 +880,7 @@ export const UpdatePlanToolCard = defineComponent({
   }
   if (isError) {
     componentParams.bottomChildren = h(BottomChildren, {
-      title: "Ошибка"
+      title: 'Ошибка'
     }, h(CodeChildren, null, toolMessage.content));
   }
   return toolHeader(componentParams);
@@ -898,19 +905,19 @@ const EditToolChildren = ({
     codeURI: uri,
     chatMessageLocation: undefined
   });
-  return h("div", {
-    class: "!select-text cursor-auto"
+  return h('div', {
+    class: '!select-text cursor-auto'
   }, h(SmallProseWrapper, null, content));
 };
 const LintErrorChildren = ({
   lintErrors
 }: {
   lintErrors: LintErrorItem[];
-}) => h("div", {
-  class: "text-xs text-void-fg-4 opacity-80 border-l-2 border-void-warning px-2 py-0.5 flex flex-col gap-0.5 overflow-x-auto whitespace-nowrap"
-}, lintErrors.map((error, i) => h("div", {
+}) => h('div', {
+  class: 'text-xs text-void-fg-4 opacity-80 border-l-2 border-void-warning px-2 py-0.5 flex flex-col gap-0.5 overflow-x-auto whitespace-nowrap'
+}, lintErrors.map((error, i) => h('div', {
   key: i
-}, "\n        Lines ", error.startLineNumber, "-", error.endLineNumber, ": ", error.message)));
+}, '\n        Lines ', error.startLineNumber, '-', error.endLineNumber, ': ', error.message)));
 const BottomChildren = defineComponent({
   name: 'BottomChildren',
   props: {
@@ -920,11 +927,11 @@ const BottomChildren = defineComponent({
     const isOpen = ref(false);
     return () => {
       const children = slots.default?.();
-      if (!children) return null;
-      return h("div", {
-        class: "w-full px-2 mt-0.5"
-      }, h("div", {
-        class: "flex items-center cursor-pointer select-none transition-colors duration-150 pl-0 py-0.5 rounded group",
+      if (!children) {return null;}
+      return h('div', {
+        class: 'w-full px-2 mt-0.5'
+      }, h('div', {
+        class: 'flex items-center cursor-pointer select-none transition-colors duration-150 pl-0 py-0.5 rounded group',
         onClick: () => {
           isOpen.value = !isOpen.value;
         },
@@ -933,12 +940,12 @@ const BottomChildren = defineComponent({
         }
       }, h(ChevronRight, {
         class: `mr-1 h-3 w-3 flex-shrink-0 transition-transform duration-100 text-void-fg-4 group-hover:text-void-fg-3 ${isOpen.value ? 'rotate-90' : ''}`
-      }), h("span", {
-        class: "font-medium text-void-fg-4 group-hover:text-void-fg-3 text-xs"
-      }, props.title)), h("div", {
+      }), h('span', {
+        class: 'font-medium text-void-fg-4 group-hover:text-void-fg-3 text-xs'
+      }, props.title)), h('div', {
         class: `overflow-hidden transition-all duration-200 ease-in-out ${isOpen.value ? 'opacity-100' : 'max-h-0 opacity-0'} text-xs pl-4`
-      }, h("div", {
-        class: "overflow-x-auto text-void-fg-4 opacity-90 border-l-2 border-void-warning px-2 py-0.5"
+      }, h('div', {
+        class: 'overflow-x-auto text-void-fg-4 opacity-90 border-l-2 border-void-warning px-2 py-0.5'
       }, children)));
     };
   },
@@ -957,11 +964,11 @@ const EditToolHeaderButtons = defineComponent({
       applyBoxId: props.applyBoxId,
       uri: props.uri,
     });
-    return () => h("div", {
-      class: "flex items-center gap-1"
+    return () => h('div', {
+      class: 'flex items-center gap-1'
     }, editState.streamState.value === 'idle-no-changes' && h(CopyButton, {
       codeStr: props.codeStr,
-      toolTipName: "Копировать"
+      toolTipName: 'Копировать'
     }), h(EditToolAcceptRejectButtonsHTML, {
       type: props.toolName,
       codeStr: props.codeStr,
@@ -995,7 +1002,7 @@ export const InvalidTool = ({
     icon
   };
   componentParams.children = h(ToolChildrenWrapper, null, h(CodeChildren, {
-    class: "bg-void-bg-3"
+    class: 'bg-void-bg-3'
   }, message));
   return toolHeader(componentParams);
 };
@@ -1033,7 +1040,7 @@ type CommandToolProps = {
 });
 
 const CommandTool = defineComponent({
-  name: "CommandTool",
+  name: 'CommandTool',
   props: {
     toolMessage: { type: Object as PropType<CommandToolProps['toolMessage']>, required: true },
     type: { type: String as PropType<CommandToolProps['type']>, required: true },
@@ -1048,8 +1055,8 @@ const CommandTool = defineComponent({
   watch(() => streamState.value?.isRunning, () => {
     const toolMessage = props.toolMessage;
     const type = props.type;
-    if (streamState.value?.isRunning !== 'tool') return;
-    if (type !== 'run_command' || toolMessage.type !== 'running_now') return;
+    if (streamState.value?.isRunning !== 'tool') {return;}
+    if (type !== 'run_command' || toolMessage.type !== 'running_now') {return;}
     let cancelled = false;
     let detach: (() => void) | undefined;
     (async () => {
@@ -1059,9 +1066,9 @@ const CommandTool = defineComponent({
         await new Promise<void>(r => setTimeout(r, 50));
         terminal = terminalToolsService.getTemporaryTerminal(toolMessage.params.terminalId);
       }
-      if (cancelled || !terminal) return;
+      if (cancelled || !terminal) {return;}
       const container = divRef.value;
-      if (!container) return;
+      if (!container) {return;}
       try {
         terminal.attachToElement(container);
         terminal.setVisible(true);
@@ -1113,30 +1120,30 @@ const CommandTool = defineComponent({
       result
     } = toolMessage;
     let msg: string;
-    if (type === 'run_command') msg = toolsService.stringOfResult.run_command(toolMessage.params, result);else msg = toolsService.stringOfResult.run_persistent_command(toolMessage.params, result);
+    if (type === 'run_command') {msg = toolsService.stringOfResult.run_command(toolMessage.params, result);}else {msg = toolsService.stringOfResult.run_persistent_command(toolMessage.params, result);}
     if (type === 'run_persistent_command') {
       componentParams.info = persistentTerminalNameOfId(toolMessage.params.persistentTerminalId);
     }
     componentParams.children = h(ToolChildrenWrapper, {
-      class: "whitespace-pre text-nowrap overflow-auto text-sm"
-    }, h("div", {
-      class: "!select-text cursor-auto"
+      class: 'whitespace-pre text-nowrap overflow-auto text-sm'
+    }, h('div', {
+      class: '!select-text cursor-auto'
     }, h(BlockCode, {
       initValue: `${msg.trim()}`,
-      language: "shellscript"
+      language: 'shellscript'
     })));
   } else if (toolMessage.type === 'tool_error') {
     const {
       result
     } = toolMessage;
     componentParams.bottomChildren = h(BottomChildren, {
-      title: "Ошибка"
+      title: 'Ошибка'
     }, h(CodeChildren, null, result));
   } else if (toolMessage.type === 'running_now') {
-    if (type === 'run_command') componentParams.children = h("div", {
+    if (type === 'run_command') {componentParams.children = h('div', {
       ref: divRef,
-      class: "relative h-[300px] text-sm"
-    });
+      class: 'relative h-[300px] text-sm'
+    });}
   } else if (toolMessage.type === 'rejected' || toolMessage.type === 'tool_request') {}
   componentParams.isOpen = type === 'run_command' && toolMessage.type === 'running_now' ? true : undefined;
   return toolHeader(componentParams);
@@ -1159,7 +1166,7 @@ export const MCPToolWrapper = ({
   const title = getTitle(toolMessage);
   const desc1 = removeMCPToolNamePrefix(toolMessage.name);
   const icon = null;
-  if (toolMessage.type === 'running_now') return null; // не показываем состояние running_now
+  if (toolMessage.type === 'running_now') {return null;} // не показываем состояние running_now
 
   const isError = false;
   const isRejected = toolMessage.type === 'rejected';
@@ -1198,7 +1205,7 @@ export const MCPToolWrapper = ({
       result
     } = toolMessage;
     componentParams.bottomChildren = h(BottomChildren, {
-      title: "Ошибка"
+      title: 'Ошибка'
     }, h(CodeChildren, null, result));
   }
   return toolHeader(componentParams);
@@ -1214,8 +1221,8 @@ const CodeNavToolCard = ({
     desc1,
     desc1Info
   } = toolNameToDesc(toolMessage.name, toolMessage.params, accessor);
-  if (toolMessage.type === 'tool_request') return null;
-  if (toolMessage.type === 'running_now') return null;
+  if (toolMessage.type === 'tool_request') {return null;}
+  if (toolMessage.type === 'running_now') {return null;}
   const isRejected = toolMessage.type === 'rejected';
   const {
     params
@@ -1238,28 +1245,28 @@ const CodeNavToolCard = ({
     };
     if (result.message) {
       componentParams.children = h(ToolChildrenWrapper, {
-        class: "text-void-fg-3 text-sm"
+        class: 'text-void-fg-3 text-sm'
       }, result.message);
     } else {
-      const truncated = toolMessage.name === 'find_references' && 'truncated' in result ? result.truncated : false;
+      const truncated = toolMessage.name === 'find_references' && Object.hasOwn(result, 'truncated') ? result.truncated : false;
       componentParams.numResults = result.locations.length;
       componentParams.hasNextPage = truncated;
       componentParams.children = result.locations.length === 0 ? undefined : h(ToolChildrenWrapper, null, result.locations.map((loc, i) => h(ListableToolItem, {
         key: i,
         name: `${getBasename(loc.uri.fsPath)}:${loc.startLine}${loc.preview ? ` — ${loc.preview.slice(0, 80)}` : ''}`,
-        class: "w-full overflow-auto",
+        class: 'w-full overflow-auto',
         onClick: () => {
           sapphireOpenFileFn(loc.uri, accessor, [loc.startLine, loc.endLine]);
         }
       })), truncated && h(ListableToolItem, {
-        name: "Results truncated.",
+        name: 'Results truncated.',
         isSmall: true,
-        class: "w-full overflow-auto"
+        class: 'w-full overflow-auto'
       }));
     }
   } else if (toolMessage.type === 'tool_error') {
     componentParams.bottomChildren = h(BottomChildren, {
-      title: "Ошибка"
+      title: 'Ошибка'
     }, h(CodeChildren, null, toolMessage.result));
   }
   return toolHeader(componentParams);
@@ -1279,8 +1286,8 @@ export const builtinToolNameToComponent: { [T in BuiltinToolName]: {
         desc1Info
       } = toolNameToDesc(toolMessage.name, toolMessage.params, accessor);
       const icon = null;
-      if (toolMessage.type === 'tool_request') return null; // не показываем устаревшие tool_request в истории
-      if (toolMessage.type === 'running_now') return null; // не показываем состояние running_now
+      if (toolMessage.type === 'tool_request') {return null;} // не показываем устаревшие tool_request в истории
+      if (toolMessage.type === 'running_now') {return null;} // не показываем состояние running_now
 
       const isError = false;
       const isRejected = toolMessage.type === 'rejected';
@@ -1312,15 +1319,15 @@ export const builtinToolNameToComponent: { [T in BuiltinToolName]: {
         };
         if (result.hasNextPage && params.pageNumber === 1)
           // первая страница вывода
-          componentParams.desc2 = `(truncated after ${Math.round(MAX_FILE_CHARS_PAGE) / 1000}k)`;else if (params.pageNumber > 1)
+          {componentParams.desc2 = `(truncated after ${Math.round(MAX_FILE_CHARS_PAGE) / 1000}k)`;}else if (params.pageNumber > 1)
           // следующие страницы
-          componentParams.desc2 = `(part ${params.pageNumber})`;
+          {componentParams.desc2 = `(part ${params.pageNumber})`;}
       } else if (toolMessage.type === 'tool_error') {
         const {
           result
         } = toolMessage;
         componentParams.bottomChildren = h(BottomChildren, {
-          title: "Ошибка"
+          title: 'Ошибка'
         }, h(CodeChildren, null, result));
       }
       return toolHeader(componentParams);
@@ -1337,8 +1344,8 @@ export const builtinToolNameToComponent: { [T in BuiltinToolName]: {
         desc1Info
       } = toolNameToDesc(toolMessage.name, toolMessage.params, accessor);
       const icon = null;
-      if (toolMessage.type === 'tool_request') return null; // не показываем устаревшие tool_request в истории
-      if (toolMessage.type === 'running_now') return null; // не показываем состояние running_now
+      if (toolMessage.type === 'tool_request') {return null;} // не показываем устаревшие tool_request в истории
+      if (toolMessage.type === 'running_now') {return null;} // не показываем состояние running_now
 
       const isError = false;
       const isRejected = toolMessage.type === 'rejected';
@@ -1355,7 +1362,7 @@ export const builtinToolNameToComponent: { [T in BuiltinToolName]: {
       };
       if (params.uri) {
         const rel = getRelative(params.uri, accessor);
-        if (rel) componentParams.info = `Only search in ${rel}`;
+        if (rel) {componentParams.info = `Only search in ${rel}`;}
       }
       if (toolMessage.type === 'success') {
         const {
@@ -1372,7 +1379,7 @@ export const builtinToolNameToComponent: { [T in BuiltinToolName]: {
           result
         } = toolMessage;
         componentParams.bottomChildren = h(BottomChildren, {
-          title: "Ошибка"
+          title: 'Ошибка'
         }, h(CodeChildren, null, result));
       }
       return toolHeader(componentParams);
@@ -1389,8 +1396,8 @@ export const builtinToolNameToComponent: { [T in BuiltinToolName]: {
         desc1Info
       } = toolNameToDesc(toolMessage.name, toolMessage.params, accessor);
       const icon = null;
-      if (toolMessage.type === 'tool_request') return null; // не показываем устаревшие tool_request в истории
-      if (toolMessage.type === 'running_now') return null; // не показываем состояние running_now
+      if (toolMessage.type === 'tool_request') {return null;} // не показываем устаревшие tool_request в истории
+      if (toolMessage.type === 'running_now') {return null;} // не показываем состояние running_now
 
       const isError = false;
       const isRejected = toolMessage.type === 'rejected';
@@ -1407,7 +1414,7 @@ export const builtinToolNameToComponent: { [T in BuiltinToolName]: {
       };
       if (params.uri) {
         const rel = getRelative(params.uri, accessor);
-        if (rel) componentParams.info = `Only search in ${rel}`;
+        if (rel) {componentParams.info = `Only search in ${rel}`;}
       }
       if (toolMessage.type === 'success') {
         const {
@@ -1417,11 +1424,11 @@ export const builtinToolNameToComponent: { [T in BuiltinToolName]: {
         componentParams.hasNextPage = result.hasNextPage;
         const isEmpty = !result.children || result.children.length === 0;
         componentParams.children = isEmpty ? h(ToolChildrenWrapper, {
-          class: "text-void-fg-3 text-sm"
-        }, "\n            Directory exists but is empty.\n          ") : h(ToolChildrenWrapper, null, result.children!.map((child, i) => h(ListableToolItem, {
+          class: 'text-void-fg-3 text-sm'
+        }, '\n            Directory exists but is empty.\n          ') : h(ToolChildrenWrapper, null, result.children!.map((child, i) => h(ListableToolItem, {
           key: i,
           name: `${child.name}${child.isDirectory ? '/' : ''}`,
-          class: "w-full overflow-auto",
+          class: 'w-full overflow-auto',
           onClick: () => {
             sapphireOpenFileFn(child.uri, accessor);
             // commandService.executeCommand('workbench.view.explorer'); // открыть в проводнике вместо reveal
@@ -1430,14 +1437,14 @@ export const builtinToolNameToComponent: { [T in BuiltinToolName]: {
         })), result.hasNextPage && h(ListableToolItem, {
           name: `Results truncated (${result.itemsRemaining} remaining).`,
           isSmall: true,
-          class: "w-full overflow-auto"
+          class: 'w-full overflow-auto'
         }));
       } else if (toolMessage.type === 'tool_error') {
         const {
           result
         } = toolMessage;
         componentParams.bottomChildren = h(BottomChildren, {
-          title: "Ошибка"
+          title: 'Ошибка'
         }, h(CodeChildren, null, result));
       }
       return toolHeader(componentParams);
@@ -1456,8 +1463,8 @@ export const builtinToolNameToComponent: { [T in BuiltinToolName]: {
         desc1Info
       } = toolNameToDesc(toolMessage.name, toolMessage.params, accessor);
       const icon = null;
-      if (toolMessage.type === 'tool_request') return null;
-      if (toolMessage.type === 'running_now') return null;
+      if (toolMessage.type === 'tool_request') {return null;}
+      if (toolMessage.type === 'running_now') {return null;}
       const componentParams: ToolHeaderParams = {
         title,
         desc1,
@@ -1470,14 +1477,14 @@ export const builtinToolNameToComponent: { [T in BuiltinToolName]: {
         const {
           result
         } = toolMessage;
-        const rows = result.hits.map(hit => h("div", {
+        const rows = result.hits.map(hit => h('div', {
           key: hit.uri.fsPath,
-          class: "text-xs text-void-fg-2 truncate"
-        }, getBasename(hit.uri.fsPath), " — ", (hit.purpose || hit.localRole).slice(0, 80)));
+          class: 'text-xs text-void-fg-2 truncate'
+        }, getBasename(hit.uri.fsPath), ' — ', (hit.purpose || hit.localRole).slice(0, 80)));
         componentParams.children = h(ToolChildrenWrapper, null, rows);
       } else if (toolMessage.type === 'tool_error') {
         componentParams.bottomChildren = h(BottomChildren, {
-          title: "Ошибка"
+          title: 'Ошибка'
         }, h(CodeChildren, null, toolMessage.result));
       }
       return toolHeader(componentParams);
@@ -1494,8 +1501,8 @@ export const builtinToolNameToComponent: { [T in BuiltinToolName]: {
         desc1,
         desc1Info
       } = toolNameToDesc(toolMessage.name, toolMessage.params, accessor);
-      if (toolMessage.type === 'tool_request') return null;
-      if (toolMessage.type === 'running_now') return null;
+      if (toolMessage.type === 'tool_request') {return null;}
+      if (toolMessage.type === 'running_now') {return null;}
       const componentParams: ToolHeaderParams = {
         title,
         desc1,
@@ -1528,8 +1535,8 @@ export const builtinToolNameToComponent: { [T in BuiltinToolName]: {
         desc1,
         desc1Info
       } = toolNameToDesc(toolMessage.name, toolMessage.params, accessor);
-      if (toolMessage.type === 'tool_request') return null;
-      if (toolMessage.type === 'running_now') return null;
+      if (toolMessage.type === 'tool_request') {return null;}
+      if (toolMessage.type === 'running_now') {return null;}
       const componentParams: ToolHeaderParams = {
         title,
         desc1,
@@ -1568,8 +1575,8 @@ export const builtinToolNameToComponent: { [T in BuiltinToolName]: {
         desc1Info
       } = toolNameToDesc(toolMessage.name, toolMessage.params, accessor);
       const icon = null;
-      if (toolMessage.type === 'tool_request') return null; // не показываем устаревшие tool_request в истории
-      if (toolMessage.type === 'running_now') return null; // не показываем состояние running_now
+      if (toolMessage.type === 'tool_request') {return null;} // не показываем устаревшие tool_request в истории
+      if (toolMessage.type === 'running_now') {return null;} // не показываем состояние running_now
 
       const {
         params
@@ -1594,21 +1601,21 @@ export const builtinToolNameToComponent: { [T in BuiltinToolName]: {
         componentParams.children = result.uris.length === 0 ? undefined : h(ToolChildrenWrapper, null, result.uris.map((uri, i) => h(ListableToolItem, {
           key: i,
           name: getBasename(uri.fsPath),
-          class: "w-full overflow-auto",
+          class: 'w-full overflow-auto',
           onClick: () => {
             sapphireOpenFileFn(uri, accessor);
           }
         })), result.hasNextPage && h(ListableToolItem, {
-          name: "Results truncated.",
+          name: 'Results truncated.',
           isSmall: true,
-          class: "w-full overflow-auto"
+          class: 'w-full overflow-auto'
         }));
       } else if (toolMessage.type === 'tool_error') {
         const {
           result
         } = toolMessage;
         componentParams.bottomChildren = h(BottomChildren, {
-          title: "Ошибка"
+          title: 'Ошибка'
         }, h(CodeChildren, null, result));
       }
       return toolHeader(componentParams);
@@ -1627,8 +1634,8 @@ export const builtinToolNameToComponent: { [T in BuiltinToolName]: {
         desc1Info
       } = toolNameToDesc(toolMessage.name, toolMessage.params, accessor);
       const icon = null;
-      if (toolMessage.type === 'tool_request') return null; // не показываем устаревшие tool_request в истории
-      if (toolMessage.type === 'running_now') return null; // не показываем состояние running_now
+      if (toolMessage.type === 'tool_request') {return null;} // не показываем устаревшие tool_request в истории
+      if (toolMessage.type === 'running_now') {return null;} // не показываем состояние running_now
 
       const {
         params
@@ -1642,10 +1649,10 @@ export const builtinToolNameToComponent: { [T in BuiltinToolName]: {
         isRejected
       };
       if (params.searchInFolder || params.isRegex) {
-        let info: string[] = [];
+        const info: string[] = [];
         if (params.searchInFolder) {
           const rel = getRelative(params.searchInFolder, accessor);
-          if (rel) info.push(`Only search in ${rel}`);
+          if (rel) {info.push(`Only search in ${rel}`);}
         }
         if (params.isRegex) {
           info.push(`Uses regex search`);
@@ -1661,21 +1668,21 @@ export const builtinToolNameToComponent: { [T in BuiltinToolName]: {
         componentParams.children = result.uris.length === 0 ? undefined : h(ToolChildrenWrapper, null, result.uris.map((uri, i) => h(ListableToolItem, {
           key: i,
           name: getBasename(uri.fsPath),
-          class: "w-full overflow-auto",
+          class: 'w-full overflow-auto',
           onClick: () => {
             sapphireOpenFileFn(uri, accessor);
           }
         })), result.hasNextPage && h(ListableToolItem, {
-          name: "Results truncated.",
+          name: 'Results truncated.',
           isSmall: true,
-          class: "w-full overflow-auto"
+          class: 'w-full overflow-auto'
         }));
       } else if (toolMessage.type === 'tool_error') {
         const {
           result
         } = toolMessage;
         componentParams.bottomChildren = h(BottomChildren, {
-          title: "Ошибка"
+          title: 'Ошибка'
         }, h(CodeChildren, null, result));
       }
       return toolHeader(componentParams);
@@ -1695,8 +1702,8 @@ export const builtinToolNameToComponent: { [T in BuiltinToolName]: {
         desc1Info
       } = toolNameToDesc(toolMessage.name, toolMessage.params, accessor);
       const icon = null;
-      if (toolMessage.type === 'tool_request') return null; // не показываем устаревшие tool_request в истории
-      if (toolMessage.type === 'running_now') return null; // не показываем состояние running_now
+      if (toolMessage.type === 'tool_request') {return null;} // не показываем устаревшие tool_request в истории
+      if (toolMessage.type === 'running_now') {return null;} // не показываем состояние running_now
 
       const {
         params
@@ -1711,8 +1718,8 @@ export const builtinToolNameToComponent: { [T in BuiltinToolName]: {
       };
       const infoarr: string[] = [];
       const uriStr = getRelative(params.uri, accessor);
-      if (uriStr) infoarr.push(uriStr);
-      if (params.isRegex) infoarr.push('Uses regex search');
+      if (uriStr) {infoarr.push(uriStr);}
+      if (params.isRegex) {infoarr.push('Uses regex search');}
       componentParams.info = infoarr.join('; ');
       if (toolMessage.type === 'success') {
         const {
@@ -1720,16 +1727,16 @@ export const builtinToolNameToComponent: { [T in BuiltinToolName]: {
         } = toolMessage; // result — массив фрагментов
         componentParams.numResults = result.lines.length;
         componentParams.children = result.lines.length === 0 ? undefined : h(ToolChildrenWrapper, null, h(CodeChildren, {
-          class: "bg-void-bg-3"
-        }, h("pre", {
-          class: "font-mono whitespace-pre"
+          class: 'bg-void-bg-3'
+        }, h('pre', {
+          class: 'font-mono whitespace-pre'
         }, toolsService.stringOfResult.search_in_file(params, result))));
       } else if (toolMessage.type === 'tool_error') {
         const {
           result
         } = toolMessage;
         componentParams.bottomChildren = h(BottomChildren, {
-          title: "Ошибка"
+          title: 'Ошибка'
         }, h(CodeChildren, null, result));
       }
       return toolHeader(componentParams);
@@ -1749,8 +1756,8 @@ export const builtinToolNameToComponent: { [T in BuiltinToolName]: {
         desc1Info
       } = toolNameToDesc(toolMessage.name, toolMessage.params, accessor);
       const icon = null;
-      if (toolMessage.type === 'tool_request') return null; // не показываем устаревшие tool_request в истории
-      if (toolMessage.type === 'running_now') return null; // не показываем состояние running_now
+      if (toolMessage.type === 'tool_request') {return null;} // не показываем устаревшие tool_request в истории
+      if (toolMessage.type === 'running_now') {return null;} // не показываем состояние running_now
 
       const isError = false;
       const isRejected = toolMessage.type === 'rejected';
@@ -1774,15 +1781,15 @@ export const builtinToolNameToComponent: { [T in BuiltinToolName]: {
         componentParams.onClick = () => {
           sapphireOpenFileFn(params.uri, accessor);
         };
-        if (result.lintErrors) componentParams.children = h(LintErrorChildren, {
+        if (result.lintErrors) {componentParams.children = h(LintErrorChildren, {
           lintErrors: result.lintErrors
-        });else componentParams.children = `No lint errors found.`;
+        });}else {componentParams.children = `No lint errors found.`;}
       } else if (toolMessage.type === 'tool_error') {
         const {
           result
         } = toolMessage;
         componentParams.bottomChildren = h(BottomChildren, {
-          title: "Ошибка"
+          title: 'Ошибка'
         }, h(CodeChildren, null, result));
       }
       return toolHeader(componentParams);
@@ -1813,8 +1820,8 @@ export const builtinToolNameToComponent: { [T in BuiltinToolName]: {
         desc1,
         desc1Info
       } = toolNameToDesc(toolMessage.name, toolMessage.params, accessor);
-      if (toolMessage.type === 'tool_request') return null;
-      if (toolMessage.type === 'running_now') return null;
+      if (toolMessage.type === 'tool_request') {return null;}
+      if (toolMessage.type === 'running_now') {return null;}
       const componentParams: ToolHeaderParams = {
         title,
         desc1,
@@ -1832,13 +1839,13 @@ export const builtinToolNameToComponent: { [T in BuiltinToolName]: {
         componentParams.hasNextPage = result.totalMatches > result.matches.length;
         const body = toolsService.stringOfResult.grep_search(params, result);
         componentParams.children = result.matches.length === 0 ? undefined : h(ToolChildrenWrapper, null, h(CodeChildren, {
-          class: "bg-void-bg-3"
-        }, h("pre", {
-          class: "font-mono whitespace-pre-wrap"
+          class: 'bg-void-bg-3'
+        }, h('pre', {
+          class: 'font-mono whitespace-pre-wrap'
         }, body)));
       } else if (toolMessage.type === 'tool_error') {
         componentParams.bottomChildren = h(BottomChildren, {
-          title: "Ошибка"
+          title: 'Ошибка'
         }, h(CodeChildren, null, toolMessage.result));
       }
       return toolHeader(componentParams);
@@ -1855,8 +1862,8 @@ export const builtinToolNameToComponent: { [T in BuiltinToolName]: {
         desc1,
         desc1Info
       } = toolNameToDesc(toolMessage.name, toolMessage.params, accessor);
-      if (toolMessage.type === 'tool_request') return null;
-      if (toolMessage.type === 'running_now') return null;
+      if (toolMessage.type === 'tool_request') {return null;}
+      if (toolMessage.type === 'running_now') {return null;}
       const componentParams: ToolHeaderParams = {
         title,
         desc1,
@@ -1872,14 +1879,14 @@ export const builtinToolNameToComponent: { [T in BuiltinToolName]: {
         } = toolMessage;
         componentParams.numResults = result.diagnostics.length;
         const body = toolsService.stringOfResult.get_diagnostics(params, result);
-        componentParams.children = result.diagnostics.length === 0 ? h(ToolChildrenWrapper, null, "No diagnostics found.") : h(ToolChildrenWrapper, null, h(CodeChildren, {
-          class: "bg-void-bg-3"
-        }, h("pre", {
-          class: "font-mono whitespace-pre-wrap"
+        componentParams.children = result.diagnostics.length === 0 ? h(ToolChildrenWrapper, null, 'No diagnostics found.') : h(ToolChildrenWrapper, null, h(CodeChildren, {
+          class: 'bg-void-bg-3'
+        }, h('pre', {
+          class: 'font-mono whitespace-pre-wrap'
         }, body)));
       } else if (toolMessage.type === 'tool_error') {
         componentParams.bottomChildren = h(BottomChildren, {
-          title: "Ошибка"
+          title: 'Ошибка'
         }, h(CodeChildren, null, toolMessage.result));
       }
       return toolHeader(componentParams);
@@ -1896,8 +1903,8 @@ export const builtinToolNameToComponent: { [T in BuiltinToolName]: {
         desc1,
         desc1Info
       } = toolNameToDesc(toolMessage.name, toolMessage.params, accessor);
-      if (toolMessage.type === 'tool_request') return null;
-      if (toolMessage.type === 'running_now') return null;
+      if (toolMessage.type === 'tool_request') {return null;}
+      if (toolMessage.type === 'running_now') {return null;}
       const componentParams: ToolHeaderParams = {
         title,
         desc1,
@@ -1915,13 +1922,13 @@ export const builtinToolNameToComponent: { [T in BuiltinToolName]: {
         componentParams.hasNextPage = result.truncated;
         const body = toolsService.stringOfResult.search_symbols(params, result);
         componentParams.children = result.symbols.length === 0 ? undefined : h(ToolChildrenWrapper, null, h(CodeChildren, {
-          class: "bg-void-bg-3"
-        }, h("pre", {
-          class: "font-mono whitespace-pre-wrap"
+          class: 'bg-void-bg-3'
+        }, h('pre', {
+          class: 'font-mono whitespace-pre-wrap'
         }, body)));
       } else if (toolMessage.type === 'tool_error') {
         componentParams.bottomChildren = h(BottomChildren, {
-          title: "Ошибка"
+          title: 'Ошибка'
         }, h(CodeChildren, null, toolMessage.result));
       }
       return toolHeader(componentParams);
@@ -1938,8 +1945,8 @@ export const builtinToolNameToComponent: { [T in BuiltinToolName]: {
         desc1,
         desc1Info
       } = toolNameToDesc(toolMessage.name, toolMessage.params, accessor);
-      if (toolMessage.type === 'tool_request') return null;
-      if (toolMessage.type === 'running_now') return null;
+      if (toolMessage.type === 'tool_request') {return null;}
+      if (toolMessage.type === 'running_now') {return null;}
       const componentParams: ToolHeaderParams = {
         title,
         desc1,
@@ -1956,13 +1963,13 @@ export const builtinToolNameToComponent: { [T in BuiltinToolName]: {
         componentParams.numResults = result.changes.length;
         const body = toolsService.stringOfResult.rename_symbol(params, result);
         componentParams.children = h(ToolChildrenWrapper, null, h(CodeChildren, {
-          class: "bg-void-bg-3"
-        }, h("pre", {
-          class: "font-mono whitespace-pre-wrap"
+          class: 'bg-void-bg-3'
+        }, h('pre', {
+          class: 'font-mono whitespace-pre-wrap'
         }, body)));
       } else if (toolMessage.type === 'tool_error') {
         componentParams.bottomChildren = h(BottomChildren, {
-          title: "Ошибка"
+          title: 'Ошибка'
         }, h(CodeChildren, null, toolMessage.result));
       }
       return toolHeader(componentParams);
@@ -1980,11 +1987,11 @@ export const builtinToolNameToComponent: { [T in BuiltinToolName]: {
         desc1Info
       } = toolNameToDesc(toolMessage.name, toolMessage.params, accessor);
       const icon = null;
-      if (toolMessage.type === 'tool_request') return null;
-      if (toolMessage.type === 'running_now') return null;
+      if (toolMessage.type === 'tool_request') {return null;}
+      if (toolMessage.type === 'running_now') {return null;}
       const isError = false;
       const isRejected = toolMessage.type === 'rejected';
-      const threadId = toolMessage.params && 'threadId' in toolMessage.params ? toolMessage.params.threadId : null;
+      const threadId = toolMessage.params && Object.hasOwn(toolMessage.params, 'threadId') ? toolMessage.params.threadId : null;
       const canSwitch = !!threadId && !!chatThreadsService.state.allThreads[threadId];
       const componentParams: ToolHeaderParams = {
         title,
@@ -1999,16 +2006,16 @@ export const builtinToolNameToComponent: { [T in BuiltinToolName]: {
         const summary = toolMessage.result.summary ?? '';
         componentParams.desc2 = summary ? h(CopyButton, {
           codeStr: summary,
-          toolTipName: "Копировать"
+          toolTipName: 'Копировать'
         }) : undefined;
         componentParams.children = summary ? h(ToolChildrenWrapper, null, h(CodeChildren, {
-          class: "bg-void-bg-3"
-        }, h("pre", {
-          class: "font-mono whitespace-pre-wrap"
+          class: 'bg-void-bg-3'
+        }, h('pre', {
+          class: 'font-mono whitespace-pre-wrap'
         }, summary))) : undefined;
       } else if (toolMessage.type === 'tool_error') {
         componentParams.bottomChildren = h(BottomChildren, {
-          title: "Ошибка"
+          title: 'Ошибка'
         }, h(CodeChildren, null, toolMessage.result));
       }
       return toolHeader(componentParams);
@@ -2024,8 +2031,8 @@ export const builtinToolNameToComponent: { [T in BuiltinToolName]: {
         desc1,
         desc1Info
       } = toolNameToDesc(toolMessage.name, toolMessage.params, accessor);
-      if (toolMessage.type === 'tool_request') return null;
-      if (toolMessage.type === 'running_now') return null;
+      if (toolMessage.type === 'tool_request') {return null;}
+      if (toolMessage.type === 'running_now') {return null;}
       const componentParams: ToolHeaderParams = {
         title,
         desc1,
@@ -2038,16 +2045,16 @@ export const builtinToolNameToComponent: { [T in BuiltinToolName]: {
         const summary = toolMessage.result.summary ?? '';
         componentParams.desc2 = summary ? h(CopyButton, {
           codeStr: summary,
-          toolTipName: "Копировать"
+          toolTipName: 'Копировать'
         }) : undefined;
         componentParams.children = summary ? h(ToolChildrenWrapper, null, h(CodeChildren, {
-          class: "bg-void-bg-3"
-        }, h("pre", {
-          class: "font-mono whitespace-pre-wrap"
+          class: 'bg-void-bg-3'
+        }, h('pre', {
+          class: 'font-mono whitespace-pre-wrap'
         }, summary))) : undefined;
       } else if (toolMessage.type === 'tool_error') {
         componentParams.bottomChildren = h(BottomChildren, {
-          title: "Ошибка"
+          title: 'Ошибка'
         }, h(CodeChildren, null, toolMessage.result));
       }
       return toolHeader(componentParams);
@@ -2063,8 +2070,8 @@ export const builtinToolNameToComponent: { [T in BuiltinToolName]: {
         desc1,
         desc1Info
       } = toolNameToDesc(toolMessage.name, toolMessage.params, accessor);
-      if (toolMessage.type === 'tool_request') return null;
-      if (toolMessage.type === 'running_now') return null;
+      if (toolMessage.type === 'tool_request') {return null;}
+      if (toolMessage.type === 'running_now') {return null;}
       const componentParams: ToolHeaderParams = {
         title,
         desc1,
@@ -2082,18 +2089,18 @@ export const builtinToolNameToComponent: { [T in BuiltinToolName]: {
         componentParams.children = result.files.length === 0 ? undefined : h(ToolChildrenWrapper, null, result.files.map((f, i) => h(ListableToolItem, {
           key: i,
           name: getBasename(f.uri.fsPath),
-          class: "w-full overflow-auto",
+          class: 'w-full overflow-auto',
           onClick: () => {
             sapphireOpenFileFn(f.uri, accessor);
           }
         })), result.truncated && h(ListableToolItem, {
-          name: "Results truncated.",
+          name: 'Results truncated.',
           isSmall: true,
-          class: "w-full overflow-auto"
+          class: 'w-full overflow-auto'
         }));
       } else if (toolMessage.type === 'tool_error') {
         componentParams.bottomChildren = h(BottomChildren, {
-          title: "Ошибка"
+          title: 'Ошибка'
         }, h(CodeChildren, null, toolMessage.result));
       }
       return toolHeader(componentParams);
@@ -2109,8 +2116,8 @@ export const builtinToolNameToComponent: { [T in BuiltinToolName]: {
         desc1,
         desc1Info
       } = toolNameToDesc(toolMessage.name, toolMessage.params, accessor);
-      if (toolMessage.type === 'tool_request') return null;
-      if (toolMessage.type === 'running_now') return null;
+      if (toolMessage.type === 'tool_request') {return null;}
+      if (toolMessage.type === 'running_now') {return null;}
       const componentParams: ToolHeaderParams = {
         title,
         desc1,
@@ -2127,14 +2134,14 @@ export const builtinToolNameToComponent: { [T in BuiltinToolName]: {
         componentParams.children = result.results.length === 0 ? undefined : h(ToolChildrenWrapper, null, result.results.map((r, i) => h(ListableToolItem, {
           key: i,
           name: r.title || r.url,
-          class: "w-full overflow-auto",
+          class: 'w-full overflow-auto',
           onClick: () => {
-            window.open(r.url, '_blank', 'noopener,noreferrer');
+            getActiveWindow().open(r.url, '_blank', 'noopener,noreferrer');
           }
         })));
       } else if (toolMessage.type === 'tool_error') {
         componentParams.bottomChildren = h(BottomChildren, {
-          title: "Ошибка"
+          title: 'Ошибка'
         }, h(CodeChildren, null, toolMessage.result));
       }
       return toolHeader(componentParams);
@@ -2151,8 +2158,8 @@ export const builtinToolNameToComponent: { [T in BuiltinToolName]: {
         desc1,
         desc1Info
       } = toolNameToDesc(toolMessage.name, toolMessage.params, accessor);
-      if (toolMessage.type === 'tool_request') return null;
-      if (toolMessage.type === 'running_now') return null;
+      if (toolMessage.type === 'tool_request') {return null;}
+      if (toolMessage.type === 'running_now') {return null;}
       const componentParams: ToolHeaderParams = {
         title,
         desc1,
@@ -2169,13 +2176,13 @@ export const builtinToolNameToComponent: { [T in BuiltinToolName]: {
         const preview = toolsService.stringOfResult.browse_url(params, result);
         componentParams.info = result.title ?? undefined;
         componentParams.children = h(ToolChildrenWrapper, null, h(CodeChildren, {
-          class: "bg-void-bg-3"
-        }, h("pre", {
-          class: "font-mono whitespace-pre-wrap"
+          class: 'bg-void-bg-3'
+        }, h('pre', {
+          class: 'font-mono whitespace-pre-wrap'
         }, preview.slice(0, 2000))));
       } else if (toolMessage.type === 'tool_error') {
         componentParams.bottomChildren = h(BottomChildren, {
-          title: "Ошибка"
+          title: 'Ошибка'
         }, h(CodeChildren, null, toolMessage.result));
       }
       return toolHeader(componentParams);
@@ -2191,8 +2198,8 @@ export const builtinToolNameToComponent: { [T in BuiltinToolName]: {
         desc1,
         desc1Info
       } = toolNameToDesc(toolMessage.name, toolMessage.params, accessor);
-      if (toolMessage.type === 'tool_request') return null;
-      if (toolMessage.type === 'running_now') return null;
+      if (toolMessage.type === 'tool_request') {return null;}
+      if (toolMessage.type === 'running_now') {return null;}
       const componentParams: ToolHeaderParams = {
         title,
         desc1,
@@ -2205,7 +2212,7 @@ export const builtinToolNameToComponent: { [T in BuiltinToolName]: {
         componentParams.info = `key=${toolMessage.result.key}`;
       } else if (toolMessage.type === 'tool_error') {
         componentParams.bottomChildren = h(BottomChildren, {
-          title: "Ошибка"
+          title: 'Ошибка'
         }, h(CodeChildren, null, toolMessage.result));
       }
       return toolHeader(componentParams);
@@ -2221,8 +2228,8 @@ export const builtinToolNameToComponent: { [T in BuiltinToolName]: {
         desc1,
         desc1Info
       } = toolNameToDesc(toolMessage.name, toolMessage.params, accessor);
-      if (toolMessage.type === 'tool_request') return null;
-      if (toolMessage.type === 'running_now') return null;
+      if (toolMessage.type === 'tool_request') {return null;}
+      if (toolMessage.type === 'running_now') {return null;}
       const componentParams: ToolHeaderParams = {
         title,
         desc1,
@@ -2236,19 +2243,19 @@ export const builtinToolNameToComponent: { [T in BuiltinToolName]: {
           results
         } = toolMessage.result;
         componentParams.numResults = results.length;
-        componentParams.children = h(ToolChildrenWrapper, null, results.map((r, i) => h("div", {
+        componentParams.children = h(ToolChildrenWrapper, null, results.map((r, i) => h('div', {
           key: i,
-          class: "mb-2"
-        }, h("div", {
-          class: "text-sm opacity-80"
+          class: 'mb-2'
+        }, h('div', {
+          class: 'text-sm opacity-80'
         }, r.completed ? '✓' : '✗', r.description), r.summary ? h(CodeChildren, {
-          class: "bg-void-bg-3"
-        }, h("pre", {
-          class: "font-mono whitespace-pre-wrap"
+          class: 'bg-void-bg-3'
+        }, h('pre', {
+          class: 'font-mono whitespace-pre-wrap'
         }, r.summary)) : null)));
       } else if (toolMessage.type === 'tool_error') {
         componentParams.bottomChildren = h(BottomChildren, {
-          title: "Ошибка"
+          title: 'Ошибка'
         }, h(CodeChildren, null, toolMessage.result));
       }
       return toolHeader(componentParams);
@@ -2278,8 +2285,8 @@ export const builtinToolNameToComponent: { [T in BuiltinToolName]: {
         desc1,
         desc1Info
       } = toolNameToDesc(toolMessage.name, toolMessage.params, accessor);
-      if (toolMessage.type === 'tool_request') return null;
-      if (toolMessage.type === 'running_now') return null;
+      if (toolMessage.type === 'tool_request') {return null;}
+      if (toolMessage.type === 'running_now') {return null;}
       const componentParams: ToolHeaderParams = {
         title,
         desc1,
@@ -2290,7 +2297,7 @@ export const builtinToolNameToComponent: { [T in BuiltinToolName]: {
       };
       if (toolMessage.type === 'tool_error') {
         componentParams.bottomChildren = h(BottomChildren, {
-          title: "Ошибка"
+          title: 'Ошибка'
         }, h(CodeChildren, null, toolMessage.result));
       }
       return toolHeader(componentParams);
@@ -2342,7 +2349,7 @@ export const builtinToolNameToComponent: { [T in BuiltinToolName]: {
           };
         }
         componentParams.bottomChildren = h(BottomChildren, {
-          title: "Ошибка"
+          title: 'Ошибка'
         }, h(CodeChildren, null, result));
       } else if (toolMessage.type === 'running_now') {
         // дополнительная разметка не нужна
@@ -2396,7 +2403,7 @@ export const builtinToolNameToComponent: { [T in BuiltinToolName]: {
           };
         }
         componentParams.bottomChildren = h(BottomChildren, {
-          title: "Ошибка"
+          title: 'Ошибка'
         }, h(CodeChildren, null, result));
       } else if (toolMessage.type === 'running_now') {
         componentParams.onClick = () => {
@@ -2427,13 +2434,13 @@ export const builtinToolNameToComponent: { [T in BuiltinToolName]: {
   run_command: {
     resultWrapper: params => h(CommandTool, {
       ...params,
-      type: "run_command"
+      type: 'run_command'
     })
   },
   run_persistent_command: {
     resultWrapper: params => h(CommandTool, {
       ...params,
-      type: "run_persistent_command"
+      type: 'run_persistent_command'
     })
   },
   open_persistent_terminal: {
@@ -2448,8 +2455,8 @@ export const builtinToolNameToComponent: { [T in BuiltinToolName]: {
       } = toolNameToDesc(toolMessage.name, toolMessage.params, accessor);
       const title = getTitle(toolMessage);
       const icon = null;
-      if (toolMessage.type === 'tool_request') return null; // не показываем устаревшие tool_request в истории
-      if (toolMessage.type === 'running_now') return null; // не показываем состояние running_now
+      if (toolMessage.type === 'tool_request') {return null;} // не показываем устаревшие tool_request в истории
+      if (toolMessage.type === 'running_now') {return null;} // не показываем состояние running_now
 
       const isError = false;
       const isRejected = toolMessage.type === 'rejected';
@@ -2480,7 +2487,7 @@ export const builtinToolNameToComponent: { [T in BuiltinToolName]: {
           result
         } = toolMessage;
         componentParams.bottomChildren = h(BottomChildren, {
-          title: "Ошибка"
+          title: 'Ошибка'
         }, h(CodeChildren, null, result));
       }
       return toolHeader(componentParams);
@@ -2498,8 +2505,8 @@ export const builtinToolNameToComponent: { [T in BuiltinToolName]: {
       } = toolNameToDesc(toolMessage.name, toolMessage.params, accessor);
       const title = getTitle(toolMessage);
       const icon = null;
-      if (toolMessage.type === 'tool_request') return null; // не показываем устаревшие tool_request в истории
-      if (toolMessage.type === 'running_now') return null; // не показываем состояние running_now
+      if (toolMessage.type === 'tool_request') {return null;} // не показываем устаревшие tool_request в истории
+      if (toolMessage.type === 'running_now') {return null;} // не показываем состояние running_now
 
       const isError = false;
       const isRejected = toolMessage.type === 'rejected';
@@ -2525,7 +2532,7 @@ export const builtinToolNameToComponent: { [T in BuiltinToolName]: {
           result
         } = toolMessage;
         componentParams.bottomChildren = h(BottomChildren, {
-          title: "Ошибка"
+          title: 'Ошибка'
         }, h(CodeChildren, null, result));
       }
       return toolHeader(componentParams);
@@ -2538,12 +2545,12 @@ export const EditToolSoFar = ({
   toolCallSoFar: RawToolCallObj;
 }) => {
   const accessor = useAccessor();
-  if (!isABuiltinToolName(toolCallSoFar.name)) return null;
+  if (!isABuiltinToolName(toolCallSoFar.name)) {return null;}
   const uri = toolCallSoFar.rawParams.uri ? URI.file(toolCallSoFar.rawParams.uri) : undefined;
   const title = titleOfBuiltinToolName[toolCallSoFar.name].proposed;
   const uriDone = toolCallSoFar.doneParams.includes('uri');
-  const desc1 = h("span", {
-    class: "flex items-center"
+  const desc1 = h('span', {
+    class: 'flex items-center'
   }, uriDone ? getBasename(toolCallSoFar.rawParams.uri ?? 'unknown') : `Генерация`, h(IconLoading, null));
   const desc1OnClick = () => {
     if (uri) {
@@ -2559,6 +2566,6 @@ export const EditToolSoFar = ({
   }, h(EditToolChildren, {
     uri: uri,
     code: toolCallSoFar.rawParams.search_replace_blocks ?? toolCallSoFar.rawParams.new_content ?? '',
-    type: "rewrite"
+    type: 'rewrite'
   }), h(IconLoading, null));
 };

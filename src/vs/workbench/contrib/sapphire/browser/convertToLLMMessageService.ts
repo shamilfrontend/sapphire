@@ -1,3 +1,7 @@
+/*---------------------------------------------------------------------------------------------
+ *  Copyright (c) Microsoft Corporation. All rights reserved.
+ *  Licensed under the MIT License. See License.txt in the project root for license information.
+ *--------------------------------------------------------------------------------------------*/
 import { Disposable } from '../../../../base/common/lifecycle.js';
 import { deepClone } from '../../../../base/common/objects.js';
 import { IModelService } from '../../../../editor/common/services/model.js';
@@ -143,10 +147,10 @@ const prepareMessages_native_tools = (
         assistantMsg = candidate;
         break;
       }
-      if (candidate.role !== 'tool') break;
+      if (candidate.role !== 'tool') {break;}
     }
     if (assistantMsg?.role === 'assistant') {
-      if (!assistantMsg.tool_calls) assistantMsg.tool_calls = [];
+      if (!assistantMsg.tool_calls) {assistantMsg.tool_calls = [];}
       assistantMsg.tool_calls.push({
         type: 'function',
         id: currMsg.id,
@@ -197,9 +201,9 @@ const prepareGatewayMessages = ({
   // ================ system message (не участвует в весах trim) ================
   const sysMsgParts: string[] = [];
   if (aiInstructions)
-    sysMsgParts.push(`GUIDELINES (from the user's .rules file):\n${aiInstructions}`);
-  if (skillInstructions) sysMsgParts.push(`SKILLS:\n${skillInstructions}`);
-  if (systemMessage) sysMsgParts.push(systemMessage);
+    {sysMsgParts.push(`GUIDELINES (from the user's .rules file):\n${aiInstructions}`);}
+  if (skillInstructions) {sysMsgParts.push(`SKILLS:\n${skillInstructions}`);}
+  if (systemMessage) {sysMsgParts.push(systemMessage);}
   const combinedSystemMessage = sysMsgParts.join('\n\n');
   const systemTokens = estimateMessageTokens({ content: combinedSystemMessage });
 
@@ -251,7 +255,7 @@ const prepareGatewayMessages = ({
       role: 'user' as const,
       content: `<SYSTEM_MESSAGE>\n${combinedSystemMessage}\n</SYSTEM_MESSAGE>\n${firstContent}`,
     };
-    if (llmMessages.length) llmMessages.splice(0, 1);
+    if (llmMessages.length) {llmMessages.splice(0, 1);}
     llmMessages.unshift(newFirstMessage);
   }
 
@@ -260,18 +264,18 @@ const prepareGatewayMessages = ({
     const currMsg: GatewayChatMessage = llmMessages[i];
     const nextMsg: GatewayChatMessage | undefined = llmMessages[i + 1];
 
-    if (currMsg.role === 'tool') continue;
+    if (currMsg.role === 'tool') {continue;}
 
     if (typeof currMsg.content === 'string') {
       currMsg.content = currMsg.content || EMPTY_LLM_MESSAGE;
     } else {
-      if (nextMsg?.role === 'tool') continue;
+      if (nextMsg?.role === 'tool') {continue;}
 
       for (const c of currMsg.content) {
-        if (c.type === 'text') c.text = c.text || EMPTY_LLM_MESSAGE;
+        if (c.type === 'text') {c.text = c.text || EMPTY_LLM_MESSAGE;}
       }
       if (currMsg.content.length === 0)
-        currMsg.content = [{ type: 'text', text: EMPTY_LLM_MESSAGE }];
+        {currMsg.content = [{ type: 'text', text: EMPTY_LLM_MESSAGE }];}
       else if (
         currMsg.role === 'user' &&
         Array.isArray(currMsg.content) &&
@@ -413,8 +417,8 @@ class ConvertToLLMMessageService extends Disposable implements IConvertToLLMMess
     const sapphireRulesFileContent = this._getSapphireRulesFileContents();
 
     const ans: string[] = [];
-    if (globalAIInstructions) ans.push(globalAIInstructions);
-    if (sapphireRulesFileContent) ans.push(sapphireRulesFileContent);
+    if (globalAIInstructions) {ans.push(globalAIInstructions);}
+    if (sapphireRulesFileContent) {ans.push(sapphireRulesFileContent);}
     return ans.join('\n\n');
   }
 
@@ -446,8 +450,8 @@ class ConvertToLLMMessageService extends Disposable implements IConvertToLLMMess
     const sapphireSkillsFileContent = this._getSapphireSkillsFileContents();
 
     const ans: string[] = [];
-    if (globalSkillInstructions) ans.push(globalSkillInstructions);
-    if (sapphireSkillsFileContent) ans.push(sapphireSkillsFileContent);
+    if (globalSkillInstructions) {ans.push(globalSkillInstructions);}
+    if (sapphireSkillsFileContent) {ans.push(sapphireSkillsFileContent);}
     return ans.join('\n\n');
   }
 
@@ -509,7 +513,7 @@ class ConvertToLLMMessageService extends Disposable implements IConvertToLLMMess
 
     const directoryStr = await this.directoryStrService.getAllDirectoriesStr({
       cutOffMessage:
-        chatMode === 'agent' || chatMode === 'plan' || chatMode === 'debug'
+        chatMode === 'agent' || chatMode === 'plan'
           ? `...Directories string cut off, use tools to read more...`
           : `...Directories string cut off, ask user for more if necessary...`,
     });
@@ -524,7 +528,7 @@ class ConvertToLLMMessageService extends Disposable implements IConvertToLLMMess
       chatMode,
     });
     const memories =
-      chatMode === 'agent' || chatMode === 'debug'
+      chatMode === 'agent'
         ? this._memoriesBlock(latestUserQuery ?? '')
         : '';
     return systemMessage + memories;
@@ -537,8 +541,8 @@ class ConvertToLLMMessageService extends Disposable implements IConvertToLLMMess
     const simpleLLMMessages: SimpleLLMMessage[] = [];
 
     for (const m of chatMessages) {
-      if (m.role === 'checkpoint') continue;
-      if (m.role === 'interrupted_streaming_tool') continue;
+      if (m.role === 'checkpoint') {continue;}
+      if (m.role === 'interrupted_streaming_tool') {continue;}
       if (m.role === 'assistant') {
         simpleLLMMessages.push({
           role: m.role,
@@ -574,7 +578,7 @@ class ConvertToLLMMessageService extends Disposable implements IConvertToLLMMess
     modelSelection,
     featureName,
   }) => {
-    if (modelSelection === null) return { messages: [], separateSystemMessage: undefined };
+    if (modelSelection === null) {return { messages: [], separateSystemMessage: undefined };}
 
     const { overridesOfModel } = this.sapphireSettingsService.state;
 
@@ -625,7 +629,7 @@ class ConvertToLLMMessageService extends Disposable implements IConvertToLLMMess
     chatMode,
     modelSelection,
   }) => {
-    if (modelSelection === null) return { messages: [], separateSystemMessage: undefined };
+    if (modelSelection === null) {return { messages: [], separateSystemMessage: undefined };}
 
     const { overridesOfModel } = this.sapphireSettingsService.state;
 
@@ -689,7 +693,7 @@ class ConvertToLLMMessageService extends Disposable implements IConvertToLLMMess
     enabledMcpServerNames,
     excludedToolNames,
   }) => {
-    if (modelSelection === null) return null;
+    if (modelSelection === null) {return null;}
 
     const { overridesOfModel } = this.sapphireSettingsService.state;
     const { providerName, modelName } = modelSelection;
@@ -747,7 +751,7 @@ class ConvertToLLMMessageService extends Disposable implements IConvertToLLMMess
 
     let conversationTokens = 0;
     for (const m of chatMessages) {
-      if (m.role === 'checkpoint' || m.role === 'interrupted_streaming_tool') continue;
+      if (m.role === 'checkpoint' || m.role === 'interrupted_streaming_tool') {continue;}
       if (m.role === 'assistant') {
         // На wire: content ассистента (displayContent) + synthetic tool_calls из следующих tool-msg
         conversationTokens += estimateMessageTokens({ content: m.displayContent ?? '' });
@@ -812,7 +816,7 @@ class ConvertToLLMMessageService extends Disposable implements IConvertToLLMMess
     // Инструкции из настроек/.rules встраиваем в prefix как комментарии (не трогаем строки ниже)
     const combinedInstructions = this._getCombinedAIInstructions();
 
-    let prefix = `\
+    const prefix = `\
 ${
   !combinedInstructions
     ? ''

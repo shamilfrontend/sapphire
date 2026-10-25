@@ -1,7 +1,7 @@
-/*--------------------------------------------------------------------------------------
- *  Copyright 2025 Glass Devtools, Inc. All rights reserved.
- *  Licensed under the Apache License, Version 2.0. See LICENSE.txt for more information.
- *--------------------------------------------------------------------------------------*/
+/*---------------------------------------------------------------------------------------------
+ *  Copyright (c) Microsoft Corporation. All rights reserved.
+ *  Licensed under the MIT License. See License.txt in the project root for license information.
+ *--------------------------------------------------------------------------------------------*/
 
 import fs from 'fs';
 import path from 'path';
@@ -150,6 +150,10 @@ const CLASS_PROP_NAMES = new Set(['class', 'className']);
 /** Строка похожа на список Tailwind-классов (а не на произвольный текст). */
 const looksLikeClassList = (value) => {
   if (!value || typeof value !== 'string') {
+    return false;
+  }
+  // CSS-правило, не список классов. Иначе префикс ломает селекторы вроде #sapphire-tooltip.
+  if (value.includes('{')) {
     return false;
   }
   if (!/[\s-]/.test(value) && !/^(flex|grid|block|hidden|relative|absolute|fixed|sticky)$/.test(value)) {
