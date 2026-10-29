@@ -4,8 +4,7 @@
  *  Licensed under the Apache License, Version 2.0. See LICENSE.txt for more information.
  *--------------------------------------------------------------------------------------*/
 
-import { computed } from 'vue';
-import { useAccessor, useSettingsState } from '../util/services.js';
+import { useAccessor } from '../util/services.js';
 import SapphireCustomDropdownBox from '../util/SapphireCustomDropdownBox.vue';
 import { ChatMode } from '../../../../../../../workbench/contrib/sapphire/common/sapphireSettingsTypes.js';
 import {
@@ -13,19 +12,19 @@ import {
   detailOfChatMode,
   iconOfChatMode,
   nameOfChatMode,
+  useCurrentThreadChatMode,
 } from './ChatComposer.js';
 
 defineProps<{ iconOnly: boolean }>();
 
 const accessor = useAccessor();
-const sapphireSettingsService = accessor.get('ISapphireSettingsService');
-const settingsState = useSettingsState();
-const chatMode = computed(() => settingsState.value.globalSettings.chatMode);
+const chatThreadsService = accessor.get('IChatThreadService');
+const chatMode = useCurrentThreadChatMode();
 
-const options: ChatMode[] = ['agent', 'plan', 'debug', 'normal'];
+const options: ChatMode[] = ['agent', 'plan', 'normal'];
 
 const onChangeOption = (newVal: ChatMode) => {
-  sapphireSettingsService.setGlobalSetting('chatMode', newVal);
+  chatThreadsService.setThreadChatMode(chatThreadsService.state.currentThreadId, newVal);
 };
 
 const displayName = (val: ChatMode) => nameOfChatMode[val];

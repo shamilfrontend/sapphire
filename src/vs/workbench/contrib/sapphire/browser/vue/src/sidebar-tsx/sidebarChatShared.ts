@@ -1,7 +1,7 @@
-/*--------------------------------------------------------------------------------------
- *  Copyright 2025 Glass Devtools, Inc. All rights reserved.
- *  Licensed under the Apache License, Version 2.0. See LICENSE.txt for more information.
- *--------------------------------------------------------------------------------------*/
+/*---------------------------------------------------------------------------------------------
+ *  Copyright (c) Microsoft Corporation. All rights reserved.
+ *  Licensed under the MIT License. See License.txt in the project root for license information.
+ *--------------------------------------------------------------------------------------------*/
 
 import { computed, onWatcherCleanup, ref, watch } from 'vue';
 import { useSettingsState } from '../util/services.js';
@@ -9,6 +9,7 @@ import { getModelCapabilities } from '../../../../common/modelCapabilities.js';
 import { ChatMessage } from '../../../../common/chatThreadServiceTypes.js';
 import type { Diff } from '../../../../common/editCodeServiceTypes.js';
 import { estimateTextTokens, outputTokensPerSecond } from '../../../../common/estimateTokens.js';
+import { getActiveWindow } from '../../../../../../../base/browser/dom.js';
 
 export const EMPTY_CHAT_MESSAGES: ChatMessage[] = [];
 
@@ -33,7 +34,7 @@ export const useLiveOutputTokensPerSecond = (
   watch(
     () => [active(), firstTokenAt()] as const,
     ([isActive, startedAt]) => {
-      if (!isActive || startedAt == null) {
+      if (!isActive || (startedAt === null || startedAt === undefined)) {
         rate.value = undefined;
         return;
       }
@@ -43,8 +44,8 @@ export const useLiveOutputTokensPerSecond = (
         rate.value = outputTokensPerSecond(tokens, startedAt, Date.now());
       };
       tick();
-      const id = window.setInterval(tick, 500);
-      onWatcherCleanup(() => window.clearInterval(id));
+      const id = getActiveWindow().setInterval(tick, 500);
+      onWatcherCleanup(() => getActiveWindow().clearInterval(id));
     },
     { immediate: true },
   );
@@ -62,7 +63,7 @@ export const useChatSupportsVision = () => {
   const settingsState = useSettingsState();
   return computed(() => {
     const modelSelection = settingsState.value.modelSelectionOfFeature.Chat;
-    if (!modelSelection) return false;
+    if (!modelSelection) {return false;}
     return !!getModelCapabilities(
       modelSelection.providerName,
       modelSelection.modelName,
@@ -77,11 +78,11 @@ export const countDiffLineStats = (
 ): { added: number; removed: number } => {
   let added = 0;
   let removed = 0;
-  if (!sortedDiffIds) return { added, removed };
+  if (!sortedDiffIds) {return { added, removed };}
 
   for (const diffId of sortedDiffIds) {
     const diff = diffOfId[diffId];
-    if (!diff) continue;
+    if (!diff) {continue;}
 
     if (diff.type === 'insertion') {
       added += diff.endLine - diff.startLine + 1;
@@ -97,9 +98,15 @@ export const countDiffLineStats = (
 };
 
 export const filesCountLabel = (count: number) => {
-  if (count === 1) return '1 файл';
-  if (count > 1 && count < 5) return `${count} файла`;
+  if (count === 1) {return '1 файл';}
+  if (count > 1 && count < 5) {return `${count} файла`;}
   return `${count} файлов`;
+};
+
+/** Суффикс placeholder композера: office всегда, картинки — только при supportsVision. */
+export const chatComposerFormatsSuffix = (supportsVision: boolean): string => {
+  const office = 'файлы xlsx, docx, pptx, pdf';
+  return supportsVision ? `, ${office}, картинки png/jpeg/webp/gif` : `, ${office}`;
 };
 
 export const SUGGESTED_PROMPTS = [

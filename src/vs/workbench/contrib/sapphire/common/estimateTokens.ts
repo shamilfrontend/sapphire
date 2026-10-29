@@ -1,7 +1,7 @@
-/*--------------------------------------------------------------------------------------
- *  Copyright 2025 Glass Devtools, Inc. All rights reserved.
- *  Licensed under the Apache License, Version 2.0. See LICENSE.txt for more information.
- *--------------------------------------------------------------------------------------*/
+/*---------------------------------------------------------------------------------------------
+ *  Copyright (c) Microsoft Corporation. All rights reserved.
+ *  Licensed under the MIT License. See License.txt in the project root for license information.
+ *--------------------------------------------------------------------------------------------*/
 
 /** Накладные токены на одно сообщение чата (роль, разделители). */
 export const MESSAGE_FRAMING_TOKENS = 4;
@@ -17,7 +17,7 @@ export const MIN_CONTEXT_TOKEN_BUDGET = Math.floor(5_000 / 4);
  * ASCII ~4 симв./токен; кириллица/latin-ext плотнее; CJK ~1 симв./токен.
  */
 export function estimateTextTokens(text: string): number {
-  if (!text) return 0;
+  if (!text) {return 0;}
   let tokens = 0;
   for (let i = 0; i < text.length; i++) {
     const c = text.charCodeAt(i);
@@ -46,7 +46,7 @@ export function estimateToolCallTokens(opts: { name: string; argumentsJson: stri
 export function estimateMessageTokens(opts: { content: string; imageCount?: number }): number {
   const textTokens = opts.content ? estimateTextTokens(opts.content) : 0;
   const imageTokens =
-    opts.imageCount != null && opts.imageCount > 0 ? estimateImageTokens(opts.imageCount) : 0;
+    (opts.imageCount !== null && opts.imageCount !== undefined) && opts.imageCount > 0 ? estimateImageTokens(opts.imageCount) : 0;
   return textTokens + imageTokens + MESSAGE_FRAMING_TOKENS;
 }
 
@@ -72,9 +72,9 @@ export class TokenEstimateCalibrator {
 
   /** Обновить множитель по одной паре (оценка, факт). */
   observe(estimatedPromptTokens: number, actualPromptTokens: number): void {
-    if (estimatedPromptTokens < 50 || actualPromptTokens < 50) return;
+    if (estimatedPromptTokens < 50 || actualPromptTokens < 50) {return;}
     const ratio = actualPromptTokens / estimatedPromptTokens;
-    if (!Number.isFinite(ratio) || ratio <= 0) return;
+    if (!Number.isFinite(ratio) || ratio <= 0) {return;}
     const next = this.alpha * ratio + (1 - this.alpha) * this.factor;
     this.factor = Math.min(this.maxFactor, Math.max(this.minFactor, next));
   }
@@ -100,10 +100,10 @@ export function outputTokensPerSecond(
   firstTokenAtMs: number,
   finishedAtMs: number,
 ): number | undefined {
-  if (!Number.isFinite(completionTokens) || completionTokens <= 0) return undefined;
-  if (!Number.isFinite(firstTokenAtMs) || !Number.isFinite(finishedAtMs)) return undefined;
+  if (!Number.isFinite(completionTokens) || completionTokens <= 0) {return undefined;}
+  if (!Number.isFinite(firstTokenAtMs) || !Number.isFinite(finishedAtMs)) {return undefined;}
   const elapsedMs = finishedAtMs - firstTokenAtMs;
-  if (elapsedMs < MIN_OUTPUT_RATE_MS) return undefined;
+  if (elapsedMs < MIN_OUTPUT_RATE_MS) {return undefined;}
   return Math.max(1, Math.round(completionTokens / (elapsedMs / 1000)));
 }
 

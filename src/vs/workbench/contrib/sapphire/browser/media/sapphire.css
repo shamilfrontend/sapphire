@@ -3,24 +3,26 @@
  *  Licensed under the Apache License, Version 2.0. See LICENSE.txt for more information.
  *--------------------------------------------------------------------------------------*/
 
+/* Fallback, если theming participant ещё не применился; основные цвета — colors.ts */
 .monaco-editor .sapphire-sweepIdxBG {
-  background-color: var(--vscode-void-sweepIdxBG);
+  background-color: var(--vscode-sapphire-sweepIdxBG, rgba(100, 100, 100, 0.5));
 }
 
-.sapphire-sweepBG {
-  background-color: var(--vscode-void-sweepBG);
+.monaco-editor .sapphire-sweepBG {
+  background-color: var(--vscode-sapphire-sweepBG, rgba(100, 100, 100, 0.2));
 }
 
-.sapphire-highlightBG {
-  background-color: var(--vscode-void-highlightBG);
+.monaco-editor .sapphire-highlightBG {
+  background-color: var(--vscode-sapphire-highlightBG, rgba(100, 100, 100, 0.1));
 }
 
-.sapphire-greenBG {
-  background-color: var(--vscode-void-greenBG);
+.monaco-editor .sapphire-greenBG {
+  background-color: var(--vscode-sapphire-greenBG, rgba(47, 158, 107, 0.22));
 }
 
+.monaco-editor .sapphire-redBG,
 .sapphire-redBG {
-  background-color: var(--vscode-void-redBG);
+  background-color: var(--vscode-sapphire-redBG, rgba(209, 75, 90, 0.22));
 }
 
 /* styles for all containers used by void */
@@ -116,6 +118,21 @@
   display: none !important;
 }
 
+/* Развёрнутый чат: колонка по центру, как в режиме агента, а не на всю ширину окна. */
+.monaco-workbench.nomaineditorarea .part.auxiliarybar .void-scope > .void-w-full.void-h-full {
+  box-sizing: border-box;
+  display: flex;
+  justify-content: center;
+  padding-inline: 24px;
+}
+
+.monaco-workbench.nomaineditorarea .part.auxiliarybar .void-scope > .void-w-full.void-h-full > .void-flex.void-flex-col {
+  width: 100%;
+  max-width: 800px;
+  min-width: 0;
+  height: 100%;
+}
+
 .monaco-workbench
   .part.titlebar
   > .titlebar-container
@@ -138,4 +155,120 @@
   > .sapphire-project-index-titlebar
   * {
   -webkit-app-region: no-drag;
+}
+
+/* Форма капсулы поиска. Цвета задаёт тема Sapphire UI, не этот файл. */
+.monaco-workbench.vscode-theme-defaults-themes-sapphire-ui-json .part.titlebar .command-center .action-item.command-center-center {
+  border-radius: 6px;
+  height: 26px;
+}
+
+.monaco-workbench .part.titlebar > .titlebar-container > .titlebar-right > .action-toolbar-container .monaco-action-bar .action-item:has(.codicon-sapphire-agents-window) {
+  width: auto;
+  overflow: visible;
+}
+
+/* Кнопки строки папки — только когда курсор на самой строке, как в сайдбаре Cursor. */
+.monaco-workbench .explorer-viewlet .pane:hover > .pane-header.expanded > .actions,
+.monaco-workbench .explorer-viewlet .pane:focus-within > .pane-header.expanded > .actions,
+.monaco-workbench .explorer-viewlet .pane > .pane-header.focused.expanded > .actions,
+.monaco-workbench .explorer-viewlet .pane > .pane-header.actions-always-visible.expanded > .actions {
+  display: none;
+}
+
+.monaco-workbench .explorer-viewlet .pane > .pane-header.expanded:hover > .actions,
+.monaco-workbench .explorer-viewlet .pane > .pane-header.expanded > .actions:focus-within {
+  display: initial;
+}
+
+/* Подпись EXPLORER и меню «…» не нужны: шапка — это ряд иконок. */
+.monaco-workbench .part.sidebar > .title > .title-label,
+.monaco-workbench .part.sidebar > .title > .title-actions,
+.monaco-workbench .part.sidebar > .title > .global-actions,
+.monaco-workbench .part.sidebar > .title.has-composite-bar > .title-actions,
+.monaco-workbench .part.sidebar > .title.has-composite-bar > .global-actions {
+  display: none !important;
+}
+
+/* Если иконки в отдельной полосе над заголовком, саму полосу EXPLORER убираем. */
+.monaco-workbench .part.sidebar > .header-or-footer.has-composite-bar + .composite.title {
+  display: none !important;
+}
+
+/* Ряд иконок по центру шапки сайдбара, с зазором 4px. */
+.monaco-workbench .part.sidebar > .title > .composite-bar-container,
+.monaco-workbench .part.sidebar > .header-or-footer > .composite-bar-container {
+  justify-content: center;
+  gap: 4px;
+}
+
+.monaco-workbench .part.sidebar > .title > .composite-bar-container > .composite-bar > .monaco-action-bar > .actions-container,
+.monaco-workbench .part.sidebar > .header-or-footer > .composite-bar-container > .composite-bar > .monaco-action-bar > .actions-container {
+  gap: 4px;
+}
+
+/* Шеврон дополнительных видов вместо многоточия. */
+.monaco-workbench .part.sidebar > .title > .composite-bar-container > .composite-bar > .monaco-action-bar .action-item .action-label.codicon-more::before,
+.monaco-workbench .part.sidebar > .header-or-footer > .composite-bar-container > .composite-bar > .monaco-action-bar .action-item .action-label.codicon-more::before {
+  content: "\eab4";
+}
+
+/* Глиф в потоке подписи: абсолютный left из sidebarpart.css сдвигал его
+   относительно плашки и поднимал весь ряд выше центра шапки. */
+.monaco-workbench .part.sidebar > .title > .composite-bar-container > .composite-bar > .monaco-action-bar .action-item.icon,
+.monaco-workbench .part.sidebar > .header-or-footer > .composite-bar-container > .composite-bar > .monaco-action-bar .action-item.icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.monaco-workbench .part.sidebar > .title > .composite-bar-container > .composite-bar > .monaco-action-bar .action-item.icon > .action-label,
+.monaco-workbench .part.sidebar > .header-or-footer > .composite-bar-container > .composite-bar > .monaco-action-bar .action-item.icon > .action-label {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  width: 16px;
+  height: 16px;
+  padding: 0;
+  line-height: 16px;
+}
+
+.monaco-workbench .part.sidebar > .title > .composite-bar-container > .composite-bar > .monaco-action-bar .action-item.icon .action-label::before,
+.monaco-workbench .part.sidebar > .header-or-footer > .composite-bar-container > .composite-bar > .monaco-action-bar .action-item.icon .action-label::before {
+  position: static;
+  top: auto;
+  left: auto;
+  transform: none;
+}
+
+/* Активная иконка — скруглённая плашка по центру кнопки, без синей черты и счётчика. */
+.monaco-workbench .part.sidebar .composite-bar .action-item .badge {
+  display: none !important;
+}
+
+.monaco-workbench .part.sidebar .composite-bar .action-item.icon.checked {
+  background-color: transparent !important;
+}
+
+.monaco-workbench .part.sidebar .composite-bar .action-item.icon.checked:not(:focus) .active-item-indicator:before {
+  display: none !important;
+}
+
+.monaco-workbench .part.sidebar > .title > .composite-bar-container > .composite-bar > .monaco-action-bar .action-item.icon.checked .active-item-indicator,
+.monaco-workbench .part.sidebar > .header-or-footer > .composite-bar-container > .composite-bar > .monaco-action-bar .action-item.icon.checked .active-item-indicator {
+  z-index: 0;
+  top: 50%;
+  right: auto;
+  bottom: auto;
+  left: 50%;
+  width: 24px;
+  height: 24px;
+  margin: 0;
+  overflow: visible;
+  border-radius: 6px;
+  transform: translate(-50%, -50%);
+  background: #333333;
 }

@@ -37,7 +37,6 @@ import {
 } from '../../../../common/planToolPin.js';
 import ErrorBoundary from './ErrorBoundary.vue';
 import ErrorDisplay from './ErrorDisplay.vue';
-import PastThreadsList from './PastThreadsList.vue';
 import QueuedMessagesPanel from './QueuedMessagesPanel.vue';
 import SapphireChatArea from './SapphireChatArea.vue';
 import ScrollToBottomContainer from './ScrollToBottomContainer.vue';
@@ -48,10 +47,11 @@ import ProjectIndexControls from './ProjectIndexControls.vue';
 import IconLoading from './IconLoading.vue';
 import ProseWrapper from './ProseWrapper.vue';
 import { PlanToolCard, EditToolSoFar } from './ChatToolCards.js';
-import { useChatContextUsage } from './ChatComposer.js';
+import { useChatContextUsage, useCurrentThreadChatMode } from './ChatComposer.js';
 import {
   EMPTY_CHAT_MESSAGES,
   SUGGESTED_PROMPTS,
+  chatComposerFormatsSuffix,
   scrollToBottom,
   useChatSupportsVision,
   useLiveOutputTokensPerSecond,
@@ -171,7 +171,7 @@ const setStagingImagesAndPersist = (images: ChatImageAttachment[]) => {
 };
 
 const modelSelection = computed(() => settingsState.value.modelSelectionOfFeature.Chat);
-const chatMode = computed(() => settingsState.value.globalSettings.chatMode);
+const chatMode = useCurrentThreadChatMode();
 const contextUsage = useChatContextUsage(
   () => previousMessages.value,
   () => chatMode.value,
@@ -348,19 +348,6 @@ const collapsePlanUriFsPath = computed(() =>
   planUriFsPathToCollapseInThread(currentThread.value?.state.activePlan),
 );
 
-const lastPauseIdx = computed(() => {
-  let idx = -1;
-  previousMessages.value.forEach((m, i) => {
-    if (m.role === 'assistant' && m.pauseReason) idx = i;
-  });
-  return idx;
-});
-const resumedAfterPause = computed(
-  () =>
-    lastPauseIdx.value >= 0 &&
-    previousMessages.value.slice(lastPauseIdx.value + 1).some((m) => m.role === 'user'),
-);
-
 const streamingChatIdx = computed(() => previousMessages.value.length);
 const showStreamingBubble = computed(
   () => !!(reasoningSoFar.value || displayContentSoFar.value || isRunning.value),
@@ -420,13 +407,13 @@ const isLandingPage = computed(() => previousMessages.value.length === 0);
 const projectName = computed(
   () => accessor.get('IWorkspaceContextService').getWorkspace().folders[0]?.name,
 );
-const placeholder = computed(() =>
-  props.variant === 'agents'
-    ? 'Сообщение, / для скиллов, @ для контекста, файлы xlsx, docx, pptx, pdf'
-    : supportsVision.value
-      ? 'Продолжить… (изображение, xlsx, docx, pptx, pdf)'
-      : 'Продолжить… (xlsx, docx, pptx, pdf)',
-);
+const placeholder = computed(() => {
+  const base =
+    props.variant === 'agents'
+      ? 'Сообщение, / для скиллов, @ для контекста'
+      : 'Агент, план, / для скиллов, @ для контекста';
+  return base + chatComposerFormatsSuffix(supportsVision.value);
+});
 
 const onComposerPaste = async (e: ClipboardEvent) => {
   if (!supportsVision.value) return;
@@ -497,6 +484,7 @@ const onComposerFileInput = async (e: Event) => {
                     @change="onComposerFileInput"
                   />
                   <SapphireInputBox2
+                    transparent
                     enableAtToMention
                     class="min-h-[81px] px-0.5 py-0.5"
                     :placeholder="placeholder"
@@ -570,6 +558,7 @@ const onComposerFileInput = async (e: Event) => {
                   @change="onComposerFileInput"
                 />
                 <SapphireInputBox2
+                  transparent
                   enableAtToMention
                   class="min-h-[81px] px-0.5 py-0.5"
                   :placeholder="placeholder"
@@ -584,29 +573,6 @@ const onComposerFileInput = async (e: Event) => {
                 />
               </SapphireChatArea>
             </div>
-          </div>
-        </div>
-      </ErrorBoundary>
-
-      <ErrorBoundary v-if="Object.keys(chatThreadsState.allThreads).length > 1">
-        <!-- блок «Предыдущие чаты», если тредов больше одного -->
-        <div class="pt-8 mb-2 text-void-fg-3 text-root select-none pointer-events-none">
-          Предыдущие чаты
-        </div>
-        <PastThreadsList />
-      </ErrorBoundary>
-      <ErrorBoundary v-else>
-        <div class="pt-8 mb-2 text-void-fg-3 text-root select-none pointer-events-none">
-          Подсказки
-        </div>
-        <div class="flex flex-col gap-2 w-full text-nowrap text-void-fg-3 select-none">
-          <div
-            v-for="text in SUGGESTED_PROMPTS"
-            :key="text"
-            class="py-1 px-2 rounded text-sm bg-void-bg-2-hover hover:bg-void-bg-2-alt cursor-pointer opacity-80 hover:opacity-100"
-            @click="onSubmit(text)"
-          >
-            {{ text }}
           </div>
         </div>
       </ErrorBoundary>
@@ -642,19 +608,19 @@ const onComposerFileInput = async (e: Event) => {
 			${previousMessages.length === 0 && !displayContentSoFar ? 'hidden' : ''}
 		`"
           >
-            <ChatBubble
-              v-for="(message, i) in previousMessages"
-              :key="i"
-              :currCheckpointIdx="currCheckpointIdx"
-              :chatMessage="message"
-              :messageIdx="i"
-              isCommitted
-              :chatIsRunning="isRunning"
-              :threadId="threadId"
-              :_scrollToBottom="() => scrollToBottom(scrollContainerRef)"
-              :showContinueButton="i === lastPauseIdx && !isRunning && !resumedAfterPause"
-              :collapsePlanUriFsPath="collapsePlanUriFsPath"
-            />
+            <template v-for="(message, i) in previousMessages" :key="i">
+              <ChatBubble
+                v-if="message.role !== 'checkpoint'"
+                :currCheckpointIdx="currCheckpointIdx"
+                :chatMessage="message"
+                :messageIdx="i"
+                isCommitted
+                :chatIsRunning="isRunning"
+                :threadId="threadId"
+                :_scrollToBottom="() => scrollToBottom(scrollContainerRef)"
+                :collapsePlanUriFsPath="collapsePlanUriFsPath"
+              />
+            </template>
             <ChatBubble
               v-if="showStreamingBubble"
               key="curr-streaming-msg"
@@ -740,6 +706,7 @@ const onComposerFileInput = async (e: Event) => {
                   @change="onComposerFileInput"
                 />
                 <SapphireInputBox2
+                  transparent
                   enableAtToMention
                   class="min-h-[81px] px-0.5 py-0.5"
                   :placeholder="placeholder"

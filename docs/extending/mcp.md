@@ -9,7 +9,7 @@
 | `common/mcpService.ts` (и связанные) | фасад настроек/состояния |
 | `electron-main/mcpChannel.ts` | запуск MCP на main |
 | `common/prompt/mcpToolDisclosure.ts` | deferred enable / фильтр схем |
-| `prompts.ts` → `availableTools` | MCP для `agent` и `debug` (`isAgentLike`) |
+| `prompts.ts` → `availableTools` | MCP для `agent` |
 
 ## Deferred enable
 
@@ -19,7 +19,7 @@
 
 1. Опишите MCP server в конфиге (команда, args, env).
 2. Убедитесь, что процесс стартует в корпоративном окружении (VPN, бинарники).
-3. В Agent или Debug проверьте: каталог → `enable_mcp_server` → tool виден и проходит approval.
+3. В Agent проверьте: каталог → `enable_mcp_server` → tool виден и проходит approval.
 4. Задокументируйте во внутреннем runbook (секреты не коммитить).
 
 ## Безопасность

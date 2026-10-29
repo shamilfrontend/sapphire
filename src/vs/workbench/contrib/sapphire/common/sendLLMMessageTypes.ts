@@ -1,7 +1,7 @@
-/*--------------------------------------------------------------------------------------
- *  Copyright 2025 Glass Devtools, Inc. All rights reserved.
- *  Licensed under the Apache License, Version 2.0. See LICENSE.txt for more information.
- *--------------------------------------------------------------------------------------*/
+/*---------------------------------------------------------------------------------------------
+ *  Copyright (c) Microsoft Corporation. All rights reserved.
+ *  Licensed under the MIT License. See License.txt in the project root for license information.
+ *--------------------------------------------------------------------------------------------*/
 
 import { InternalToolInfo } from './prompt/prompts.js';
 import { ToolName, ToolParamName } from './toolsServiceTypes.js';
@@ -20,7 +20,7 @@ export const errorDetails = (fullError: Error | null): string | null => {
     return null;
   }
   if (typeof fullError === 'object') {
-    if (Object.keys(fullError).length === 0) return null;
+    if (Object.keys(fullError).length === 0) {return null;}
     return JSON.stringify(fullError, null, 2);
   }
   if (typeof fullError === 'string') {
@@ -30,7 +30,7 @@ export const errorDetails = (fullError: Error | null): string | null => {
 };
 
 export const getErrorMessage: (error: unknown) => string = (error) => {
-  if (error instanceof Error) return `${error.name}: ${error.message}`;
+  if (error instanceof Error) {return `${error.name}: ${error.message}`;}
   return `${error}`;
 };
 
@@ -133,7 +133,7 @@ type SendLLMType =
       messages: LLMChatMessage[];
       separateSystemMessage: string | undefined;
       chatMode: ChatMode | null;
-      /** false — agent/debug без update_plan. Если поле опущено, считается false. */
+      /** false — agent без update_plan. Если поле опущено, считается false. */
       allowUpdatePlan?: boolean;
       /**
        * MCP-серверы с полными схемами в контексте.
@@ -164,7 +164,7 @@ export type ServiceSendLLMMessageParams = {
   onError: OnError;
   /** Опционально — не передаётся в autocomplete/SCM и т.п. */
   onRetry?: OnRetry;
-  logging: { loggingName: string; loggingExtras?: { [k: string]: any } };
+  logging: { loggingName: string; loggingExtras?: { [k: string]: unknown } };
   featureName: FeatureName;
   modelSelection: ModelSelection | null;
   modelSelectionOptions: ModelSelectionOptions | undefined;
@@ -178,7 +178,7 @@ export type SendLLMMessageParams = {
   onFinalMessage: OnFinalMessage;
   onError: OnError;
   onRetry?: OnRetry;
-  logging: { loggingName: string; loggingExtras?: { [k: string]: any } };
+  logging: { loggingName: string; loggingExtras?: { [k: string]: unknown } };
   abortRef: AbortRef;
   requestId: string;
   featureName: FeatureName;
@@ -228,7 +228,7 @@ export type ModelListParams<ModelResponse> = {
 export type ServiceModelListParams<modelResponse> = {
   providerName: ProviderName;
   onSuccess: (param: { models: modelResponse[] }) => void;
-  onError: (param: { error: any }) => void;
+  onError: (param: { error: string }) => void;
 };
 
 type BlockedMainModelListParams = 'onSuccess' | 'onError';

@@ -1,7 +1,7 @@
-/*--------------------------------------------------------------------------------------
- *  Copyright 2025 Glass Devtools, Inc. All rights reserved.
- *  Licensed under the Apache License, Version 2.0. See LICENSE.txt for more information.
- *--------------------------------------------------------------------------------------*/
+/*---------------------------------------------------------------------------------------------
+ *  Copyright (c) Microsoft Corporation. All rights reserved.
+ *  Licensed under the MIT License. See License.txt in the project root for license information.
+ *--------------------------------------------------------------------------------------------*/
 
 import { CancellationToken } from '../../../../base/common/cancellation.js';
 import {
@@ -24,22 +24,22 @@ const findStagingSelectionIndex = (
   currentSelections: StagingSelectionItem[] | undefined,
   newSelection: StagingSelectionItem,
 ): number | null => {
-  if (!currentSelections) return null;
+  if (!currentSelections) {return null;}
 
   for (let i = 0; i < currentSelections.length; i += 1) {
     const s = currentSelections[i];
 
-    if (s.uri.fsPath !== newSelection.uri.fsPath) continue;
+    if (s.uri.fsPath !== newSelection.uri.fsPath) {continue;}
 
     if (s.type === 'File' && newSelection.type === 'File') {
       return i;
     }
     if (s.type === 'CodeSelection' && newSelection.type === 'CodeSelection') {
-      if (s.uri.fsPath !== newSelection.uri.fsPath) continue;
+      if (s.uri.fsPath !== newSelection.uri.fsPath) {continue;}
       // совпадение uri и range — тот же selection
       const [oldStart, oldEnd] = s.range;
       const [newStart, newEnd] = newSelection.range;
-      if (oldStart !== newStart || oldEnd !== newEnd) continue;
+      if (oldStart !== newStart || oldEnd !== newEnd) {continue;}
       return i;
     }
     if (s.type === 'Folder' && newSelection.type === 'Folder') {
@@ -55,7 +55,7 @@ export class ChatThreadStaging {
   _addMessageToThread(threadId: string, message: ChatMessage) {
     const { allThreads } = this._s.state;
     const oldThread = allThreads[threadId];
-    if (!oldThread) return; // не должно случаться
+    if (!oldThread) {return;} // не должно случаться
     // обновляем state и persist
     const newThreads = {
       ...allThreads,
@@ -81,7 +81,7 @@ export class ChatThreadStaging {
   ) {
     const { allThreads } = this._s.state;
     const oldThread = allThreads[threadId];
-    if (!oldThread) return;
+    if (!oldThread) {return;}
 
     let currCheckpointIdx = oldThread.state.currCheckpointIdx;
     if (currCheckpointIdx !== null && currCheckpointIdx !== undefined) {
@@ -118,7 +118,7 @@ export class ChatThreadStaging {
   setCurrentlyFocusedMessageIdx(messageIdx: number | undefined) {
     const threadId = this._s.state.currentThreadId;
     const thread = this._s.state.allThreads[threadId];
-    if (!thread) return;
+    if (!thread) {return;}
 
     this._s._setState({
       allThreads: {
@@ -286,7 +286,7 @@ export class ChatThreadStaging {
     const focusedMessageIdx = this._s.getCurrentFocusedMessageIdx();
     const { selections, setSelections } = this._getStagingAccess(focusedMessageIdx);
     const n = Math.min(numPops, selections.length);
-    if (n <= 0) return;
+    if (n <= 0) {return;}
 
     const insertAt = selections.length - n;
     this._pushStagingUndo({
@@ -300,7 +300,7 @@ export class ChatThreadStaging {
   removeStagingSelectionAt(index: number, messageIdx?: number): void {
     const targetIdx = messageIdx !== undefined ? messageIdx : this._s.getCurrentFocusedMessageIdx();
     const { selections, setSelections } = this._getStagingAccess(targetIdx);
-    if (index < 0 || index >= selections.length) return;
+    if (index < 0 || index >= selections.length) {return;}
 
     this._pushStagingUndo({
       items: [selections[index]],
@@ -313,7 +313,7 @@ export class ChatThreadStaging {
   undoStagingPop(): boolean {
     const threadId = this._s.state.currentThreadId;
     const stack = this._s._stagingUndoOfThread[threadId];
-    if (!stack?.length) return false;
+    if (!stack?.length) {return false;}
 
     const entry = stack.pop()!;
     const { selections, setSelections } = this._getStagingAccess(entry.messageIdx);
@@ -330,7 +330,7 @@ export class ChatThreadStaging {
   private _setCurrentMessageState(state: Partial<UserMessageState>, messageIdx: number): void {
     const threadId = this._s.state.currentThreadId;
     const thread = this._s.state.allThreads[threadId];
-    if (!thread) return;
+    if (!thread) {return;}
 
     this._s._setState({
       allThreads: {
@@ -360,7 +360,7 @@ export class ChatThreadStaging {
     doNotRefreshMountInfo?: boolean,
   ): void {
     const thread = this._s.state.allThreads[threadId];
-    if (!thread) return;
+    if (!thread) {return;}
 
     this._s._setState(
       {
@@ -397,7 +397,7 @@ export class ChatThreadStaging {
     draft: { draftText?: string; stagingImages?: ChatImageAttachment[] },
   ): void => {
     const thread = this._s.state.allThreads[threadId];
-    if (!thread) return;
+    if (!thread) {return;}
     if (draft.draftText !== undefined) {
       thread.state.draftText = draft.draftText;
     }
@@ -408,13 +408,13 @@ export class ChatThreadStaging {
 
   getCurrentMessageState(messageIdx: number): UserMessageState {
     const currMessage = this._s.getCurrentThread()?.messages?.[messageIdx];
-    if (!currMessage || currMessage.role !== 'user') return defaultMessageState;
+    if (!currMessage || currMessage.role !== 'user') {return defaultMessageState;}
     return currMessage.state;
   }
 
   setCurrentMessageState(messageIdx: number, newState: Partial<UserMessageState>) {
     const currMessage = this._s.getCurrentThread()?.messages?.[messageIdx];
-    if (!currMessage || currMessage.role !== 'user') return;
+    if (!currMessage || currMessage.role !== 'user') {return;}
     this._setCurrentMessageState(newState, messageIdx);
   }
 }

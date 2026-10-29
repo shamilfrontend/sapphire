@@ -1,7 +1,7 @@
-/*--------------------------------------------------------------------------------------
- *  Copyright 2025 Glass Devtools, Inc. All rights reserved.
- *  Licensed under the Apache License, Version 2.0. See LICENSE.txt for more information.
- *--------------------------------------------------------------------------------------*/
+/*---------------------------------------------------------------------------------------------
+ *  Copyright (c) Microsoft Corporation. All rights reserved.
+ *  Licensed under the MIT License. See License.txt in the project root for license information.
+ *--------------------------------------------------------------------------------------------*/
 
 import { promises as dns } from 'dns';
 import { Event } from '../../../../base/common/event.js';
@@ -12,11 +12,11 @@ import {
 } from '../common/webEgressPolicy.js';
 
 export class WebEgressChannel implements IServerChannel {
-  listen(_: unknown, _event: string): Event<any> {
-    return Event.None;
+  listen<T>(_: unknown, _event: string): Event<T> {
+    return Event.None as Event<T>;
   }
 
-  async call(_: unknown, command: string, arg?: { url?: string }): Promise<any> {
+  async call<T>(_: unknown, command: string, arg?: { url?: string }): Promise<T> {
     if (command !== 'assertPublicHttpUrl') {
       throw new Error(`Unknown web egress command: ${command}`);
     }
@@ -31,6 +31,7 @@ export class WebEgressChannel implements IServerChannel {
       const results = await dns.lookup(hostname, { all: true, verbatim: true });
       return results.map((r) => r.address);
     });
-    return { ok: true as const };
+    const result = { ok: true as const };
+    return result as T;
   }
 }

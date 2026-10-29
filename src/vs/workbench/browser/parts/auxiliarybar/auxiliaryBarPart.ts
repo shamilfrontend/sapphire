@@ -191,7 +191,8 @@ export class AuxiliaryBarPart extends AbstractPaneCompositePart {
 	private resolveConfiguration(): IAuxiliaryBarPartConfiguration {
 		const position = this.configurationService.getValue<ActivityBarPosition>(LayoutSettings.ACTIVITY_BAR_LOCATION);
 
-		const canShowLabels = position !== ActivityBarPosition.TOP && position !== ActivityBarPosition.BOTTOM; // use same style as activity bar in this case
+		// Чат остаётся вкладкой с подписью. Горизонтальные иконки activity bar — только у основной панели.
+		const canShowLabels = position !== ActivityBarPosition.BOTTOM;
 		const showLabels = canShowLabels && this.configurationService.getValue('workbench.secondarySideBar.showLabels') !== false;
 
 		return { position, canShowLabels, showLabels };
@@ -313,7 +314,8 @@ export class AuxiliaryBarPart extends AbstractPaneCompositePart {
 
 	protected getCompositeBarPosition(): CompositeBarPosition {
 		switch (this.configuration.position) {
-			case ActivityBarPosition.TOP: return CompositeBarPosition.TOP;
+			// top у основной панели не поднимает вторую полосу иконок над «Новый чат».
+			case ActivityBarPosition.TOP: return CompositeBarPosition.TITLE;
 			case ActivityBarPosition.BOTTOM: return CompositeBarPosition.BOTTOM;
 			case ActivityBarPosition.HIDDEN: return CompositeBarPosition.TITLE;
 			case ActivityBarPosition.DEFAULT: return CompositeBarPosition.TITLE;

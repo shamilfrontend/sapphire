@@ -65,7 +65,15 @@ src/vs/base/common/signals-core/**
 # Sapphire files with a third-party copyright and their own formatting
 src/vs/workbench/contrib/sapphire/browser/autocompleteService.ts
 src/vs/workbench/contrib/sapphire/browser/planEditor.ts
+src/vs/workbench/contrib/sapphire/browser/sapphireAgentsWindowService.ts
+src/vs/workbench/contrib/sapphire/browser/sapphireCommandBarService.ts
+src/vs/workbench/contrib/sapphire/browser/sapphireCursorChrome.ts
+src/vs/workbench/contrib/sapphire/browser/sapphireExplorerViews.ts
 src/vs/workbench/contrib/sapphire/browser/sapphireUpdateActions.ts
 src/vs/workbench/contrib/sapphire/browser/toolsService.ts
 src/vs/workbench/contrib/sapphire/common/refreshModelService.ts
 src/vs/workbench/contrib/sapphire/electron-main/llmMessage/systemCertificatesFetch.ts
+
+# Generated Vue bundle input. Edit src/ only; build.js recopies it into src2/.
+src/vs/workbench/contrib/sapphire/browser/vue/src2/**
+src/vs/workbench/contrib/sapphire/browser/vue/out/**

@@ -1,7 +1,7 @@
-/*--------------------------------------------------------------------------------------
- *  Copyright 2025 Glass Devtools, Inc. All rights reserved.
- *  Licensed under the Apache License, Version 2.0. See LICENSE.txt for more information.
- *--------------------------------------------------------------------------------------*/
+/*---------------------------------------------------------------------------------------------
+ *  Copyright (c) Microsoft Corporation. All rights reserved.
+ *  Licensed under the MIT License. See License.txt in the project root for license information.
+ *--------------------------------------------------------------------------------------------*/
 
 import {
   SendLLMMessageParams,
@@ -41,18 +41,18 @@ export const sendLLMMessage = async ({
   const { providerName, modelName } = modelSelection;
 
   let _aborter: (() => void) | null = null;
-  let _setAborter = (fn: () => void) => {
+  const _setAborter = (fn: () => void) => {
     _aborter = fn;
   };
   let _didAbort = false;
 
   const onText: OnText = (params) => {
-    if (_didAbort) return;
+    if (_didAbort) {return;}
     onText_(params);
   };
 
   const onFinalMessage: OnFinalMessage = (params) => {
-    if (_didAbort) return;
+    if (_didAbort) {return;}
     if (params.usage) {
       console.log(
         `[llm] feature=${featureName} provider=${providerName} requestId=${requestId} prompt=${params.usage.prompt_tokens} completion=${params.usage.completion_tokens} total=${params.usage.total_tokens}`,
@@ -62,7 +62,7 @@ export const sendLLMMessage = async ({
   };
 
   const onError: OnError = ({ message: errorMessage, fullError, gatewayRetryExhausted }) => {
-    if (_didAbort) return;
+    if (_didAbort) {return;}
     console.error('sendLLMMessage onError:', errorMessage);
 
     // fetch failed / connection error — по умолчанию почти без деталей
@@ -82,7 +82,7 @@ export const sendLLMMessage = async ({
   };
 
   const onRetry: OnRetry = (params) => {
-    if (_didAbort) return;
+    if (_didAbort) {return;}
     onRetry_?.(params);
   };
 

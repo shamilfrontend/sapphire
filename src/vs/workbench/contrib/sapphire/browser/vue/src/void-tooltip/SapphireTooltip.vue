@@ -4,7 +4,7 @@
  *  Licensed under the Apache License, Version 2.0. See LICENSE.txt for more information.
  *--------------------------------------------------------------------------------------*/
 
-import { onMounted, onUnmounted, ref, watch } from 'vue';
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
 import { autoUpdate, computePosition, flip, offset, shift, type Placement, type VirtualElement } from '@floating-ui/vue';
 import 'floating-vue/dist/style.css';
 import '../styles.css';
@@ -63,19 +63,36 @@ const hide = () => {
   anchor = null;
 };
 
+/** Якорь снят с DOM или схлопнут — иначе floating-ui кладёт пузырь в (6,8) под traffic lights. */
+const isAnchorAlive = (el: HTMLElement | null): el is HTMLElement => {
+  if (!el || !el.isConnected) {
+    return false;
+  }
+  const rect = el.getBoundingClientRect();
+  return rect.width > 0 && rect.height > 0;
+};
+
 const position = async () => {
   const floating = floatingEl.value;
-  if (!anchor || !floating) {
+  if (!floating) {
     return;
   }
+  if (!isAnchorAlive(anchor)) {
+    hide();
+    return;
+  }
+  const currentAnchor = anchor;
   const virtual: VirtualElement = {
-    getBoundingClientRect: () => anchor!.getBoundingClientRect(),
+    getBoundingClientRect: () => currentAnchor.getBoundingClientRect(),
   };
   const { x, y, strategy } = await computePosition(virtual, floating, {
     strategy: 'fixed',
-    placement: placementOf(anchor),
+    placement: placementOf(currentAnchor),
     middleware: [offset(6), flip(), shift({ padding: 8 })],
   });
+  if (!isAnchorAlive(anchor) || anchor !== currentAnchor) {
+    return;
+  }
   Object.assign(floating.style, {
     position: strategy,
     left: `${x}px`,
@@ -97,6 +114,10 @@ const show = (el: HTMLElement) => {
   text.value = content;
   tooltipId.value = id;
   showTimer = setTimeout(() => {
+    if (!isAnchorAlive(anchor) || anchor !== el) {
+      hide();
+      return;
+    }
     open.value = true;
   }, delayOf(el));
 };
@@ -104,17 +125,21 @@ const show = (el: HTMLElement) => {
 watch(open, async (isOpen) => {
   stopAutoUpdate?.();
   stopAutoUpdate = undefined;
-  if (!isOpen || !anchor) {
+  if (!isOpen) {
     return;
   }
   await Promise.resolve();
   const floating = floatingEl.value;
-  if (!floating || !anchor) {
+  if (!floating || !isAnchorAlive(anchor)) {
+    hide();
     return;
   }
   await position();
+  if (!isAnchorAlive(anchor) || !floatingEl.value) {
+    return;
+  }
   const currentAnchor = anchor;
-  stopAutoUpdate = autoUpdate(currentAnchor, floating, () => {
+  stopAutoUpdate = autoUpdate(currentAnchor, floatingEl.value, () => {
     void position();
   });
 });
@@ -146,62 +171,81 @@ const onOut = (event: MouseEvent) => {
   hide();
 };
 
-const tooltipCss = `
-#sapphire-tooltip,
-#sapphire-tooltip-orange,
-#sapphire-tooltip-green,
-#sapphire-tooltip-provider-info {
-  font-size: 12px;
-  line-height: 16px;
-  padding: 4px 8px;
-  border-radius: 6px;
-  z-index: 999999;
-  max-width: 300px;
-  word-wrap: break-word;
-  border: 1px solid rgba(100, 100, 100, 0.2);
-  box-shadow: 0 2px 8px var(--vscode-widget-shadow);
-  opacity: 1;
-}
-#sapphire-tooltip,
-#sapphire-tooltip-provider-info {
-  background-color: var(--vscode-editor-background);
-  color: var(--vscode-input-foreground);
-}
-#sapphire-tooltip-orange {
-  background-color: #f6762a;
-  color: white;
-  border-color: rgba(200, 200, 200, 0.3);
-}
-#sapphire-tooltip-green {
-  background-color: #228b22;
-  color: white;
-  border-color: rgba(200, 200, 200, 0.3);
-}
-#sapphire-tooltip-provider-info {
-  pointer-events: all;
-  user-select: text;
-  font-size: 11px;
-  max-width: 280px;
-  padding-top: 8px;
-  padding-bottom: 8px;
-}
-`;
+const onPointerDown = (event: Event) => {
+  if (!anchor || !open.value) {
+    return;
+  }
+  const target = event.target;
+  if (target instanceof Node && (anchor === target || anchor.contains(target))) {
+    return;
+  }
+  hide();
+};
 
-let styleEl: HTMLStyleElement | undefined;
+const onWindowBlur = () => {
+  hide();
+};
+
+const onDocumentMouseLeave = (event: MouseEvent) => {
+  // relatedTarget null — мышь ушла за пределы окна
+  if (event.relatedTarget === null) {
+    hide();
+  }
+};
+
+/** Инлайн, а не CSS-строка: префиксер классов иначе ломает селекторы #sapphire-tooltip. */
+const bubbleStyle = computed((): Record<string, string> => {
+  const id = tooltipId.value;
+  const style: Record<string, string> = {
+    maxWidth: '280px',
+    width: 'max-content',
+    whiteSpace: 'normal',
+    overflowWrap: 'break-word',
+    fontSize: '12px',
+    lineHeight: '16px',
+    padding: '6px 10px',
+    borderRadius: '8px',
+    zIndex: '999999',
+    border: '1px solid var(--vscode-widget-border, rgba(100, 100, 100, 0.25))',
+    boxShadow: '0 2px 8px var(--vscode-widget-shadow)',
+    opacity: '1',
+    pointerEvents: 'none',
+    backgroundColor: 'var(--vscode-editorHoverWidget-background, var(--vscode-editor-background))',
+    color: 'var(--vscode-editorHoverWidget-foreground, var(--vscode-input-foreground))',
+  };
+  if (id === 'sapphire-tooltip-orange') {
+    style.backgroundColor = '#f6762a';
+    style.color = 'white';
+    style.borderColor = 'rgba(200, 200, 200, 0.3)';
+  } else if (id === 'sapphire-tooltip-green') {
+    style.backgroundColor = '#228b22';
+    style.color = 'white';
+    style.borderColor = 'rgba(200, 200, 200, 0.3)';
+  } else if (id === 'sapphire-tooltip-provider-info') {
+    style.pointerEvents = 'auto';
+    style.userSelect = 'text';
+    style.fontSize = '11px';
+    style.paddingTop = '8px';
+    style.paddingBottom = '8px';
+  }
+  return style;
+});
 
 onMounted(() => {
-  styleEl = document.createElement('style');
-  styleEl.textContent = tooltipCss;
-  document.head.appendChild(styleEl);
   document.addEventListener('mouseover', onOver);
   document.addEventListener('mouseout', onOut);
+  document.addEventListener('pointerdown', onPointerDown, true);
+  document.documentElement.addEventListener('mouseleave', onDocumentMouseLeave);
+  window.addEventListener('blur', onWindowBlur);
 });
 
 onUnmounted(() => {
   hide();
-  styleEl?.remove();
   document.removeEventListener('mouseover', onOver);
   document.removeEventListener('mouseout', onOut);
+  document.removeEventListener('pointerdown', onPointerDown, true);
+  document.documentElement.removeEventListener('mouseleave', onDocumentMouseLeave);
+  window.removeEventListener('blur', onWindowBlur);
 });
 </script>
 
@@ -212,6 +256,7 @@ onUnmounted(() => {
     ref="floatingEl"
     class="sapphire-vue-tooltip"
     role="tooltip"
+    :style="bubbleStyle"
   >
     {{ text }}
   </div>

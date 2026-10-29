@@ -349,6 +349,7 @@ export class Sound {
 	public static readonly codeActionTriggered = Sound.register({ fileName: 'codeActionTriggered.mp3' });
 	public static readonly codeActionApplied = Sound.register({ fileName: 'codeActionApplied.mp3' });
 	public static readonly confetti = Sound.register({ fileName: 'confetti.mp3' });
+	public static readonly ohOhIcq = Sound.register({ fileName: 'oh-oh-icq-sound.mp3' });
 
 	private constructor(public readonly fileName: string) { }
 }

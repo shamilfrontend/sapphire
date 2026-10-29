@@ -1,7 +1,7 @@
-/*--------------------------------------------------------------------------------------
- *  Copyright 2025 Glass Devtools, Inc. All rights reserved.
- *  Licensed under the Apache License, Version 2.0. See LICENSE.txt for more information.
- *--------------------------------------------------------------------------------------*/
+/*---------------------------------------------------------------------------------------------
+ *  Copyright (c) Microsoft Corporation. All rights reserved.
+ *  Licensed under the MIT License. See License.txt in the project root for license information.
+ *--------------------------------------------------------------------------------------------*/
 
 import { EndOfLinePreference, ITextModel } from '../../../../../editor/common/model.js';
 import { Position } from '../../../../../editor/common/core/position.js';
@@ -120,10 +120,10 @@ const removeLeftTabsAndTrimEnds = (s: string): string => {
 export const removeAllWhitespace = (str: string): string => str.replace(/\s+/g, '');
 
 export const plaintextFromHover = (hover: Hover | undefined | null): string => {
-  if (!hover?.contents?.length) return '';
+  if (!hover?.contents?.length) {return '';}
   for (const part of hover.contents) {
     const raw = typeof part === 'string' ? part : part.value;
-    if (!raw) continue;
+    if (!raw) {continue;}
     const withoutFences = raw.replace(/```[\s\S]*?```/g, ' ').replace(/[`*_]/g, ' ');
     const line = withoutFences
       .split('\n')
@@ -153,8 +153,8 @@ function getIsSubsequence({
   of: string;
   subsequence: string;
 }): [boolean, string] {
-  if (subsequence.length === 0) return [true, ''];
-  if (of.length === 0) return [false, ''];
+  if (subsequence.length === 0) {return [true, ''];}
+  if (of.length === 0) {return [false, ''];}
 
   let subsequenceIndex = 0;
   let lastMatchChar = '';
@@ -193,7 +193,7 @@ function getStringUpToUnbalancedClosingParenthesis(s: string, prefix: string): s
         escape = true;
         continue;
       }
-      if (!inDouble && !inTemplate && char === "'") {
+      if (!inDouble && !inTemplate && char === '\'') {
         inSingle = !inSingle;
         continue;
       }
@@ -205,7 +205,7 @@ function getStringUpToUnbalancedClosingParenthesis(s: string, prefix: string): s
         inTemplate = !inTemplate;
         continue;
       }
-      if (inSingle || inDouble || inTemplate) continue;
+      if (inSingle || inDouble || inTemplate) {continue;}
 
       if (char === '(' || char === '{' || char === '[') {
         st.push(char);
@@ -240,7 +240,7 @@ function getStringUpToUnbalancedClosingParenthesis(s: string, prefix: string): s
       escape = true;
       continue;
     }
-    if (!inDouble && !inTemplate && char === "'") {
+    if (!inDouble && !inTemplate && char === '\'') {
       inSingle = !inSingle;
       continue;
     }
@@ -252,7 +252,7 @@ function getStringUpToUnbalancedClosingParenthesis(s: string, prefix: string): s
       inTemplate = !inTemplate;
       continue;
     }
-    if (inSingle || inDouble || inTemplate) continue;
+    if (inSingle || inDouble || inTemplate) {continue;}
 
     if (char === '(' || char === '{' || char === '[') {
       stack.push(char);

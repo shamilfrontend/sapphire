@@ -63,7 +63,7 @@
 | **Автоматически находить релевантные файлы** | Heuristic: до 3 файлов по запросу (чип «Найдено») |
 | **Индексировать проект** | Фоновый индекс `.sapphire/index/` |
 | **Индексировать офисные файлы** | xlsx / docx / pptx / pdf в индексе |
-| **LLM-описания файлов (purpose)** | Короткое «зачем файл» через модель SCM |
+| **LLM-описания файлов (purpose)** | Короткое «зачем файл» через модель SCM; очередь сама, когда в чате нет активных запросов |
 
 См. [Tools](/guide/tools), [Контекст](/guide/context), [Индекс проекта](/architecture/project-index).
 
@@ -121,7 +121,7 @@
 
 ## MCP
 
-MCP (Model Context Protocol) подключает **внешние tools** к режимам **Agent** и **Debug**.
+MCP (Model Context Protocol) подключает **внешние tools** к режиму **Agent**.
 
 - **Add MCP Server** — открыть конфиг (`mcp.json` / UI);
 - список серверов, тумблер, статус / ошибки.
@@ -131,7 +131,7 @@ MCP (Model Context Protocol) подключает **внешние tools** к р
 
 MCP tools **не** доступны в Chat и Plan.
 
-В Agent/Debug:
+В Agent:
 
 1. Модель видит каталог online-серверов и tool `enable_mcp_server`.
 2. После `enable_mcp_server` полные схемы tools этого сервера попадают в контекст **текущего треда**.

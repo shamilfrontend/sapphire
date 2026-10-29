@@ -1,18 +1,19 @@
-/*--------------------------------------------------------------------------------------
- *  Sapphire — pending file diffs beside the chat in Режим Агент.
- *--------------------------------------------------------------------------------------*/
+/*---------------------------------------------------------------------------------------------
+ *  Copyright (c) Microsoft Corporation. All rights reserved.
+ *  Licensed under the MIT License. See License.txt in the project root for license information.
+ *--------------------------------------------------------------------------------------------*/
 
 import type { DiffZone } from '../../../../common/editCodeServiceTypes.js';
 
 export const reviewFilesLabel = (count: number) => {
-  if (count === 1) return '1 файл';
-  if (count > 1 && count < 5) return `${count} файла`;
+  if (count === 1) {return '1 файл';}
+  if (count > 1 && count < 5) {return `${count} файла`;}
   return `${count} файлов`;
 };
 
 /** Подставляет в modified снимок original по DiffZone снизу вверх, чтобы диапазоны строк оставались валидными. */
 export const originalFromDiffZones = (modified: string, zones: DiffZone[]): string => {
-  if (zones.length === 0) return modified;
+  if (zones.length === 0) {return modified;}
   const lines = modified.split('\n');
   const sorted = [...zones].sort((a, b) => b.startLine - a.startLine);
   for (const zone of sorted) {

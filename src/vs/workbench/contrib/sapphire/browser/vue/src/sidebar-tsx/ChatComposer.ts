@@ -1,14 +1,15 @@
-/*--------------------------------------------------------------------------------------
- *  Copyright 2025 Glass Devtools, Inc. All rights reserved.
- *  Licensed under the Apache License, Version 2.0. See LICENSE.txt for more information.
- *--------------------------------------------------------------------------------------*/
+/*---------------------------------------------------------------------------------------------
+ *  Copyright (c) Microsoft Corporation. All rights reserved.
+ *  Licensed under the MIT License. See License.txt in the project root for license information.
+ *--------------------------------------------------------------------------------------------*/
 
-import { h, onWatcherCleanup, ref, toValue, watch, type MaybeRefOrGetter, type VNode } from 'vue';
-import { Bot, Bug, ListTodo, MessageSquare } from 'lucide-vue-next';
-import { useAccessor } from '../util/services.js';
+import { computed, h, onWatcherCleanup, ref, toValue, watch, type MaybeRefOrGetter, type VNode } from 'vue';
+import { Bot, ListTodo, MessageSquare } from 'lucide-vue-next';
+import { useAccessor, useChatThreadsState, useSettingsState } from '../util/services.js';
 import {
   ChatMode,
   ModelSelection,
+  resolveThreadChatMode,
 } from '../../../../../../../workbench/contrib/sapphire/common/sapphireSettingsTypes.js';
 import {
   ChatImageAttachment,
@@ -67,10 +68,10 @@ export const useChatContextUsage = (
             enabledMcpServerNames: mcpNames,
           })
           .then((result) => {
-            if (!cancelled) usage.value = result;
+            if (!cancelled) {usage.value = result;}
           })
           .catch(() => {
-            if (!cancelled) usage.value = null;
+            if (!cancelled) {usage.value = null;}
           });
       }, 400);
       onWatcherCleanup(() => {
@@ -84,37 +85,44 @@ export const useChatContextUsage = (
   return usage;
 };
 
-export const RESERVE_COLOR = '#38BDF8';
+/** Режим открытого чата. Смена в другом чате этот computed не двигает. */
+export const useCurrentThreadChatMode = () => {
+  const settingsState = useSettingsState();
+  const threadsState = useChatThreadsState();
+  return computed(() => {
+    const state = threadsState.value;
+    const thread = state.allThreads[state.currentThreadId];
+    return resolveThreadChatMode(
+      thread?.state.chatMode,
+      settingsState.value.globalSettings.chatMode,
+    );
+  });
+};
 
-export const REASONING_HINT =
-  'Режим рассуждений: модель сначала продумывает ответ, затем отвечает. Чем выше уровень — тем тщательнее анализ, но медленнее и больше токенов. Можно выключить.';
+export const RESERVE_COLOR = '#38BDF8';
 
 export const nameOfChatMode = {
   normal: 'Чат',
   plan: 'Планирование',
   agent: 'Агент',
-  debug: 'Отладка',
 };
 
 export const detailOfChatMode = {
   normal: 'Обычный чат',
   plan: 'Сначала план, без правок',
   agent: 'Редактирует файлы и использует инструменты',
-  debug: 'Систематически ищет и чинит баги по runtime-трейсам',
 };
 
 export const accentOfChatMode: Record<ChatMode, { fg: string; bg: string }> = {
   normal: { fg: '#89d185', bg: 'rgba(137, 209, 133, 0.12)' },
   plan: { fg: '#cca700', bg: 'rgba(204, 167, 0, 0.12)' },
   agent: { fg: '#179fff', bg: 'rgba(23, 159, 255, 0.12)' },
-  debug: { fg: '#f14c4c', bg: 'rgba(241, 76, 76, 0.12)' },
 };
 
 const iconComponentOfChatMode = {
   normal: MessageSquare,
   plan: ListTodo,
   agent: Bot,
-  debug: Bug,
 } as const;
 
 export const iconOfChatMode = (mode: ChatMode): VNode =>

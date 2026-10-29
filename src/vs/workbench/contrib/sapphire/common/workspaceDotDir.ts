@@ -1,9 +1,9 @@
-/*--------------------------------------------------------------------------------------
- *  Copyright 2025 Glass Devtools, Inc. All rights reserved.
- *  Licensed under the Apache License, Version 2.0. See LICENSE.txt for more information.
- *--------------------------------------------------------------------------------------*/
+/*---------------------------------------------------------------------------------------------
+ *  Copyright (c) Microsoft Corporation. All rights reserved.
+ *  Licensed under the MIT License. See License.txt in the project root for license information.
+ *--------------------------------------------------------------------------------------------*/
 
-/** Каталог состояния IDE в корне workspace: индекс, планы, debug-лог. */
+/** Каталог состояния IDE в корне workspace: индекс и планы. */
 export const WORKSPACE_DOT_DIR = '.sapphire';
 
 /** Прежние имена каталога. Переносятся один раз, если нового ещё нет. */

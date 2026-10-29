@@ -1,7 +1,7 @@
-/*--------------------------------------------------------------------------------------
- *  Copyright 2025 Glass Devtools, Inc. All rights reserved.
- *  Licensed under the Apache License, Version 2.0. See LICENSE.txt for more information.
- *--------------------------------------------------------------------------------------*/
+/*---------------------------------------------------------------------------------------------
+ *  Copyright (c) Microsoft Corporation. All rights reserved.
+ *  Licensed under the MIT License. See License.txt in the project root for license information.
+ *--------------------------------------------------------------------------------------------*/
 
 import { DEEPSEEK_USAGE_URL } from './llmProviderConfig.js';
 import {
@@ -70,6 +70,34 @@ export type SettingsOfProvider = {
 };
 
 export type SettingName = keyof SettingsAtProvider<ProviderName>;
+
+/**
+ * Провайдер в списке «подключённых» Settings: заполнены поля и есть модели,
+ * либо сохранён apiKey (чтобы править/удалять ключ даже при пустом списке моделей).
+ * Дефолтный endpoint без моделей (Ollama и т.п.) не считается подключённым.
+ */
+export const isProviderListedAsConnected = (
+  settings: SettingsOfProvider[ProviderName] | undefined,
+): boolean => {
+  if (!settings?._didFillInProviderSettings) {
+    return false;
+  }
+  if (settings.models.length > 0) {
+    return true;
+  }
+  const apiKey = Object.hasOwn(settings, 'apiKey') ? settings.apiKey : undefined;
+  return typeof apiKey === 'string' && apiKey.trim().length > 0;
+};
+
+/** Облачные для формы добавления: каталог + Vertex / Azure / Bedrock. */
+export const addFormCloudProviderNames = [
+  ...cloudProviderNames,
+  'googleVertex',
+  'microsoftAzure',
+  'awsBedrock',
+] as const satisfies readonly ProviderName[];
+
+export const addFormLocalProviderNames = localProviderNames;
 
 type DisplayInfoForProviderName = {
   title: string;
@@ -191,6 +219,8 @@ const defaultCustomSettings: Record<CustomSettingName, undefined> = {
 };
 
 const settingsOf = <P extends ProviderName>(providerName: P): SettingsOfProvider[P] =>
+  // Spread по generic-провайдеру не сужается до SettingsOfProvider[P].
+  // eslint-disable-next-line local/code-no-dangerous-type-assertions
   ({
     ...defaultCustomSettings,
     ...defaultProviderSettings[providerName],
@@ -241,13 +271,13 @@ export type FeatureName = keyof ModelSelectionOfFeature;
 
 export const displayInfoOfFeatureName = (featureName: FeatureName) => {
   // редактор:
-  if (featureName === 'Autocomplete') return 'Автодополнение';
-  if (featureName === 'Ctrl+K') return 'Быстрое редактирование';
+  if (featureName === 'Autocomplete') {return 'Автодополнение';}
+  if (featureName === 'Ctrl+K') {return 'Быстрое редактирование';}
   // сайдбар:
-  if (featureName === 'Chat') return 'Чат';
-  if (featureName === 'Apply') return 'Apply';
+  if (featureName === 'Chat') {return 'Чат';}
+  if (featureName === 'Apply') {return 'Apply';}
   // SCM:
-  if (featureName === 'SCM') return 'Генератор сообщений коммита';
+  if (featureName === 'SCM') {return 'Генератор сообщений коммита';}
   throw new Error(`Feature Name ${featureName} not allowed`);
 };
 
@@ -283,29 +313,41 @@ export const isFeatureNameDisabled = (
   // есть модели для включения у включённых провайдеров
   const canTurnOnAModel = !!providerNames.find((providerName) => {
     const p = settingsState.settingsOfProvider[providerName];
-    if (p?.isEnabled === false) return false;
+    if (p?.isEnabled === false) {return false;}
     const models = p?.models ?? [];
     return models.filter((m) => m.isHidden).length !== 0;
   });
-  if (canTurnOnAModel) return 'needToEnableModel';
+  if (canTurnOnAModel) {return 'needToEnableModel';}
 
   // включённый провайдер есть — добавить модель
   const anyEnabledFilledIn = !!providerNames.find((providerName) => {
     const p = settingsState.settingsOfProvider[providerName];
     return !!p?._didFillInProviderSettings && p.isEnabled !== false;
   });
-  if (anyEnabledFilledIn) return 'addModel';
+  if (anyEnabledFilledIn) {return 'addModel';}
 
   // провайдеры настроены, но все выключены
   const anyFilledIn = !!providerNames.find(
     (providerName) => settingsState.settingsOfProvider[providerName]?._didFillInProviderSettings,
   );
-  if (anyFilledIn) return 'providerDisabled';
+  if (anyFilledIn) {return 'providerDisabled';}
 
   return 'addProvider';
 };
 
-export type ChatMode = 'agent' | 'normal' | 'plan' | 'debug';
+export type ChatMode = 'agent' | 'normal' | 'plan';
+
+const chatModes: readonly ChatMode[] = ['agent', 'normal', 'plan'];
+
+export const isChatMode = (value: unknown): value is ChatMode =>
+  typeof value === 'string' && (chatModes as readonly string[]).includes(value);
+
+/** Режим треда, если он сохранён; иначе общий fallback (старые чаты без своего режима). */
+export const resolveThreadChatMode = (chatMode: unknown, fallback: ChatMode): ChatMode => {
+  // Снятый режим «Отладка» был тем же набором tools, что агент.
+  if (chatMode === 'debug') {return 'agent';}
+  return isChatMode(chatMode) ? chatMode : fallback;
+};
 
 /** Оболочка workbench: режим IDE (классический редактор) или полноэкранный chat-first «Режим Агент». */
 export type LayoutMode = 'ide' | 'agents';
@@ -493,14 +535,14 @@ export const mergeShippedUserSkills = (
 const SLASH_SKILL_TOKEN_RE = /(?:^|[\s([{])\/([a-z][a-z0-9]*(?:-[a-z0-9]+)*)\b/gi;
 
 export const parseSlashSkillSlugs = (text: string): string[] => {
-  if (!text) return [];
+  if (!text) {return [];}
   const slugs: string[] = [];
   const seen = new Set<string>();
   SLASH_SKILL_TOKEN_RE.lastIndex = 0;
   let m: RegExpExecArray | null;
   while ((m = SLASH_SKILL_TOKEN_RE.exec(text)) !== null) {
     const slug = m[1].toLowerCase();
-    if (seen.has(slug)) continue;
+    if (seen.has(slug)) {continue;}
     seen.add(slug);
     slugs.push(slug);
   }
@@ -509,14 +551,14 @@ export const parseSlashSkillSlugs = (text: string): string[] => {
 
 /** Тела скиллов по slug; неизвестные игнорируются. Category-slug → все скиллы категории. */
 export const resolveSkillContentsBySlugs = (skills: UserSkill[], slugs: string[]): string => {
-  if (!slugs.length) return '';
+  if (!slugs.length) {return '';}
   const parts: string[] = [];
   const usedIds = new Set<string>();
   for (const slug of slugs) {
     const exact = skills.filter((s) => s.slug === slug && s.content.trim());
     if (exact.length) {
       for (const s of exact) {
-        if (usedIds.has(s.id)) continue;
+        if (usedIds.has(s.id)) {continue;}
         usedIds.add(s.id);
         parts.push(s.content.trim());
       }
@@ -524,7 +566,7 @@ export const resolveSkillContentsBySlugs = (skills: UserSkill[], slugs: string[]
     }
     const byCategory = skills.filter((s) => s.category === slug && s.content.trim());
     for (const s of byCategory) {
-      if (usedIds.has(s.id)) continue;
+      if (usedIds.has(s.id)) {continue;}
       usedIds.add(s.id);
       parts.push(s.content.trim());
     }
@@ -643,11 +685,11 @@ export type OverridesOfModel = {
   };
 };
 
-const overridesOfModel = {} as OverridesOfModel;
+const overridesOfModel: Partial<OverridesOfModel> = {};
 for (const providerName of providerNames) {
   overridesOfModel[providerName] = {};
 }
-export const defaultOverridesOfModel = overridesOfModel;
+export const defaultOverridesOfModel = overridesOfModel as OverridesOfModel;
 
 export interface MCPUserStateOfName {
   [serverName: string]: MCPUserState | undefined;

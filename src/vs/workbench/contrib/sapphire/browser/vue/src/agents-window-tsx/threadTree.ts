@@ -1,6 +1,7 @@
-/*--------------------------------------------------------------------------------------
- *  Sapphire — folder tree of chats in the Режим Агент sidebar.
- *--------------------------------------------------------------------------------------*/
+/*---------------------------------------------------------------------------------------------
+ *  Copyright (c) Microsoft Corporation. All rights reserved.
+ *  Licensed under the MIT License. See License.txt in the project root for license information.
+ *--------------------------------------------------------------------------------------------*/
 
 import type { InjectionKey } from 'vue';
 import {
@@ -64,7 +65,7 @@ export const agentsTreeKey: InjectionKey<AgentsTreeApi> = Symbol('agentsTree');
 
 export const readDrag = (dataTransfer: DataTransfer): DragPayload | null => {
   const raw = dataTransfer.getData(DRAG_MIME) || dataTransfer.getData('text/plain');
-  if (!raw) return null;
+  if (!raw) {return null;}
   try {
     const data = JSON.parse(raw) as Partial<DragPayload>;
     if ((data.kind === 'folder' || data.kind === 'thread') && typeof data.id === 'string') {
@@ -87,9 +88,9 @@ export const loadExpanded = (): Set<string> | null => {
         raw = legacy;
       }
     }
-    if (raw === null) return null;
+    if (raw === null) {return null;}
     const parsed: unknown = JSON.parse(raw);
-    if (!Array.isArray(parsed)) return null;
+    if (!Array.isArray(parsed)) {return null;}
     return new Set(parsed.filter((id): id is string => typeof id === 'string'));
   } catch {
     return null;
@@ -106,8 +107,8 @@ export const persistExpanded = (ids: Set<string>) => {
 };
 
 export const sameDrop = (a: DropTarget | null, b: DropTarget | null) => {
-  if (a === b) return true;
-  if (!a || !b) return false;
-  if (a.kind === 'root' || b.kind === 'root') return a.kind === b.kind;
+  if (a === b) {return true;}
+  if (!a || !b) {return false;}
+  if (a.kind === 'root' || b.kind === 'root') {return a.kind === b.kind;}
   return a.kind === b.kind && a.folderId === b.folderId;
 };

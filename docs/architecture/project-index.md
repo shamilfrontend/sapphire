@@ -12,19 +12,28 @@ flowchart TD
   Scan[scanning: обход дерева]
   Analyze[analyzing: чанки, символы, edges]
   Persist1[persist .sapphire/index]
-  Purpose{projectIndexLlmPurpose?}
+  Purpose{projectIndexLlmPurpose и есть pending/failed?}
+  Chat{Активный запрос в чате?}
+  Wait[ждать idle чата]
   Queue[очередь purpose]
   LLM[1 LLM-запрос на файл]
   Persist2[persist после каждого файла]
+  Tour{тур нет или stale?}
+  GenTour[один LLM-запрос tour.json]
   Idle[idle]
   Start --> Scan --> Analyze --> Persist1 --> Purpose
-  Purpose -->|нет| Idle
-  Purpose -->|да| Queue --> LLM --> Persist2
-  Persist2 -->|ещё в очереди| LLM
-  Persist2 -->|готово| Idle
+  Purpose -->|нет| Tour
+  Purpose -->|да| Chat
+  Chat -->|да| Wait --> Queue
+  Chat -->|нет| Queue
+  Queue --> LLM --> Persist2
+  Persist2 -->|ещё в очереди| Chat
+  Persist2 -->|готово| Tour
+  Tour -->|да| GenTour --> Idle
+  Tour -->|нет| Idle
 ```
 
-Фазы статуса: `scanning` → `analyzing` → `purpose` (если включено) → `idle` / `error`.
+Фазы статуса: `scanning` → `analyzing` → `purpose` (если включено и чат свободен) → `idle` / `error`. Тур — отдельный LLM-запрос после этого, без своей фазы.
 
 | Фаза        | Что делает                                                                 | LLM |
 | ----------- | -------------------------------------------------------------------------- | --- |
@@ -41,15 +50,19 @@ flowchart TD
 | Открытие workspace / enable     | incremental    |
 | Изменение файлов (debounce 1.5 с) | incremental  |
 | `Sapphire: Reindex Workspace`    | full           |
-| Resume после Pause              | incremental + оставшийся purpose |
+| Resume после Pause              | incremental, затем purpose если чат idle |
+| Включён `projectIndexLlmPurpose` и есть `pending` / `failed` | очередь purpose, когда чат idle |
+| Тура нет или он stale           | один LLM-запрос после purpose (или сразу после локального индекса, если purpose не нужен) |
 
-Инкремент: переразбираются изменившиеся файлы (по hash). Purpose перезапрашивается только для `pending` / `failed` или при смене hash; при `done` и том же hash — пропускается. Full reindex заново гоняет purpose для всех не-`skipped`.
+Инкремент: переразбираются изменившиеся файлы (по hash). Purpose перезапрашивается только для `pending` / `failed` или при смене hash; при `done` и том же hash — пропускается. Full reindex не сбрасывает уже готовый purpose при том же hash.
 
 Pause/Cancel останавливает очередь и блокирует автозапуск, пока пользователь не сделает Resume или Reindex.
 
 ## LLM-purpose
 
-- Вкл/выкл: `projectIndexLlmPurpose` (Settings → «LLM-purpose», по умолчанию вкл.).
+- Вкл/выкл: `projectIndexLlmPurpose` (Settings → «LLM-описания файлов», по умолчанию выкл.).
+- Когда включено, очередь стартует сама после локального индекса, если есть `pending` / `failed`. Отдельный запуск из карточки индекса по-прежнему возможен.
+- Пока в любом треде чата есть активный запрос (`LLM`, `tool`, `preparing` или живой `idle` с interrupt), очередь не стартует и ставится на паузу **перед следующим файлом**. `awaiting_user` не блокирует. После idle (debounce ~400 мс) очередь продолжается.
 - Модель: `modelSelectionOfFeature.SCM` (часто синхронизирована с Chat через `syncSCMToChat`).
 - Параллелизм: **1** запрос за раз (`PURPOSE_CONCURRENCY = 1`).
 - На файл: excerpt чанков (до ~1800 символов) + имена символов; ответ — компактный JSON.
@@ -123,7 +136,7 @@ JSONL: одна запись = один файл workspace.
 
 ### `tour.json`
 
-Опциональный guided tour онбординга (не часть schemaVersion). Генерируется одним LLM-запросом (модель SCM) из компактной сводки: слои, до ~80 файлов с purpose/localRole, до ~60 рёбер `imports`/`calls`. Кнопка в карточке индекса запускает его вручную. После очереди LLM-purpose, если тура нет или он stale, сервис запускает генерацию один раз на этот purpose-batch.
+Опциональный guided tour онбординга (не часть schemaVersion). Генерируется одним LLM-запросом (модель SCM) из компактной сводки: слои, до ~80 файлов с purpose/localRole, до ~60 рёбер `imports`/`calls`. Отдельной кнопки нет: после очереди LLM-purpose (или сразу после локального индекса, если purpose выключен или нечего описывать) сервис генерирует тур, если его нет или он stale. Тот же гейт, что у purpose: запрос не уходит, пока в чате есть активный запрос.
 
 | Поле | Смысл |
 | --- | --- |
@@ -139,7 +152,7 @@ JSONL: одна запись = один файл workspace.
 | --------------------------- | ------ | ----------------------------- |
 | `projectIndexEnabled`       | true   | фоновый индекс                |
 | `projectIndexIncludeOffice` | true   | xlsx/docx/pptx/pdf в индексе  |
-| `projectIndexLlmPurpose`    | true   | очередь purpose через шлюз    |
+| `projectIndexLlmPurpose`    | false  | авто-очередь purpose через шлюз, только при idle чата |
 
 ## Ключевые файлы
 

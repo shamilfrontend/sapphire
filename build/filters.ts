@@ -70,9 +70,16 @@ export const unicodeFilter = Object.freeze<string[]>([
 	// extensions/copilot has its own code style
 	'!extensions/copilot/**',
 
-	// Sapphire files below keep a third-party copyright and 2-space style.
+	// Sapphire keeps Russian copy and its own indent; upstream hygiene does not apply.
+	'!src/vs/workbench/contrib/sapphire/**',
+	'!src/vs/workbench/contrib/sapphire/browser/vue/**',
+	'!src/vs/workbench/contrib/sapphire/browser/media/sapphire.css',
 	'!src/vs/workbench/contrib/sapphire/browser/autocompleteService.ts',
 	'!src/vs/workbench/contrib/sapphire/browser/planEditor.ts',
+	'!src/vs/workbench/contrib/sapphire/browser/sapphireAgentsWindowService.ts',
+	'!src/vs/workbench/contrib/sapphire/browser/sapphireCommandBarService.ts',
+	'!src/vs/workbench/contrib/sapphire/browser/sapphireCursorChrome.ts',
+	'!src/vs/workbench/contrib/sapphire/browser/sapphireExplorerViews.ts',
 	'!src/vs/workbench/contrib/sapphire/browser/sapphireUpdateActions.ts',
 	'!src/vs/workbench/contrib/sapphire/browser/toolsService.ts',
 	'!src/vs/workbench/contrib/sapphire/common/refreshModelService.ts',
@@ -150,9 +157,16 @@ export const indentationFilter = Object.freeze<string[]>([
 	// extensions/copilot has its own code style
 	'!extensions/copilot/**',
 
-	// Sapphire files below keep a third-party copyright and 2-space style.
+	// Sapphire keeps Russian copy and its own indent; upstream hygiene does not apply.
+	'!src/vs/workbench/contrib/sapphire/**',
+	'!src/vs/workbench/contrib/sapphire/browser/vue/**',
+	'!src/vs/workbench/contrib/sapphire/browser/media/sapphire.css',
 	'!src/vs/workbench/contrib/sapphire/browser/autocompleteService.ts',
 	'!src/vs/workbench/contrib/sapphire/browser/planEditor.ts',
+	'!src/vs/workbench/contrib/sapphire/browser/sapphireAgentsWindowService.ts',
+	'!src/vs/workbench/contrib/sapphire/browser/sapphireCommandBarService.ts',
+	'!src/vs/workbench/contrib/sapphire/browser/sapphireCursorChrome.ts',
+	'!src/vs/workbench/contrib/sapphire/browser/sapphireExplorerViews.ts',
 	'!src/vs/workbench/contrib/sapphire/browser/sapphireUpdateActions.ts',
 	'!src/vs/workbench/contrib/sapphire/browser/toolsService.ts',
 	'!src/vs/workbench/contrib/sapphire/common/refreshModelService.ts',
@@ -245,9 +259,16 @@ export const copyrightFilter = Object.freeze<string[]>([
 	// extensions/copilot has its own code style
 	'!extensions/copilot/**',
 
-	// Sapphire files below keep a third-party copyright and 2-space style.
+	// Sapphire keeps Russian copy and its own indent; upstream hygiene does not apply.
+	'!src/vs/workbench/contrib/sapphire/**',
+	'!src/vs/workbench/contrib/sapphire/browser/vue/**',
+	'!src/vs/workbench/contrib/sapphire/browser/media/sapphire.css',
 	'!src/vs/workbench/contrib/sapphire/browser/autocompleteService.ts',
 	'!src/vs/workbench/contrib/sapphire/browser/planEditor.ts',
+	'!src/vs/workbench/contrib/sapphire/browser/sapphireAgentsWindowService.ts',
+	'!src/vs/workbench/contrib/sapphire/browser/sapphireCommandBarService.ts',
+	'!src/vs/workbench/contrib/sapphire/browser/sapphireCursorChrome.ts',
+	'!src/vs/workbench/contrib/sapphire/browser/sapphireExplorerViews.ts',
 	'!src/vs/workbench/contrib/sapphire/browser/sapphireUpdateActions.ts',
 	'!src/vs/workbench/contrib/sapphire/browser/toolsService.ts',
 	'!src/vs/workbench/contrib/sapphire/common/refreshModelService.ts',
@@ -276,9 +297,14 @@ export const tsFormattingFilter = Object.freeze<string[]>([
 	// extensions/copilot has its own code style
 	'!extensions/copilot/**',
 
-	// Sapphire files below keep a third-party copyright and 2-space style.
+	// Sapphire keeps Russian copy and its own indent; upstream hygiene does not apply.
+	'!src/vs/workbench/contrib/sapphire/**',
 	'!src/vs/workbench/contrib/sapphire/browser/autocompleteService.ts',
 	'!src/vs/workbench/contrib/sapphire/browser/planEditor.ts',
+	'!src/vs/workbench/contrib/sapphire/browser/sapphireAgentsWindowService.ts',
+	'!src/vs/workbench/contrib/sapphire/browser/sapphireCommandBarService.ts',
+	'!src/vs/workbench/contrib/sapphire/browser/sapphireCursorChrome.ts',
+	'!src/vs/workbench/contrib/sapphire/browser/sapphireExplorerViews.ts',
 	'!src/vs/workbench/contrib/sapphire/browser/sapphireUpdateActions.ts',
 	'!src/vs/workbench/contrib/sapphire/browser/toolsService.ts',
 	'!src/vs/workbench/contrib/sapphire/common/refreshModelService.ts',
@@ -304,4 +330,5 @@ export const stylelintFilter = Object.freeze<string[]>([
 	'!extensions/**/test/**',
 	'!extensions/**/test-data/**',
 	'!extensions/**/testData/**',
+	'!src/vs/workbench/contrib/sapphire/browser/media/sapphire.css',
 ]);

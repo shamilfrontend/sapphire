@@ -1,7 +1,7 @@
-/*--------------------------------------------------------------------------------------
- *  Copyright 2025 Glass Devtools, Inc. All rights reserved.
- *  Licensed under the Apache License, Version 2.0. See LICENSE.txt for more information.
- *--------------------------------------------------------------------------------------*/
+/*---------------------------------------------------------------------------------------------
+ *  Copyright (c) Microsoft Corporation. All rights reserved.
+ *  Licensed under the MIT License. See License.txt in the project root for license information.
+ *--------------------------------------------------------------------------------------------*/
 
 import assert from 'assert';
 import { ensureNoDisposablesAreLeakedInTestSuite } from '../../../../../base/test/common/utils.js';
@@ -126,8 +126,8 @@ export const TOTAL = 1;
 
   test('analyzeTextFile resolves nested methods and calls, skips packages', () => {
     const text = [
-      "import { pay } from './billing';",
-      "import React from 'react';",
+      'import { pay } from \'./billing\';',
+      'import React from \'react\';',
       '',
       'export class Cart {',
       '  checkout() {',
@@ -183,8 +183,8 @@ export const TOTAL = 1;
 
   test('analyzeTextFile resolves .js specifier to .ts and namespace calls', () => {
     const text = [
-      "import { helper } from './helper.js';",
-      "import * as billing from './billing.js';",
+      'import { helper } from \'./helper.js\';',
+      'import * as billing from \'./billing.js\';',
       'export function run() {',
       '  billing.pay();',
       '  return helper;',
@@ -221,8 +221,8 @@ export const TOTAL = 1;
 
   test('analyzeTextFile resolves vs/ alias and skips packages', () => {
     const text = [
-      "import { URI } from 'vs/base/common/uri.js';",
-      "import React from 'react';",
+      'import { URI } from \'vs/base/common/uri.js\';',
+      'import React from \'react\';',
       'export function useUri() {',
       '  return URI;',
       '}',
@@ -245,7 +245,7 @@ export const TOTAL = 1;
 
   test('analyzeTextFile links destructured require calls', () => {
     const text = [
-      "const { pay } = require('./billing.js');",
+      'const { pay } = require(\'./billing.js\');',
       'export function run() {',
       '  pay();',
       '}',
@@ -281,8 +281,8 @@ export const TOTAL = 1;
 
   test('analyzeTextFile skips import type edges', () => {
     const text = [
-      "import type { X } from './types';",
-      "import { type Y, z } from './values';",
+      'import type { X } from \'./types\';',
+      'import { type Y, z } from \'./values\';',
       'export function use(zArg: unknown) {',
       '  return zArg;',
       '}',

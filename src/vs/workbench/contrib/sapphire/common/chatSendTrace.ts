@@ -1,7 +1,7 @@
-/*--------------------------------------------------------------------------------------
- *  Sapphire — кольцевой лог отправки чата (диагностика зависания нового чата).
- *  Без текста сообщений: только шаги, состояния и длины.
- *--------------------------------------------------------------------------------------*/
+/*---------------------------------------------------------------------------------------------
+ *  Copyright (c) Microsoft Corporation. All rights reserved.
+ *  Licensed under the MIT License. See License.txt in the project root for license information.
+ *--------------------------------------------------------------------------------------------*/
 
 type ChatTraceEntry = {
   /** Мс от первой записи текущей сессии. */
@@ -16,7 +16,7 @@ const entries: ChatTraceEntry[] = [];
 let origin = 0;
 
 function shortThread(threadId: string | undefined): string {
-  if (!threadId) return '-';
+  if (!threadId) {return '-';}
   return threadId.length <= 8 ? threadId : threadId.slice(-8);
 }
 

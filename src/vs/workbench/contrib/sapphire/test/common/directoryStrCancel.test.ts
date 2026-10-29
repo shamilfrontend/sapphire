@@ -1,15 +1,20 @@
-/*--------------------------------------------------------------------------------------
- *  Copyright 2025 Glass Devtools, Inc. All rights reserved.
- *  Licensed under the Apache License, Version 2.0. See LICENSE.txt for more information.
- *--------------------------------------------------------------------------------------*/
+/*---------------------------------------------------------------------------------------------
+ *  Copyright (c) Microsoft Corporation. All rights reserved.
+ *  Licensed under the MIT License. See License.txt in the project root for license information.
+ *--------------------------------------------------------------------------------------------*/
 
 import assert from 'assert';
 import { ensureNoDisposablesAreLeakedInTestSuite } from '../../../../../base/test/common/utils.js';
 import { CancellationTokenSource } from '../../../../../base/common/cancellation.js';
 import { isCancellationError } from '../../../../../base/common/errors.js';
 import { URI } from '../../../../../base/common/uri.js';
+import { IFileService } from '../../../../../platform/files/common/files.js';
 import { MAX_TOOL_ABSOLUTE_TIME } from '../../common/prompt/prompts.js';
 import { computeDirectoryTree1Deep } from '../../common/directoryStrService.js';
+
+function asFileService(partial: Partial<IFileService>): IFileService {
+  return partial as IFileService;
+}
 
 suite('directoryStr cancel', () => {
   ensureNoDisposablesAreLeakedInTestSuite();
@@ -21,11 +26,11 @@ suite('directoryStr cancel', () => {
   test('computeDirectoryTree1Deep rejects when token is already cancelled', async () => {
     const cts = new CancellationTokenSource();
     cts.cancel();
-    const fakeFileService = {
+    const fakeFileService = asFileService({
       resolve: async () => {
         throw new Error('resolve should not run after cancel');
       },
-    } as any;
+    });
 
     let caught: unknown;
     try {

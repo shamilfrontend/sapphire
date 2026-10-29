@@ -1,7 +1,7 @@
-/*--------------------------------------------------------------------------------------
- *  Copyright 2025 Glass Devtools, Inc. All rights reserved.
- *  Licensed under the Apache License, Version 2.0. See LICENSE.txt for more information.
- *--------------------------------------------------------------------------------------*/
+/*---------------------------------------------------------------------------------------------
+ *  Copyright (c) Microsoft Corporation. All rights reserved.
+ *  Licensed under the MIT License. See License.txt in the project root for license information.
+ *--------------------------------------------------------------------------------------------*/
 
 import type {
   ProjectIndexEdgeRecord,
@@ -191,7 +191,7 @@ export function tourStepAt(
 export function formatTourForAgent(tour: ProjectIndexTour | null): string {
   const steps = tour?.steps;
   if (!tour || !steps?.length) {
-    return 'No onboarding tour yet. Ask the user to generate one from Project Index controls (Generate onboarding tour), then call get_project_tour again.';
+    return 'No onboarding tour yet. It is generated automatically after indexing when the tour is missing or stale. Call get_project_tour again after indexing finishes.';
   }
   const basedOn = tour.basedOn;
   const lines: string[] = [

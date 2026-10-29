@@ -4,10 +4,9 @@
  *  Licensed under the Apache License, Version 2.0. See LICENSE.txt for more information.
  *--------------------------------------------------------------------------------------*/
 
-import { onMounted, onUnmounted, ref, watch, type VNodeChild } from 'vue';
+import { nextTick, onMounted, onUnmounted, ref, watch, type VNodeChild } from 'vue';
 import { Paperclip } from 'lucide-vue-next';
-import { useSettingsState } from '../util/services.js';
-import ModelDropdown from '../void-settings-tsx/ModelDropdown.vue';
+import ModelSettingsMenu from './ModelSettingsMenu.vue';
 import {
   FeatureName,
 } from '../../../../../../../workbench/contrib/sapphire/common/sapphireSettingsTypes.js';
@@ -19,8 +18,7 @@ import type { ChatContextUsage } from '../../../convertToLLMMessageService.js';
 import IconX from './IconX.vue';
 import SelectedFiles from './SelectedFiles.vue';
 import SelectedImages from './SelectedImages.vue';
-import { accentOfChatMode } from './ChatComposer.js';
-import ReasoningOptionSlider from './ReasoningOptionSlider.vue';
+import { accentOfChatMode, nameOfChatMode, useCurrentThreadChatMode } from './ChatComposer.js';
 import ChatModeDropdown from './ChatModeDropdown.vue';
 import ContextUsageIndicator from './ContextUsageIndicator.vue';
 import ButtonSubmit from './ButtonSubmit.vue';
@@ -57,8 +55,10 @@ const props = withDefaults(
   },
 );
 
-const settingsState = useSettingsState();
+const chatMode = useCurrentThreadChatMode();
 const toolbarRef = ref<HTMLDivElement | null>(null);
+const actionsRef = ref<HTMLDivElement | null>(null);
+const modeMeasureRef = ref<HTMLDivElement | null>(null);
 const compactMode = ref(false);
 
 const LoadingIconView = () => props.loadingIcon ?? null;
@@ -67,22 +67,50 @@ const setRootEl = (el: unknown) => {
   props.divRef.current = el instanceof HTMLDivElement ? el : null;
 };
 
+/** Хвост названия модели, который остаётся видимым, прежде чем спрятать подпись режима. */
+const MODEL_LABEL_MIN_PX = 72;
+const MODE_MODEL_GAP_PX = 8;
+const TOOLBAR_GAP_PX = 4;
+const FIT_SLACK_PX = 2;
+
 let toolbarObserver: ResizeObserver | undefined;
+const updateCompact = () => {
+  if (props.featureName !== 'Chat') {
+    compactMode.value = false;
+    return;
+  }
+  const toolbar = toolbarRef.value;
+  const modeWidth = modeMeasureRef.value?.offsetWidth ?? 0;
+  const actionsWidth = actionsRef.value?.offsetWidth ?? 0;
+  if (!toolbar || modeWidth === 0) return;
+  const needed =
+    modeWidth + MODE_MODEL_GAP_PX + MODEL_LABEL_MIN_PX + TOOLBAR_GAP_PX + actionsWidth + FIT_SLACK_PX;
+  compactMode.value = toolbar.clientWidth < needed;
+};
+
 const bindToolbar = () => {
   toolbarObserver?.disconnect();
   toolbarObserver = undefined;
-  const toolbar = toolbarRef.value;
-  if (!toolbar || props.featureName !== 'Chat') return;
-  const update = () => {
-    const width = toolbar.clientWidth;
-    compactMode.value = width < 300 ? true : width >= 360 ? false : compactMode.value;
-  };
-  update();
-  toolbarObserver = new ResizeObserver(update);
-  toolbarObserver.observe(toolbar);
+  if (props.featureName !== 'Chat') {
+    compactMode.value = false;
+    return;
+  }
+  const nodes = [toolbarRef.value, actionsRef.value, modeMeasureRef.value].filter(
+    (node): node is HTMLDivElement => node instanceof HTMLDivElement,
+  );
+  if (nodes.length === 0) return;
+  updateCompact();
+  toolbarObserver = new ResizeObserver(() => updateCompact());
+  for (const node of nodes) toolbarObserver.observe(node);
 };
 onMounted(bindToolbar);
-watch(() => props.featureName, bindToolbar);
+watch(
+  () =>
+    [props.featureName, chatMode.value, props.isStreaming] as const,
+  () => {
+    void nextTick(() => bindToolbar());
+  },
+);
 onUnmounted(() => toolbarObserver?.disconnect());
 </script>
 
@@ -130,23 +158,27 @@ onUnmounted(() => toolbarObserver?.disconnect());
     </div>
 
     <!-- Нижняя панель: модель, отправка -->
-    <div ref="toolbarRef" class="flex flex-row flex-nowrap items-center gap-1 mt-1 min-w-0">
-      <div v-if="showModelDropdown" class="flex flex-col gap-y-1 min-w-0 flex-1">
-        <ReasoningOptionSlider :featureName="featureName" />
-
-        <div class="flex items-center flex-nowrap gap-x-2 min-w-0">
-          <ChatModeDropdown v-if="featureName === 'Chat'" :iconOnly="compactMode" />
-          <div class="min-w-0 flex-1">
-            <ModelDropdown
-              :featureName="featureName"
-              class="text-xs text-void-fg-3 rounded"
-              fillWidth
-            />
-          </div>
-        </div>
+    <div ref="toolbarRef" class="relative flex flex-row flex-nowrap items-center gap-1 mt-1 min-w-0">
+      <div
+        v-if="featureName === 'Chat'"
+        ref="modeMeasureRef"
+        class="invisible absolute left-0 top-0 pointer-events-none flex items-center h-4 text-xs rounded-md py-0.5 px-2 border border-transparent whitespace-nowrap"
+        aria-hidden="true"
+      >
+        <span class="size-3.5 shrink-0 mr-1" />
+        <span class="mr-1">{{ nameOfChatMode[chatMode] }}</span>
+        <span class="size-3 shrink-0" />
       </div>
 
-      <div class="flex items-center gap-2 shrink-0">
+      <div v-if="showModelDropdown" class="flex items-center flex-nowrap min-w-0 flex-1">
+        <ChatModeDropdown v-if="featureName === 'Chat'" :iconOnly="compactMode" />
+      </div>
+
+      <div v-if="showModelDropdown" class="min-w-0 max-w-[240px] shrink">
+        <ModelSettingsMenu :featureName="featureName" />
+      </div>
+
+      <div ref="actionsRef" class="flex items-center gap-2 shrink-0">
         <ContextUsageIndicator
           v-if="featureName === 'Chat' && contextUsage !== undefined"
           :usage="contextUsage ?? null"
@@ -170,18 +202,18 @@ onUnmounted(() => toolbarObserver?.disconnect());
             v-if="!isDisabled"
             @click="onSubmit()"
             :disabled="isDisabled"
-            :accentColor="featureName === 'Chat' ? accentOfChatMode[settingsState.globalSettings.chatMode].fg : undefined"
+            :accentColor="featureName === 'Chat' ? accentOfChatMode[chatMode].fg : undefined"
           />
           <ButtonStop
             @click="onAbort()"
-            :accentColor="featureName === 'Chat' ? accentOfChatMode[settingsState.globalSettings.chatMode].fg : undefined"
+            :accentColor="featureName === 'Chat' ? accentOfChatMode[chatMode].fg : undefined"
           />
         </template>
         <ButtonSubmit
-          v-else
+          v-else-if="!isDisabled"
           @click="onSubmit()"
           :disabled="isDisabled"
-          :accentColor="featureName === 'Chat' ? accentOfChatMode[settingsState.globalSettings.chatMode].fg : undefined"
+          :accentColor="featureName === 'Chat' ? accentOfChatMode[chatMode].fg : undefined"
         />
       </div>
     </div>

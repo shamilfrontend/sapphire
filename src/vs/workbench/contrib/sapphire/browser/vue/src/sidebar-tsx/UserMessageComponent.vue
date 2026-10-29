@@ -60,6 +60,8 @@ const textAreaRefState = ref<HTMLTextAreaElement | null>(null);
 const textAreaFnsRef: { current: TextAreaFns | null } = { current: null };
 const textAreaRef: { current: HTMLTextAreaElement | null } = { current: null };
 const editImages = ref<ChatImageAttachment[]>(props.chatMessage.images ?? []);
+const messagePlainText = () => props.chatMessage.displayContent || props.chatMessage.content || '';
+const editText = ref(messagePlainText());
 const editFileInputRef = ref<HTMLInputElement | null>(null);
 const supportsVision = useChatSupportsVision();
 // синхронизация поля при входе в режим edit
@@ -82,10 +84,12 @@ watch(
     if (canInitialize && shouldInitialize) {
       setStagingSelections(props.chatMessage.selections || []);
       editImages.value = props.chatMessage.images ?? [];
+      const text = editText.value || messagePlainText();
+      editText.value = text;
+      isDisabled.value = !text && editImages.value.length === 0;
 
-      if (textAreaFnsRef.current)
-        textAreaFnsRef.current.setValue(props.chatMessage.displayContent || '');
-
+      if (!textAreaFnsRef.current) return;
+      textAreaFnsRef.current.setValue(text);
       textAreaRefState.value?.focus();
 
       _justEnabledEdit.current = false;
@@ -101,7 +105,15 @@ watch(supportsVision, (vision) => {
   }
 });
 
-const onOpenEdit = () => {
+const onOpenEdit = (source: string, event?: MouseEvent) => {
+  const target = event?.target instanceof Element ? event.target : null;
+  // #region agent log
+  fetch('http://127.0.0.1:7714/ingest/0d7d40a3-f671-45c9-9179-7225f077dfe2',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'22bbe4'},body:JSON.stringify({sessionId:'22bbe4',hypothesisId:source==='pencil'?'B':'A',location:'UserMessageComponent.vue:onOpenEdit',message:'open edit',data:{source,mode:mode.value,tag:target?.tagName??null,className:typeof target?.className==='string'?target.className:null,fromImage:!!target?.closest?.('[data-sapphire-image]'),imageCount:props.chatMessage.images?.length??0},timestamp:Date.now()})}).catch(()=>{});
+  // #endregion
+  const text = messagePlainText();
+  const images = props.chatMessage.images ?? [];
+  editText.value = text;
+  isDisabled.value = !text && images.length === 0;
   setIsBeingEdited(true);
   chatThreadsService.setCurrentlyFocusedMessageIdx(props.messageIdx);
   _justEnabledEdit.current = true;
@@ -231,6 +243,7 @@ const setEditImages = (imgs: ChatImageAttachment[]) => {
 };
 
 const onEditChangeText = (text: string) => {
+  editText.value = text;
   isDisabled.value = !text && editImages.value.length === 0;
 };
 
@@ -260,10 +273,15 @@ const onEditFileInput = async (e: Event) => {
 };
 const onEditSymbolClick = () => {
   if (mode.value === 'display') {
-    onOpenEdit();
+    onOpenEdit('pencil');
   } else if (mode.value === 'edit') {
     onCloseEdit();
   }
+};
+
+const onDisplayBubbleClick = (event: MouseEvent) => {
+  if (mode.value !== 'display') return;
+  onOpenEdit('bubble', event);
 };
 </script>
 
@@ -292,11 +310,11 @@ const onEditSymbolClick = () => {
               mode === 'edit'
                 ? ''
                 : mode === 'display'
-                  ? 'p-2.5 flex flex-col bg-void-bg-1-alt text-void-fg-1 overflow-x-auto cursor-pointer'
+                  ? 'p-2.5 flex flex-col bg-void-bg-1-alt overflow-x-auto cursor-pointer'
                   : ''
             }
         `"
-      @click="mode === 'display' ? onOpenEdit() : undefined"
+      @click="onDisplayBubbleClick"
     >
       <template v-if="mode === 'display'">
         <SelectedFiles type="past" :messageIdx="messageIdx" :selections="chatMessage.selections || []" />
@@ -305,7 +323,7 @@ const onEditSymbolClick = () => {
           type="past"
           :images="chatMessage.images!"
         />
-        <span class="px-0.5 select-text cursor-text">{{ chatMessage.displayContent }}</span>
+        <span class="px-0.5 select-text cursor-text text-void-user-msg-fg">{{ chatMessage.displayContent }}</span>
       </template>
       <div
         v-else-if="mode === 'edit'"
@@ -343,6 +361,7 @@ const onEditSymbolClick = () => {
             :textAreaRef="textAreaRef"
             class="min-h-[81px] max-h-[500px] px-0.5"
             placeholder="Редактировать сообщение..."
+            :initValue="editText || chatMessage.displayContent || chatMessage.content || ''"
             :onChangeText="onEditChangeText"
             :onFocus="onEditFocus"
             :onBlur="onEditBlur"

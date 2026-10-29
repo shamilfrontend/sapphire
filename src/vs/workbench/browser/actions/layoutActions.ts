@@ -352,7 +352,7 @@ MenuRegistry.appendMenuItems([
 			order: 2
 		}
 	}, {
-		id: MenuId.LayoutControlMenu,
+		id: MenuId.TitleBarLeft,
 		item: {
 			group: 'navigation',
 			command: {
@@ -371,7 +371,7 @@ MenuRegistry.appendMenuItems([
 			order: 0
 		}
 	}, {
-		id: MenuId.LayoutControlMenu,
+		id: MenuId.TitleBarLeft,
 		item: {
 			group: 'navigation',
 			command: {
@@ -1411,19 +1411,6 @@ for (const key of ModernUIEnabledContext.keys()) {
 	LayoutContextKeySet.add(key);
 }
 
-/**
- * Matches the title bar's `editorActionsEnabled` getter: true when editor
- * actions render in the title bar (either explicitly, or because tabs are
- * hidden and the location defaults there).
- */
-const EditorActionsInTitleBar = ContextKeyExpr.or(
-	ContextKeyExpr.equals(`config.${LayoutSettings.EDITOR_ACTIONS_LOCATION}`, EditorActionsLocation.TITLEBAR),
-	ContextKeyExpr.and(
-		ContextKeyExpr.equals(`config.${LayoutSettings.EDITOR_ACTIONS_LOCATION}`, EditorActionsLocation.DEFAULT),
-		ContextKeyExpr.equals(`config.${LayoutSettings.EDITOR_TABS_MODE}`, EditorTabsMode.NONE)
-	)
-)!;
-
 registerAction2(class CustomizeLayoutAction extends Action2 {
 
 	private _currentQuickPick?: IQuickPick<IQuickPickItem, { useSeparators: true }>;
@@ -1440,22 +1427,16 @@ registerAction2(class CustomizeLayoutAction extends Action2 {
 					group: 'z_end',
 				},
 				{
-					id: MenuId.LayoutControlMenu,
+					id: MenuId.TitleBarLeft,
+					group: 'navigation',
+					order: 3,
 					when: ContextKeyExpr.and(
-						IsAuxiliaryWindowContext.toNegated(),
-						ContextKeyExpr.equals('config.workbench.layoutControl.type', 'both'),
-						EditorActionsInTitleBar.negate()
+						IsAuxiliaryWindowContext.negate(),
+						ContextKeyExpr.or(
+							ContextKeyExpr.equals('config.workbench.layoutControl.type', 'toggles'),
+							ContextKeyExpr.equals('config.workbench.layoutControl.type', 'both')
+						)
 					),
-					group: 'navigation'
-				},
-				{
-					id: MenuId.LayoutControlMenu,
-					when: ContextKeyExpr.and(
-						IsAuxiliaryWindowContext.toNegated(),
-						ContextKeyExpr.equals('config.workbench.layoutControl.type', 'both'),
-						EditorActionsInTitleBar
-					),
-					group: '1_layout'
 				}
 			]
 		});

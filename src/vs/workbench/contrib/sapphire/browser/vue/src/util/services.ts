@@ -1,7 +1,7 @@
-/*--------------------------------------------------------------------------------------
- *  Copyright 2025 Glass Devtools, Inc. All rights reserved.
- *  Licensed under the Apache License, Version 2.0. See LICENSE.txt for more information.
- *--------------------------------------------------------------------------------------*/
+/*---------------------------------------------------------------------------------------------
+ *  Copyright (c) Microsoft Corporation. All rights reserved.
+ *  Licensed under the MIT License. See License.txt in the project root for license information.
+ *--------------------------------------------------------------------------------------------*/
 
 import {
   computed,
@@ -70,10 +70,10 @@ import { IEditorService } from '../../../../../../services/editor/common/editorS
 import {
   IProjectIndexService,
 } from '../../../projectIndexService.js';
-import type { ProjectIndexStatus } from '../../../../common/projectIndex/projectIndexTypes.js';
 import {
   EMPTY_PROJECT_INDEX_STATUS,
   emptyProjectIndexSteps,
+  type ProjectIndexStatus,
 } from '../../../../common/projectIndex/projectIndexTypes.js';
 
 // Глобальные снимки state обновляются синхронно с VS Code-сервисами; Vue подписывается через listeners.
@@ -374,7 +374,7 @@ export const useChatThreadsStreamState = (threadId: MaybeRefOrGetter<string>) =>
   );
   const listener = (threadId_: string) => {
     const id = toValue(threadId);
-    if (threadId_ !== id) return;
+    if (threadId_ !== id) {return;}
     s.value = chatThreadsStreamState[id];
   };
   bindListener(
@@ -402,7 +402,7 @@ export const useChatThreadMessageQueue = (threadId: MaybeRefOrGetter<string>) =>
   );
   const listener = (threadId_: string) => {
     const id = toValue(threadId);
-    if (threadId_ !== id) return;
+    if (threadId_ !== id) {return;}
     queue.value = [...readQueue(id)];
   };
   bindListener(

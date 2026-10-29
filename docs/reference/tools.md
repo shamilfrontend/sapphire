@@ -4,9 +4,7 @@
 
 **Chat (normal)** — builtin tools не передаются модели.
 
-**Debug** использует тот же набор, что **Agent** (`isAgentLike`).
-
-| Tool | Plan | Agent / Debug | Approval | Назначение |
+| Tool | Plan | Agent | Approval | Назначение |
 | --- | :-: | :-: | --- | --- |
 | `read_file` | ✓ | ✓ | — | Содержимое файла (office → извлечённый текст) |
 | `ls_dir` | ✓ | ✓ | — | Список файлов/папок |
@@ -44,16 +42,16 @@
 | `enable_mcp_server` | ✗ | \*\* | — | Включить MCP-сервер в треде (deferred) |
 | MCP tools | ✗ | \*\* | MCP | Tools включённых серверов |
 
-\* **`update_plan` в Agent/Debug** — только пока выполняется утверждённый план (`allowUpdatePlan`, статус `building`). В Plan доступен всегда.
+\* **`update_plan` в Agent** — только пока выполняется утверждённый план (`allowUpdatePlan`, статус `building`). В Plan доступен всегда.
 
-\*\* **`enable_mcp_server` и MCP tools** — только в Agent/Debug при online MCP. Сначала каталог + `enable_mcp_server`; полные схемы tools сервера — после enable в треде.
+\*\* **`enable_mcp_server` и MCP tools** — только в Agent при online MCP. Сначала каталог + `enable_mcp_server`; полные схемы tools сервера — после enable в треде.
 
 ## Заметки
 
 - `read_file` / `search_in_file` для `.xlsx` / `.xlsm`, `.docx`, `.pptx`, `.pdf` — извлечённый текст; файл > 25 МБ не разбирается. См. [Офисные файлы](/guide/office), [архитектура](/architecture/office-extract).
 - `search_project_index` — локальный индекс (token-score). См. [Индекс проекта](/architecture/project-index).
 - `diff_impact` — BFS до 2 hops по графу индекса (импорты и вызовы) для относительных путей. Тот же расчёт попадает в генерацию commit message.
-- `get_project_tour` — шаги онбординга из `.sapphire/index/tour.json` (генерируется вручную в UI индекса).
+- `get_project_tour` — шаги онбординга из `.sapphire/index/tour.json` (появляется сам после индексации, если тура нет или он устарел).
 - Планы: `.sapphire/plans/*.plan.md` (YAML frontmatter + markdown, опционально Mermaid).
 - `web_search` / `browse_url` идут в публичную сеть, не на LLM-шлюз. См. [Приватность](/guide/privacy).
 - Параллельные subagents — только read-only набор; `run_subagent` у дочернего агента недоступен (без вложенности).

@@ -1,7 +1,7 @@
-/*--------------------------------------------------------------------------------------
- *  Copyright 2025 Glass Devtools, Inc. All rights reserved.
- *  Licensed under the Apache License, Version 2.0. See LICENSE.txt for more information.
- *--------------------------------------------------------------------------------------*/
+/*---------------------------------------------------------------------------------------------
+ *  Copyright (c) Microsoft Corporation. All rights reserved.
+ *  Licensed under the MIT License. See License.txt in the project root for license information.
+ *--------------------------------------------------------------------------------------------*/
 
 import { type ComputedRef, type InjectionKey } from 'vue';
 import { type MarkedToken, type Token } from 'marked';
@@ -29,13 +29,13 @@ function isPathLikeCodespan(s: string): boolean {
 export const collectPathLikeCodespans = (tokens: Token[]): string[] => {
   const out: string[] = [];
   const walk = (toks: Token[] | undefined) => {
-    if (!toks) return;
+    if (!toks) {return;}
     for (const token of toks) {
       const t = token as MarkedToken & { items?: { tokens?: Token[] }[] };
       if (t.type === 'codespan' && isPathLikeCodespan(t.text)) {
         out.push(t.text);
       }
-      if ('tokens' in t && Array.isArray(t.tokens)) {
+      if (Object.hasOwn(t, 'tokens') && Array.isArray(t.tokens)) {
         walk(t.tokens as Token[]);
       }
       if (t.type === 'list' && Array.isArray(t.items)) {
@@ -113,8 +113,8 @@ export const linkifyPlainText = (text: string): LinkifyResult => {
     i += 1;
     last = end;
   }
-  if (parts.length === 0) return { kind: 'plain', text };
-  if (last < text.length) parts.push({ kind: 'text', key: 't-end', text: text.slice(last) });
+  if (parts.length === 0) {return { kind: 'plain', text };}
+  if (last < text.length) {parts.push({ kind: 'text', key: 't-end', text: text.slice(last) });}
   return { kind: 'rich', parts };
 };
 

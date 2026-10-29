@@ -1,7 +1,7 @@
-/*--------------------------------------------------------------------------------------
- *  Copyright 2025 Glass Devtools, Inc. All rights reserved.
- *  Licensed under the Apache License, Version 2.0. See LICENSE.txt for more information.
- *--------------------------------------------------------------------------------------*/
+/*---------------------------------------------------------------------------------------------
+ *  Copyright (c) Microsoft Corporation. All rights reserved.
+ *  Licensed under the MIT License. See License.txt in the project root for license information.
+ *--------------------------------------------------------------------------------------------*/
 
 import { URI } from '../../../../../base/common/uri.js';
 import { IFileService } from '../../../../../platform/files/common/files.js';
@@ -180,7 +180,7 @@ type SnakeCase<S extends string> =
         ? `${C extends Lowercase<C> ? C : `_${Lowercase<C>}`}${SnakeCase<Rest>}`
         : S;
 
-type SnakeCaseKeys<T extends Record<string, any>> = {
+type SnakeCaseKeys<T extends object> = {
   [K in keyof T as SnakeCase<Extract<K, string>>]: T[K];
 };
 
@@ -271,7 +271,7 @@ export const builtinTools: {
 
   get_project_tour: {
     name: 'get_project_tour',
-    description: `Return the saved onboarding tour for this workspace (.sapphire/index/tour.json): ordered steps with titles, descriptions, and key file paths. Prefer this when the user asks how the project is structured, for onboarding, or where to start reading. If missing, tell them to generate it from Project Index controls.`,
+    description: `Return the saved onboarding tour for this workspace (.sapphire/index/tour.json): ordered steps with titles, descriptions, and key file paths. Prefer this when the user asks how the project is structured, for onboarding, or where to start reading. If missing, the tour is generated automatically as part of indexing when the index is ready.`,
     params: {},
   },
 
@@ -603,7 +603,7 @@ export const isABuiltinToolName = (toolName: string): toolName is BuiltinToolNam
 };
 
 type AvailableToolsOptions = {
-  /** Agent/debug: update_plan только пока выполняется утверждённый план. */
+  /** Agent: update_plan только пока выполняется утверждённый план. */
   allowUpdatePlan?: boolean;
   /**
    * MCP-серверы, чьи полные схемы попадают в контекст.
@@ -618,7 +618,7 @@ type AvailableToolsOptions = {
   disableAllTools?: boolean;
 };
 
-/** Встроенные инструменты только agent/debug — не для read-only plan. */
+/** Встроенные инструменты только agent — не для read-only plan. */
 const AGENT_ONLY_BUILTIN_TOOLS = new Set<BuiltinToolName>([
   'run_subagent',
   'run_parallel_subagents',
@@ -659,14 +659,14 @@ export const availableTools = (
   const allBuiltin = Object.keys(builtinTools) as BuiltinToolName[];
   const readOnlyTools = allBuiltin.filter(
     (toolName) =>
-      !(toolName in approvalTypeOfBuiltinToolName) &&
+      !Object.hasOwn(approvalTypeOfBuiltinToolName, toolName) &&
       toolName !== 'create_plan' &&
       toolName !== 'update_plan' &&
       toolName !== 'enable_mcp_server' &&
       !AGENT_ONLY_BUILTIN_TOOLS.has(toolName),
   );
 
-  const isAgentLike = chatMode === 'agent' || chatMode === 'debug';
+  const isAgent = chatMode === 'agent';
   const hasOnlineMcp = (mcpTools?.length ?? 0) > 0;
 
   const builtinToolNames: BuiltinToolName[] | undefined =
@@ -674,7 +674,7 @@ export const availableTools = (
       ? undefined
       : chatMode === 'plan'
         ? [...readOnlyTools, 'create_plan', 'update_plan']
-        : isAgentLike
+        : isAgent
           ? allBuiltin.filter(
               (t) =>
                 t !== 'create_plan' &&
@@ -683,7 +683,7 @@ export const availableTools = (
             )
           : undefined;
 
-  if (!builtinToolNames) return undefined;
+  if (!builtinToolNames) {return undefined;}
 
   const excluded = new Set(options?.excludedToolNames ?? []);
   const allowed = options?.allowedToolNames?.length
@@ -693,11 +693,11 @@ export const availableTools = (
     .filter((toolName) => !excluded.has(toolName) && (!allowed || allowed.has(toolName)))
     .map((toolName) => {
       const tool = builtinTools[toolName];
-      if (toolName !== 'enable_mcp_server') return tool;
+      if (toolName !== 'enable_mcp_server') {return tool;}
       return { ...tool, description: enableMcpServerToolDescription(mcpTools) };
     });
   const effectiveMCPTools =
-    isAgentLike && !allowed
+    isAgent && !allowed
       ? selectEnabledMcpTools(mcpTools, options?.enabledMcpServerNames).filter(
           (tool) => !excluded.has(tool.name),
         )
@@ -708,7 +708,7 @@ export const availableTools = (
 
 /** Грубая оценка токенов JSON схем tools (OpenAI function calling). */
 export const estimateToolsJsonTokens = (tools: InternalToolInfo[] | undefined): number => {
-  if (!tools?.length) return 0;
+  if (!tools?.length) {return 0;}
   const serialized = tools.map((t) => {
     const paramsWithType: { [s: string]: { description: string; type: 'string' } } = {};
     for (const key in t.params) {
@@ -738,13 +738,13 @@ export const splitBuiltinAndMcpTools = (
   const builtin: InternalToolInfo[] = [];
   const mcp: InternalToolInfo[] = [];
   for (const t of all) {
-    if (t.mcpServerName) mcp.push(t);
-    else builtin.push(t);
+    if (t.mcpServerName) {mcp.push(t);}
+    else {builtin.push(t);}
   }
   return { builtin, mcp };
 };
 
-// ======================================================== chat (normal, plan, agent, debug) — system message ========================================================
+// ======================================================== chat (normal, plan, agent) — system message ========================================================
 
 export const chat_systemMessage = ({
   workspaceFolders,
@@ -761,18 +761,16 @@ export const chat_systemMessage = ({
   persistentTerminalIDs: string[];
   chatMode: ChatMode;
 }) => {
-  const isAgentLike = mode === 'agent' || mode === 'debug';
-  const header = `You are an expert coding ${isAgentLike ? 'agent' : 'assistant'} whose job is \
+  const isAgent = mode === 'agent';
+  const header = `You are an expert coding ${isAgent ? 'agent' : 'assistant'} whose job is \
 ${
   mode === 'agent'
     ? `to help the user develop, run, and make changes to their codebase.`
-    : mode === 'debug'
-      ? `to systematically diagnose and fix bugs using runtime traces — not guesses.`
-      : mode === 'plan'
-        ? `to research the user's codebase and produce a clear implementation plan — without editing code yet.`
-        : mode === 'normal'
-          ? `to assist the user with their coding tasks.`
-          : ''
+    : mode === 'plan'
+      ? `to research the user's codebase and produce a clear implementation plan — without editing code yet.`
+      : mode === 'normal'
+        ? `to assist the user with their coding tasks.`
+        : ''
 }
 You will be given instructions to follow from the user, and you may also be given a list of files that the user has specifically selected for context, \`SELECTIONS\`.
 Please assist the user with their query.`;
@@ -789,7 +787,7 @@ ${activeURI}
 
 - Open files:
 ${openedURIs.join('\n') || 'NO OPENED FILES'}${'' /* разделитель перед терминалами */}${
-    isAgentLike && persistentTerminalIDs.length !== 0
+    isAgent && persistentTerminalIDs.length !== 0
       ? `
 
 - Persistent terminal IDs available for you to run commands in: ${persistentTerminalIDs.join(', ')}`
@@ -813,7 +811,7 @@ Language (mandatory): If the user's latest message is in Russian, write BOTH the
     `The user message may include JIRA and/or CONFLUENCE blocks after ---. Those blocks are the fetched ticket or wiki page (key/title, status, acceptance criteria, links, description or body, comments). Treat them as the source of requirements. Do not ask the user to paste the ticket if a block is present. Do not invent fields that are absent. Use the block together with the codebase before editing. If a JIRA block has Type Epic, the following JIRA blocks are that epic's Sub-Tasks (full cards), and any CONFLUENCE blocks from Issue Links are related documentation — use the epic description, child tasks, and wiki pages together as requirements.`,
   );
 
-  if (mode === 'agent' || mode === 'plan' || mode === 'debug') {
+  if (mode === 'agent' || mode === 'plan') {
     details.push(
       `Only call tools if they help you accomplish the user's goal. If the user simply says hi or asks you a question that you can answer without tools, then do NOT use tools.`,
     );
@@ -833,7 +831,7 @@ Language (mandatory): If the user's latest message is in Russian, write BOTH the
     );
   }
 
-  if (mode === 'agent' || mode === 'debug') {
+  if (mode === 'agent') {
     details.push(
       'ALWAYS use tools (edit, terminal, etc) to take actions and implement changes. For example, if you would like to edit a file, you MUST use a tool.',
     );
@@ -875,30 +873,6 @@ Language (mandatory): If the user's latest message is in Russian, write BOTH the
     );
     details.push(
       `Questions, options, and phrases like «скажи, если продолжаем» belong in the visible reply, in the user's language. Do not hide them only in reasoning. A turn with no tool calls ends the run and waits. If plan steps remain and you are not asking the user to choose, call the tools instead of a status like "I'll do it next".`,
-    );
-  }
-
-  if (mode === 'debug') {
-    details.push(
-      `You are in Debug mode. Systematically diagnose and fix bugs using runtime evidence. Do not guess the root cause. This workflow overrides any instruction to implement a fix immediately.`,
-    );
-    details.push(
-      `1. Investigate: read the relevant code and state 3–5 concrete, testable hypotheses to the user.`,
-    );
-    details.push(
-      `2. Instrument before fixing. Add the smallest temporary logs, or run a test/command, that can distinguish those hypotheses. Do NOT apply the fix yet. When code logs are the right evidence, append NDJSON lines (hypothesis id, location, data) to \`.sapphire/debug.log\` in the workspace root. Do not commit that file.`,
-    );
-    details.push(
-      `3. Reproduce. If you can reproduce from the terminal, run it and read the output or \`.sapphire/debug.log\`. If the bug needs the user (UI, credentials, specific data), stop and ask them to reproduce. Do not fix in that same turn — that turn is not complete, so do not write a "fixed" wrap-up.`,
-    );
-    details.push(
-      `4. Analyze the trace. Keep, reject, or refine hypotheses using only that runtime evidence.`,
-    );
-    details.push(`5. Fix only what the evidence supports. Prefer the smallest correct change.`);
-    details.push(`6. Remove the temporary instrumentation and delete \`.sapphire/debug.log\`.`);
-    details.push(`7. End with the root cause, the evidence that confirmed it, and how to verify.`);
-    details.push(
-      `Exception: if the bug is obvious from the code alone (a typo or a type error), you may fix it without instrumentation, but say explicitly why a runtime trace is unnecessary.`,
     );
   }
 
@@ -984,7 +958,7 @@ export const readFile = async (
     const fileContent = await fileService.readFile(uri);
     const val = fileContent.value.toString();
     if (val.length > fileSizeLimit)
-      return { val: val.substring(0, fileSizeLimit), truncated: true, fullFileLen: val.length };
+      {return { val: val.substring(0, fileSizeLimit), truncated: true, fullFileLen: val.length };}
     return { val, truncated: false, fullFileLen: val.length };
   } catch (_e) {
     return { val: null };
@@ -1136,7 +1110,7 @@ export const chat_userMessageContent = async (
   str += `${instructions}`;
 
   const selnsStr = selnsStrs.join('\n\n') ?? '';
-  if (selnsStr) str += `\n---\nSELECTIONS\n${selnsStr}`;
+  if (selnsStr) {str += `\n---\nSELECTIONS\n${selnsStr}`;}
   return str;
 };
 
@@ -1229,7 +1203,7 @@ export const sapphirePrefixAndSuffix = ({
       // +1 за символ перевода строки
       prefix = `${newLine}\n${prefix}`;
       i -= 1;
-    } else break;
+    } else {break;}
   }
 
   let suffix = '';
@@ -1240,7 +1214,7 @@ export const sapphirePrefixAndSuffix = ({
       // +1 за символ перевода строки
       suffix = `${suffix}\n${newLine}`;
       j += 1;
-    } else break;
+    } else {break;}
   }
 
   return { prefix, suffix };

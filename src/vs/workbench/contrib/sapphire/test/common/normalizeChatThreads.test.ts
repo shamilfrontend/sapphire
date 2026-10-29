@@ -1,11 +1,12 @@
-/*--------------------------------------------------------------------------------------
- *  Copyright 2025 Glass Devtools, Inc. All rights reserved.
- *  Licensed under the Apache License, Version 2.0. See LICENSE.txt for more information.
- *--------------------------------------------------------------------------------------*/
+/*---------------------------------------------------------------------------------------------
+ *  Copyright (c) Microsoft Corporation. All rights reserved.
+ *  Licensed under the MIT License. See License.txt in the project root for license information.
+ *--------------------------------------------------------------------------------------------*/
 
 import assert from 'assert';
 import { ensureNoDisposablesAreLeakedInTestSuite } from '../../../../../base/test/common/utils.js';
-import { normalizeThreadsFromStorage } from '../../common/normalizeChatThreads.js';
+import { URI } from '../../../../../base/common/uri.js';
+import { normalizeThreadsFromStorage, NormalizableChatThread } from '../../common/normalizeChatThreads.js';
 
 suite('normalizeChatThreads', () => {
   ensureNoDisposablesAreLeakedInTestSuite();
@@ -17,7 +18,7 @@ suite('normalizeChatThreads', () => {
         createdAt: '2026-01-01T00:00:00.000Z',
         lastModified: '2026-01-01T00:00:00.000Z',
         // messages / state отсутствуют — как после битого JSON hydrate
-      } as any,
+      } satisfies NormalizableChatThread,
     });
 
     const thread = out.t1!;
@@ -34,21 +35,46 @@ suite('normalizeChatThreads', () => {
     const out = normalizeThreadsFromStorage({
       t1: {
         id: 't1',
-        messages: [{ role: 'user', content: 'hi', displayContent: 'hi', selections: [], state: {} }],
+        messages: [{
+          role: 'user',
+          content: 'hi',
+          displayContent: 'hi',
+          selections: [],
+          state: { stagingSelections: [], isBeingEdited: false },
+        }],
         state: {
           currCheckpointIdx: 0,
-          stagingSelections: [{ type: 'File', uri: {} as any, language: 'ts' }],
+          stagingSelections: [{ type: 'File', uri: URI.file('/a.ts'), language: 'ts' }],
           linksOfMessageIdx: {},
+          chatMode: 'plan',
         },
         filesWithUserChanges: { '/a.ts': true },
-      } as any,
+      } satisfies NormalizableChatThread,
     });
 
     const thread = out.t1!;
     assert.strictEqual(thread.messages!.length, 1);
-    assert.strictEqual((thread as any).filesWithUserChanges, undefined);
+    assert.strictEqual(thread.filesWithUserChanges, undefined);
     assert.strictEqual(thread.state!.stagingSelections!.length, 1);
     assert.strictEqual(thread.state!.currCheckpointIdx, 0);
+    assert.strictEqual(thread.state!.chatMode, 'plan');
+  });
+
+  test('rewrites retired debug mode to agent', () => {
+    const out = normalizeThreadsFromStorage({
+      t1: {
+        id: 't1',
+        messages: [],
+        state: {
+          currCheckpointIdx: null,
+          stagingSelections: [],
+          linksOfMessageIdx: {},
+          chatMode: 'debug',
+        },
+      } satisfies NormalizableChatThread,
+    });
+
+    assert.strictEqual(out.t1!.state!.chatMode, 'agent');
   });
 
   test('treats null messages / stagingSelections as empty arrays', () => {
@@ -59,7 +85,7 @@ suite('normalizeChatThreads', () => {
         state: {
           stagingSelections: null,
         },
-      } as any,
+      } satisfies NormalizableChatThread,
     });
 
     assert.deepStrictEqual(out.t1!.messages, []);

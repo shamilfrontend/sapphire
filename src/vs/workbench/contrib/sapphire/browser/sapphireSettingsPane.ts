@@ -1,7 +1,7 @@
-/*--------------------------------------------------------------------------------------
- *  Copyright 2025 Glass Devtools, Inc. All rights reserved.
- *  Licensed under the Apache License, Version 2.0. See LICENSE.txt for more information.
- *--------------------------------------------------------------------------------------*/
+/*---------------------------------------------------------------------------------------------
+ *  Copyright (c) Microsoft Corporation. All rights reserved.
+ *  Licensed under the MIT License. See License.txt in the project root for license information.
+ *--------------------------------------------------------------------------------------------*/
 
 import { IInstantiationService } from '../../../../platform/instantiation/common/instantiation.js';
 import { EditorInput } from '../../../common/editor/editorInput.js';
@@ -32,6 +32,13 @@ import { toDisposable } from '../../../../base/common/lifecycle.js';
 import { registerIcon } from '../../../../platform/theme/common/iconRegistry.js';
 
 // см. preferences.contribution.ts — редактор keybindings
+
+/** Класс `codicon-sapphire-settings-titlebar` — шестерёнка + подпись Sapphire в titlebarpart.css. */
+const settingsTitlebarIcon = registerIcon(
+  'sapphire-settings-titlebar',
+  Codicon.settingsGear,
+  nls.localize('sapphireSettingsTitlebarIcon', 'Icon for Sapphire Settings in the title bar.'),
+);
 
 /** Залитая шестерёнка, когда открыты настройки Sapphire (CSS mask в titlebar). */
 const settingsGearOnIcon = registerIcon(
@@ -137,7 +144,7 @@ registerAction2(
       super({
         id: SAPPHIRE_TOGGLE_SETTINGS_ACTION_ID,
         title: nls.localize2('sapphireSettings', 'Настройки Sapphire'),
-        icon: Codicon.settingsGear,
+        icon: settingsTitlebarIcon,
         toggled: {
           condition: ActiveEditorContext.isEqualTo(SapphireSettingsPane.ID),
           icon: settingsGearOnIcon,
@@ -153,7 +160,8 @@ registerAction2(
               ContextKeyExpr.equals('config.workbench.layoutControl.type', 'toggles'),
               ContextKeyExpr.equals('config.workbench.layoutControl.type', 'both'),
             ),
-            group: 'z_end',
+            group: 'navigation',
+            order: 3,
           },
         ],
       });
@@ -171,8 +179,8 @@ registerAction2(
         const openEditor = openEditors[0].editor;
         const isCurrentlyOpen =
           editorService.activeEditor?.resource?.fsPath === openEditor.resource?.fsPath;
-        if (isCurrentlyOpen) await editorService.closeEditors(openEditors);
-        else await editorGroupService.activeGroup.openEditor(openEditor);
+        if (isCurrentlyOpen) {await editorService.closeEditors(openEditors);}
+        else {await editorGroupService.activeGroup.openEditor(openEditor);}
         return;
       }
 

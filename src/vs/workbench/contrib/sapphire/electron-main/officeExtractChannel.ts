@@ -1,7 +1,7 @@
-/*--------------------------------------------------------------------------------------
- *  Copyright 2025 Glass Devtools, Inc. All rights reserved.
- *  Licensed under the Apache License, Version 2.0. See LICENSE.txt for more information.
- *--------------------------------------------------------------------------------------*/
+/*---------------------------------------------------------------------------------------------
+ *  Copyright (c) Microsoft Corporation. All rights reserved.
+ *  Licensed under the MIT License. See License.txt in the project root for license information.
+ *--------------------------------------------------------------------------------------------*/
 
 import { promises as fs } from 'fs';
 import { Event } from '../../../../base/common/event.js';
@@ -14,11 +14,11 @@ import {
 import { extractOfficeBuffer } from '../node/office/extractOfficeBuffer.js';
 
 export class OfficeExtractChannel implements IServerChannel {
-  listen(_: unknown, _event: string): Event<any> {
-    return Event.None;
+  listen<T>(_: unknown, _event: string): Event<T> {
+    return Event.None as Event<T>;
   }
 
-  async call(_: unknown, command: string, arg?: { fsPath?: string }): Promise<any> {
+  async call<T>(_: unknown, command: string, arg?: { fsPath?: string }): Promise<T> {
     if (command !== 'extract') {
       throw new Error(`Unknown office extract command: ${command}`);
     }
@@ -35,9 +35,9 @@ export class OfficeExtractChannel implements IServerChannel {
       throw new Error('Not a file.');
     }
     if (stat.size > OFFICE_MAX_FILE_BYTES) {
-      return tooLargeOfficePayload(fsPath);
+      return tooLargeOfficePayload(fsPath) as T;
     }
     const bytes = await fs.readFile(fsPath);
-    return extractOfficeBuffer(bytes, fsPath);
+    return (await extractOfficeBuffer(bytes, fsPath)) as T;
   }
 }

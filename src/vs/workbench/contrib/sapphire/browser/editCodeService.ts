@@ -1,7 +1,7 @@
-/*--------------------------------------------------------------------------------------
- *  Copyright 2025 Glass Devtools, Inc. All rights reserved.
- *  Licensed under the Apache License, Version 2.0. See LICENSE.txt for more information.
- *--------------------------------------------------------------------------------------*/
+/*---------------------------------------------------------------------------------------------
+ *  Copyright (c) Microsoft Corporation. All rights reserved.
+ *  Licensed under the MIT License. See License.txt in the project root for license information.
+ *--------------------------------------------------------------------------------------------*/
 
 import { Disposable } from '../../../../base/common/lifecycle.js';
 import {
@@ -30,8 +30,7 @@ import {
   IConsistentEditorItemService,
   IConsistentItemService,
 } from './helperServices/consistentItemService.js';
-import { defaultQuickEditFimTags } from '../common/prompt/prompts.js';
-import type { QuickEditFimTagsType } from '../common/prompt/prompts.js';
+import { defaultQuickEditFimTags, type QuickEditFimTagsType } from '../common/prompt/prompts.js';
 import { IModelContentChangedEvent } from '../../../../editor/common/textModelEvents.js';
 import {
   INotificationService,
@@ -217,10 +216,10 @@ class EditCodeService extends Disposable implements IEditCodeService {
       }
 
       // Не вешать слушатели дважды — иначе дубликаты
-      if (registeredModelURIs.has(model.uri.fsPath)) return;
+      if (registeredModelURIs.has(model.uri.fsPath)) {return;}
       registeredModelURIs.add(model.uri.fsPath);
 
-      if (!(model.uri.fsPath in this.diffAreasOfURI)) {
+      if (!Object.hasOwn(this.diffAreasOfURI, model.uri.fsPath)) {
         this.diffAreasOfURI[model.uri.fsPath] = new Set();
       }
 
@@ -234,7 +233,7 @@ class EditCodeService extends Disposable implements IEditCodeService {
           }
           const beforeEntireFileCode = this._noteModelText(model);
           // Запись агента обновляет baseline, но не считается ручной правкой.
-          if (this.weAreWriting) return;
+          if (this.weAreWriting) {return;}
           this._onUserChangeContent(model.uri, e, beforeEntireFileCode);
         }),
       );
@@ -243,7 +242,7 @@ class EditCodeService extends Disposable implements IEditCodeService {
       this._diffZones._refreshStylesAndDiffsInURI(model.uri);
     };
     // Все текущие модели + onModelAdded
-    for (let model of this._modelService.getModels()) {
+    for (const model of this._modelService.getModels()) {
       initializeModel(model);
     }
     this._register(
@@ -253,13 +252,13 @@ class EditCodeService extends Disposable implements IEditCodeService {
     );
 
     // Обновление стилей при смене вкладки редактора
-    let initializeEditor = (editor: ICodeEditor) => {
+    const initializeEditor = (editor: ICodeEditor) => {
       const uri = editor.getModel()?.uri ?? null;
-      if (uri) this._diffZones._refreshStylesAndDiffsInURI(uri);
+      if (uri) {this._diffZones._refreshStylesAndDiffsInURI(uri);}
     };
 
     // Существующие редакторы + onCodeEditorAdd
-    for (let editor of this._codeEditorService.listCodeEditors()) {
+    for (const editor of this._codeEditorService.listCodeEditors()) {
       initializeEditor(editor);
     }
     this._register(
@@ -362,9 +361,9 @@ class EditCodeService extends Disposable implements IEditCodeService {
 
   private _getActiveEditorURI(): URI | null {
     const editor = this._codeEditorService.getActiveCodeEditor();
-    if (!editor) return null;
+    if (!editor) {return null;}
     const uri = editor.getModel()?.uri;
-    if (!uri) return null;
+    if (!uri) {return null;}
     return uri;
   }
 
@@ -422,7 +421,7 @@ class EditCodeService extends Disposable implements IEditCodeService {
     for (const diffareaid in this.diffAreaOfId) {
       const diffArea = this.diffAreaOfId[diffareaid];
 
-      if (diffArea._URI.fsPath !== uri.fsPath) continue;
+      if (diffArea._URI.fsPath !== uri.fsPath) {continue;}
 
       snapshottedDiffAreaOfId[diffareaid] = deepClone(
         Object.fromEntries(diffAreaSnapshotKeys.map((key) => [key, diffArea[key]])),
@@ -442,7 +441,7 @@ class EditCodeService extends Disposable implements IEditCodeService {
     // Остановить стрим всех DiffZone на uri
     for (const diffareaid in this.diffAreaOfId) {
       const diffArea = this.diffAreaOfId[diffareaid];
-      if (diffArea.type === 'DiffZone') this._stopIfStreaming(diffArea);
+      if (diffArea.type === 'DiffZone') {this._stopIfStreaming(diffArea);}
     }
 
     // Удалить все diff-области на uri (со стилями)
@@ -496,7 +495,7 @@ class EditCodeService extends Disposable implements IEditCodeService {
         await this._restoreVoidFileSnapshot(uri, beforeSnapshot);
       },
       redo: async () => {
-        if (afterSnapshot) await this._restoreVoidFileSnapshot(uri, afterSnapshot);
+        if (afterSnapshot) {await this._restoreVoidFileSnapshot(uri, afterSnapshot);}
       },
     };
     this._undoRedoService.pushElement(elt);
@@ -548,9 +547,9 @@ class EditCodeService extends Disposable implements IEditCodeService {
     } else {
       startLineInOriginalCode = lastDiff.originalStartLine;
       if (lastDiff.type === 'insertion' || lastDiff.type === 'edit')
-        endLineInLlmTextSoFar = lastDiff.endLine;
-      else if (lastDiff.type === 'deletion') endLineInLlmTextSoFar = lastDiff.startLine;
-      else throw new Error(`Sapphire: diff.type not recognized on: ${lastDiff}`);
+        {endLineInLlmTextSoFar = lastDiff.endLine;}
+      else if (lastDiff.type === 'deletion') {endLineInLlmTextSoFar = lastDiff.startLine;}
+      else {throw new Error(`Sapphire: diff.type not recognized on: ${lastDiff}`);}
     }
 
     // В начале — разделитель \n между потоком и originalCode для алгоритма
@@ -635,8 +634,8 @@ class EditCodeService extends Disposable implements IEditCodeService {
 
   isCtrlKZoneStreaming({ diffareaid }: { diffareaid: number }) {
     const ctrlKZone = this.diffAreaOfId[diffareaid];
-    if (!ctrlKZone) return false;
-    if (ctrlKZone.type !== 'CtrlKZone') return false;
+    if (!ctrlKZone) {return false;}
+    if (ctrlKZone.type !== 'CtrlKZone') {return false;}
     return !!ctrlKZone._linkedStreamingDiffZone;
   }
 

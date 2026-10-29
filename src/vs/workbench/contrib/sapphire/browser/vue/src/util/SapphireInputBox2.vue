@@ -47,6 +47,8 @@ const props = withDefaults(
     onFocus?: (e: FocusEvent) => void;
     onBlur?: (e: FocusEvent) => void;
     onPaste?: (e: ClipboardEvent) => void;
+    /** Чат: без плашки input.background, текст лежит на фоне карточки. */
+    transparent?: boolean;
   }>(),
   {
     multiline: false,
@@ -71,6 +73,8 @@ const settingsState = useSettingsState();
 const userSkills = computed(() => settingsState.value.globalSettings.userSkills ?? []);
 
 const textAreaRef = ref<HTMLTextAreaElement | null>(null);
+/** Контролируемое значение: неуправляемый textarea сбрасывался, если ref не успевал. */
+const textValue = ref(props.initValue ?? '');
 const selectedOptionRef = ref<HTMLDivElement | null>(null);
 const isMenuOpen = ref(false);
 const menuKind = ref<MenuKind | null>(null);
@@ -153,6 +157,7 @@ const insertTextAtCursor = (_text: string) => {
   textarea.focus();
   const { textBefore, textAfter } = removeTriggerCharAtCursor();
   textarea.value = textBefore + textAfter;
+  textValue.value = textarea.value;
   const newCursorPos = textBefore.length;
   textarea.setSelectionRange(newCursorPos, newCursorPos);
 
@@ -168,6 +173,7 @@ const insertSkillSlugAtCursor = (slug: string) => {
   const { textBefore, textAfter } = removeTriggerCharAtCursor();
   const insertion = `/${slug} `;
   textarea.value = textBefore + insertion + textAfter;
+  textValue.value = textarea.value;
   const newCursorPos = textBefore.length + insertion.length;
   textarea.setSelectionRange(newCursorPos, newCursorPos);
 
@@ -489,16 +495,26 @@ watch(isMenuOpen, (open) => {
 
 const isEnabled = ref(true);
 
-/** Подставить initValue в DOM. silent — без onChangeText (hydrate при mount/смене треда). */
+/** Подставить initValue. silent — без onChangeText (hydrate при mount/смене треда). */
 const applyInitValue = (initValue: string | null | undefined, silent: boolean) => {
-  const r = textAreaRef.value;
-  if (!r) return;
   const val = initValue ?? '';
-  r.value = val;
+  textValue.value = val;
+  const r = textAreaRef.value;
+  if (r && r.value !== val) {
+    r.value = val;
+  }
   if (!silent) {
     notifyChangeText(val);
   }
   adjustHeight();
+};
+
+const bindTextArea = (el: unknown) => {
+  const node = el instanceof HTMLTextAreaElement ? el : null;
+  textAreaRef.value = node;
+  if (node && node.value !== textValue.value) {
+    node.value = textValue.value;
+  }
 };
 
 const fns: TextAreaFns = {
@@ -533,12 +549,10 @@ watch(
   (el) => {
     if (props.fnsRef) props.fnsRef.current = fns;
     syncExternalTextAreaRef(el);
-    // hydrate после mount: immediate watch initValue раньше бежал до появления ref
-    if (el) {
-      applyInitValue(props.initValue, true);
-    } else {
-      adjustHeight();
+    if (el && el.value !== textValue.value) {
+      el.value = textValue.value;
     }
+    adjustHeight();
   },
   { flush: 'post' },
 );
@@ -562,10 +576,16 @@ defineExpose({
   setValue: fns.setValue,
   enable: fns.enable,
   disable: fns.disable,
-  textarea: textAreaRef,
+  get textarea() {
+    return textAreaRef.value;
+  },
 });
 
 const onTextAreaInput = (event: Event) => {
+  const target = event.target instanceof HTMLTextAreaElement ? event.target : null;
+  if (target) {
+    textValue.value = target.value;
+  }
   const latestChange = event instanceof InputEvent ? event.data : null;
 
   if (latestChange === '@') {
@@ -647,16 +667,16 @@ const onTextAreaPaste = (e: ClipboardEvent) => {
   emit('paste', e);
 };
 
-const textAreaStyle = {
-  // defaultInputBoxStyles VS Code
-  background: asCssVariable(inputBackground),
+const textAreaStyle = computed(() => ({
+  background: props.transparent ? 'transparent' : asCssVariable(inputBackground),
   color: asCssVariable(inputForeground),
-};
+}));
 </script>
 
 <template>
   <textarea
-    ref="textAreaRef"
+    :ref="bindTextArea"
+    :value="textValue"
     :autofocus="false"
     :disabled="!isEnabled"
     :class="[

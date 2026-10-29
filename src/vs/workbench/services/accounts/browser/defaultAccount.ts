@@ -117,6 +117,21 @@ function toDefaultAccountConfig(defaultChatAgent: IDefaultChatAgent): IDefaultAc
 	};
 }
 
+/** Placeholder when product.json has no defaultChatAgent (Sapphire ships its own AI stack). */
+const EMPTY_DEFAULT_ACCOUNT_CONFIG: IDefaultAccountConfig = {
+	preferredExtensions: [],
+	authenticationProvider: {
+		default: { id: '', name: '' },
+		enterprise: { id: '', name: '' },
+		enterpriseProviderConfig: '',
+		scopes: [],
+	},
+	entitlementUrl: '',
+	tokenEntitlementUrl: '',
+	mcpRegistryDataUrl: '',
+	managedSettingsUrl: '',
+};
+
 export class DefaultAccountService extends Disposable implements IDefaultAccountService {
 	declare _serviceBrand: undefined;
 
@@ -155,6 +170,12 @@ export class DefaultAccountService extends Disposable implements IDefaultAccount
 		@IProductService productService: IProductService,
 	) {
 		super();
+		if (!productService.defaultChatAgent) {
+			// No Copilot defaultChatAgent — account provider is unused; do not block startup.
+			this.defaultAccountConfig = EMPTY_DEFAULT_ACCOUNT_CONFIG;
+			this.initBarrier.open();
+			return;
+		}
 		this.defaultAccountConfig = toDefaultAccountConfig(productService.defaultChatAgent);
 	}
 
@@ -1645,6 +1666,9 @@ class DefaultAccountProviderContribution extends Disposable implements IWorkbenc
 		@IDefaultAccountService defaultAccountService: IDefaultAccountService,
 	) {
 		super();
+		if (!productService.defaultChatAgent) {
+			return;
+		}
 		const defaultAccountProvider = this._register(instantiationService.createInstance(DefaultAccountProvider, toDefaultAccountConfig(productService.defaultChatAgent)));
 		defaultAccountService.setDefaultAccountProvider(defaultAccountProvider);
 	}

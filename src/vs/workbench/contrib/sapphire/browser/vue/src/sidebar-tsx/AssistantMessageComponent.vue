@@ -19,7 +19,6 @@ const props = defineProps<{
   isCheckpointGhost: boolean;
   messageIdx: number;
   isCommitted: boolean;
-  showContinueButton?: boolean;
 }>();
 
 const accessor = useAccessor();
@@ -38,13 +37,6 @@ const chatMessageLocation = computed<ChatMessageLocation>(() => ({
   messageIdx: props.messageIdx,
 }));
 const isEmpty = computed(() => !displayContent.value && !props.chatMessage.reasoning);
-
-const onContinue = () => {
-  void chatThreadsService.addUserMessageAndStreamResponse({
-    userMessage: 'продолжай',
-    threadId: thread.value.id,
-  });
-};
 </script>
 
 <template>
@@ -84,15 +76,6 @@ const onContinue = () => {
             ? ` · ${chatMessage.outputTokensPerSecond} Токенов / сек`
             : ''
         }}
-      </div>
-      <div v-if="showContinueButton && !isCheckpointGhost" class="mt-2 flex justify-end">
-        <button
-          type="button"
-          class="px-2 py-1 bg-[var(--vscode-button-background)] text-[var(--vscode-button-foreground)] hover:opacity-90 rounded-sm text-sm font-medium"
-          @click="onContinue"
-        >
-          Продолжить
-        </button>
       </div>
     </div>
   </template>

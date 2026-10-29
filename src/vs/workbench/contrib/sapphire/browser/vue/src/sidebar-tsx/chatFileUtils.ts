@@ -1,11 +1,12 @@
-/*--------------------------------------------------------------------------------------
- *  Copyright 2025 Glass Devtools, Inc. All rights reserved.
- *  Licensed under the Apache License, Version 2.0. See LICENSE.txt for more information.
- *--------------------------------------------------------------------------------------*/
+/*---------------------------------------------------------------------------------------------
+ *  Copyright (c) Microsoft Corporation. All rights reserved.
+ *  Licensed under the MIT License. See License.txt in the project root for license information.
+ *--------------------------------------------------------------------------------------------*/
 
 import { ScrollType } from '../../../../../../../editor/common/editorCommon.js';
 import { IRange } from '../../../../../../../editor/common/core/range.js';
 import { URI } from '../../../../../../../base/common/uri.js';
+import { openAgentsFile } from '../agents-window-tsx/agentsFileBridge.js';
 import { useAccessor } from '../util/services.js';
 
 export const getRelative = (uri: URI, accessor: ReturnType<typeof useAccessor>) => {
@@ -32,6 +33,10 @@ export const sapphireOpenFileFn = (
   accessor: ReturnType<typeof useAccessor>,
   range?: [number, number],
 ) => {
+  if (uri.fsPath && openAgentsFile({ fsPath: uri.fsPath, range })) {
+    return;
+  }
+
   const commandService = accessor.get('ICommandService');
   const editorService = accessor.get('ICodeEditorService');
 
@@ -52,10 +57,10 @@ export const sapphireOpenFileFn = (
   commandService.executeCommand('vscode.open', uri).then(() => {
     // выделяем строки в редакторе
     setTimeout(() => {
-      if (!editorSelection) return;
+      if (!editorSelection) {return;}
 
       const editor = editorService.getActiveCodeEditor();
-      if (!editor) return;
+      if (!editor) {return;}
 
       editor.setSelection(editorSelection);
       editor.revealRange(editorSelection, ScrollType.Immediate);

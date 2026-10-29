@@ -1,3 +1,7 @@
+/*---------------------------------------------------------------------------------------------
+ *  Copyright (c) Microsoft Corporation. All rights reserved.
+ *  Licensed under the MIT License. See License.txt in the project root for license information.
+ *--------------------------------------------------------------------------------------------*/
 import { Disposable, IReference } from '../../../../base/common/lifecycle.js';
 import { URI } from '../../../../base/common/uri.js';
 import { ITextModel } from '../../../../editor/common/model.js';
@@ -53,7 +57,7 @@ class SapphireModelService extends Disposable implements ISapphireModelService {
 
   initializeModel = async (uri: URI) => {
     try {
-      if (uri.fsPath in this._modelRefOfURI) return;
+      if (Object.hasOwn(this._modelRefOfURI, uri.fsPath)) {return;}
       // untitled / inmemory / прочие схемы — нет FS-провайдера, не на диске
       if (!this._fileService.hasProvider(uri)) {
         return;
@@ -89,7 +93,7 @@ class SapphireModelService extends Disposable implements ISapphireModelService {
   getModel = (uri: URI) => this.getModelFromFsPath(uri.fsPath);
 
   getModelSafe = async (uri: URI): Promise<SapphireModelType> => {
-    if (!(uri.fsPath in this._modelRefOfURI)) await this.initializeModel(uri);
+    if (!Object.hasOwn(this._modelRefOfURI, uri.fsPath)) {await this.initializeModel(uri);}
     return this.getModel(uri);
   };
 

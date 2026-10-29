@@ -1,10 +1,11 @@
-/*--------------------------------------------------------------------------------------
- *  Copyright 2025 Glass Devtools, Inc. All rights reserved.
- *  Licensed under the Apache License, Version 2.0. See LICENSE.txt for more information.
- *--------------------------------------------------------------------------------------*/
+/*---------------------------------------------------------------------------------------------
+ *  Copyright (c) Microsoft Corporation. All rights reserved.
+ *  Licensed under the MIT License. See License.txt in the project root for license information.
+ *--------------------------------------------------------------------------------------------*/
 
 import { reactive, ref, toValue, type MaybeRefOrGetter } from 'vue';
 import { DataTransfers } from '../../../../../../../base/browser/dnd.js';
+import { isDragEvent } from '../../../../../../../base/browser/dom.js';
 import { Mimes } from '../../../../../../../base/common/mime.js';
 import { URI } from '../../../../../../../base/common/uri.js';
 import { ILanguageService } from '../../../../../../../editor/common/languages/language.js';
@@ -157,8 +158,8 @@ export type ChatDropEvent = {
 };
 
 const asNativeDragEvent = (e: ChatDropEvent): DragEvent | null => {
-  if (e.nativeEvent instanceof DragEvent) return e.nativeEvent;
-  if (e instanceof DragEvent) return e;
+  if (e.nativeEvent && isDragEvent(e.nativeEvent)) {return e.nativeEvent;}
+  if (isDragEvent(e)) {return e;}
   return null;
 };
 

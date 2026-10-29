@@ -1,7 +1,7 @@
-/*--------------------------------------------------------------------------------------
- *  Copyright 2025 Glass Devtools, Inc. All rights reserved.
- *  Licensed under the Apache License, Version 2.0. See LICENSE.txt for more information.
- *--------------------------------------------------------------------------------------*/
+/*---------------------------------------------------------------------------------------------
+ *  Copyright (c) Microsoft Corporation. All rights reserved.
+ *  Licensed under the MIT License. See License.txt in the project root for license information.
+ *--------------------------------------------------------------------------------------------*/
 
 import { URI } from '../../../../base/common/uri.js';
 import { shorten } from '../../../../base/common/labels.js';
@@ -14,7 +14,7 @@ export const classifyCodespan = (
   raw: string,
 ): { codespanType: 'file-or-folder' | 'function-or-class'; target: string } | null => {
   const trimmed = raw.trim();
-  if (!trimmed) return null;
+  if (!trimmed) {return null;}
 
   if (trimmed.includes('/') || trimmed.includes('\\') || CODESPAN_FILE_EXT.test(trimmed)) {
     return { codespanType: 'file-or-folder', target: trimmed };

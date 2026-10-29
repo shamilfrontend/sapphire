@@ -119,7 +119,8 @@ watch(
 );
 
 const autoList = computed(() => (autoActiveSelection.value ? [autoActiveSelection.value] : []));
-const allSelections = computed(() => [...selections.value, ...autoList.value]);
+const allSelections = computed(() => [...(selections.value ?? []), ...(autoList.value ?? [])]);
+const hasSelections = computed(() => (allSelections.value?.length ?? 0) > 0);
 const selectionPathLabels = computed(() =>
   uniquePathLabels(allSelections.value.map((s) => getRelative(s.uri, accessor) ?? s.uri.fsPath)),
 );
@@ -194,7 +195,7 @@ const removeSelection = (
 
 <template>
   <div
-    v-if="allSelections.length !== 0"
+    v-if="hasSelections"
     class="flex items-center flex-wrap text-left relative gap-x-0.5 gap-y-1 pb-0.5"
   >
     <div

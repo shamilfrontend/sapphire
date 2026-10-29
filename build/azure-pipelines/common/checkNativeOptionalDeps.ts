@@ -8,12 +8,11 @@ import path from 'path';
 
 // Some dependencies ship their native binary in a per-platform package that is
 // declared as an *optional* dependency of a small base package — e.g.
-// `@openai/codex` and `@anthropic-ai/claude-agent-sdk` are thin launchers and
-// the real binaries live in `@openai/codex-<platform>-<arch>` /
-// `@anthropic-ai/claude-agent-sdk-<platform>-<arch>`. `npm install` / `npm ci`
-// do NOT fail when an optional dependency cannot be installed, so a transient
-// hiccup can leave the base package present while the per-platform package is
-// missing (see https://github.com/microsoft/vscode/pull/323881).
+// `@openai/codex` is a thin launcher and the real binary lives in
+// `@openai/codex-<platform>-<arch>`. `npm install` / `npm ci` do NOT fail when
+// an optional dependency cannot be installed, so a transient hiccup can leave
+// the base package present while the per-platform package is missing
+// (see https://github.com/microsoft/vscode/pull/323881).
 //
 // `findMissingNativeOptionalDep` is the reusable primitive that detects this.
 // It is used from two places:
@@ -64,7 +63,6 @@ export function findMissingNativeOptionalDep(nodeModulesDir: string, basePackage
 // required whenever the base package itself is installed.
 const NATIVE_OPTIONAL_DEP_BASE_PACKAGES = [
 	'@openai/codex',
-	'@anthropic-ai/claude-agent-sdk',
 ];
 
 // Platform/arch combinations these packages publish a per-platform package for.

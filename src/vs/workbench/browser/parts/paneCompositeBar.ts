@@ -79,6 +79,7 @@ export interface IPaneCompositeBarOptions {
 	readonly orientation: ActionsOrientation;
 	readonly compositeSize: number;
 	readonly overflowActionSize: number;
+	readonly alwaysShowOverflow?: boolean;
 	readonly preventLoopNavigation?: boolean;
 	readonly activityHoverOptions: IActivityHoverOptions;
 	readonly fillExtraContextMenuActions: (actions: IAction[], e?: MouseEvent | GestureEvent) => void;
@@ -154,6 +155,7 @@ export class PaneCompositeBar extends Disposable {
 			dndHandler: this.dndHandler,
 			compositeSize: this.options.compositeSize,
 			overflowActionSize: this.options.overflowActionSize,
+			alwaysShowOverflow: this.options.alwaysShowOverflow,
 			colors: theme => this.options.colors(theme),
 		}));
 	}

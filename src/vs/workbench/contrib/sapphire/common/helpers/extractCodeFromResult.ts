@@ -1,7 +1,7 @@
-/*--------------------------------------------------------------------------------------
- *  Copyright 2025 Glass Devtools, Inc. All rights reserved.
- *  Licensed under the Apache License, Version 2.0. See LICENSE.txt for more information.
- *--------------------------------------------------------------------------------------*/
+/*---------------------------------------------------------------------------------------------
+ *  Copyright (c) Microsoft Corporation. All rights reserved.
+ *  Licensed under the MIT License. See License.txt in the project root for license information.
+ *--------------------------------------------------------------------------------------------*/
 
 import { DIVIDER, FINAL, ORIGINAL } from '../prompt/prompts.js';
 
@@ -29,7 +29,7 @@ class SurroundingsRemover {
     let offset = 0;
     // console.log('prefix', prefix, Math.min(this.j, prefix.length - 1))
     while (this.i <= this.j && offset <= prefix.length - 1) {
-      if (this.originalS.charAt(this.i) !== prefix.charAt(offset)) break;
+      if (this.originalS.charAt(this.i) !== prefix.charAt(offset)) {break;}
       offset += 1;
       this.i += 1;
     }
@@ -72,8 +72,8 @@ class SurroundingsRemover {
     }
     // console.log('index', index, until.length)
 
-    if (alsoRemoveUntilStr) this.i = index + until.length;
-    else this.i = index;
+    if (alsoRemoveUntilStr) {this.i = index + until.length;}
+    else {this.i = index;}
 
     return true;
   };
@@ -85,16 +85,16 @@ class SurroundingsRemover {
 
     const pm = this;
     const foundCodeBlock = pm.removePrefix('```');
-    if (!foundCodeBlock) return false;
+    if (!foundCodeBlock) {return false;}
 
     pm.removeFromStartUntilFullMatch('\n', true); // пропуск language после ```
 
     const j = pm.j;
     let foundCodeBlockEnd = pm.removeSuffix('```');
 
-    if (pm.j === j) foundCodeBlockEnd = pm.removeSuffix('```\n'); // без сдвига — пробуем ```\n
+    if (pm.j === j) {foundCodeBlockEnd = pm.removeSuffix('```\n');} // без сдвига — пробуем ```\n
 
-    if (!foundCodeBlockEnd) return false;
+    if (!foundCodeBlockEnd) {return false;}
 
     pm.removeSuffix('\n'); // \n перед закрывающими ```
     return true;
@@ -183,7 +183,7 @@ const endsWithAnyPrefixOf = (str: string, anyPrefix: string) => {
   for (let i = anyPrefix.length; i >= 1; i--) {
     // i >= 1 — пустой префикс не проверяем
     const prefix = anyPrefix.slice(0, i);
-    if (str.endsWith(prefix)) return prefix;
+    if (str.endsWith(prefix)) {return prefix;}
   }
   return null;
 };

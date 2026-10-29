@@ -7,10 +7,20 @@ OpenAI-совместимые провайдеры (OpenAI, DeepSeek, Groq, Open
 ## DeepSeek
 
 - Чат: `https://api.deepseek.com/v1`
-- Модели по умолчанию: `deepseek-chat`, `deepseek-reasoner` (`reasoning_content`)
 - Ключ и расход: [platform.deepseek.com/usage](https://platform.deepseek.com/usage)
 
 Endpoint чата пользователь не правит: для DeepSeek он задан в коде. Вводится API-ключ.
+
+В запросе уходит API id; в пикере и Settings показывается версия из `displayName` в `modelCapabilities.ts`.
+
+| API id | Версия сейчас |
+| --- | --- |
+| `deepseek-flash` | DeepSeek V4.1 Flash 1017 |
+| `deepseek-v4-flash`, `deepseek-v4-flash-vision-exp` | то же (legacy-алиасы) |
+| `deepseek-v4-pro` | DeepSeek V4 Pro |
+| `deepseek-chat`, `deepseek-reasoner` | старые id без отдельной подписи версии |
+
+Когда DeepSeek сменит чекпоинт за `deepseek-flash`, обновите `displayName` в каталоге.
 
 ## Список моделей
 

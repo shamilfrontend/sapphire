@@ -4,7 +4,7 @@
  *  Licensed under the Apache License, Version 2.0. See LICENSE.txt for more information.
  *--------------------------------------------------------------------------------------*/
 
-import { onUnmounted, ref, watch } from 'vue';
+import { onMounted, onUnmounted, ref, watch } from 'vue';
 import { Minus, Plus, X } from 'lucide-vue-next';
 import { ChatImageAttachment } from '../../../../common/chatThreadServiceTypes.js';
 import { chatImageToDataUrl } from '../../../../common/chatImageUtils.js';
@@ -35,7 +35,7 @@ watch(
 const clampZoom = (z: number) => Math.min(5, Math.max(1, z));
 
 const onKey = (e: KeyboardEvent) => {
-  if (e.key === 'Escape') props.onClose();
+  if (e.key === 'Escape') closeLightbox('escape');
   if (e.key === '+' || e.key === '=') zoom.value = Math.min(5, zoom.value + 0.25);
   if (e.key === '-') zoom.value = Math.max(1, zoom.value - 0.25);
 };
@@ -43,8 +43,27 @@ const onKey = (e: KeyboardEvent) => {
 window.addEventListener('keydown', onKey);
 onUnmounted(() => window.removeEventListener('keydown', onKey));
 
+const closeLightbox = (reason: string) => {
+  // #region agent log
+  fetch('http://127.0.0.1:7714/ingest/0d7d40a3-f671-45c9-9179-7225f077dfe2',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'22bbe4'},body:JSON.stringify({sessionId:'22bbe4',hypothesisId:'E',location:'ImageLightbox.vue:close',message:'lightbox close',data:{reason},timestamp:Date.now()})}).catch(()=>{});
+  // #endregion
+  props.onClose();
+};
+
+onMounted(() => {
+  // #region agent log
+  fetch('http://127.0.0.1:7714/ingest/0d7d40a3-f671-45c9-9179-7225f077dfe2',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'22bbe4'},body:JSON.stringify({sessionId:'22bbe4',hypothesisId:'C',location:'ImageLightbox.vue:mounted',message:'lightbox mounted',data:{imageId:props.image.id},timestamp:Date.now()})}).catch(()=>{});
+  // #endregion
+});
+
+onUnmounted(() => {
+  // #region agent log
+  fetch('http://127.0.0.1:7714/ingest/0d7d40a3-f671-45c9-9179-7225f077dfe2',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'22bbe4'},body:JSON.stringify({sessionId:'22bbe4',hypothesisId:'C',location:'ImageLightbox.vue:unmounted',message:'lightbox unmounted',data:{imageId:props.image.id},timestamp:Date.now()})}).catch(()=>{});
+  // #endregion
+});
+
 const onBackdropMouseUp = () => {
-  if (!mouseDownInsideModal.value) props.onClose();
+  if (!mouseDownInsideModal.value) closeLightbox('backdrop');
   mouseDownInsideModal.value = false;
 };
 
@@ -124,7 +143,7 @@ const onImageMouseDown = (e: MouseEvent) => {
           type="button"
           class="rounded-full size-8 flex items-center justify-center bg-black/50 text-white hover:bg-black/70 cursor-pointer"
           title="Закрыть"
-          @click="onClose()"
+          @click="closeLightbox('button')"
         >
           <X :size="16" />
         </button>

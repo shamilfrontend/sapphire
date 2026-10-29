@@ -1,7 +1,7 @@
-/*--------------------------------------------------------------------------------------
- *  Copyright 2025 Glass Devtools, Inc. All rights reserved.
- *  Licensed under the Apache License, Version 2.0. See LICENSE.txt for more information.
- *--------------------------------------------------------------------------------------*/
+/*---------------------------------------------------------------------------------------------
+ *  Copyright (c) Microsoft Corporation. All rights reserved.
+ *  Licensed under the MIT License. See License.txt in the project root for license information.
+ *--------------------------------------------------------------------------------------------*/
 
 import { Disposable } from '../../../../../base/common/lifecycle.js';
 import { URI } from '../../../../../base/common/uri.js';
@@ -49,14 +49,14 @@ class ConsistentItemService extends Disposable implements IConsistentItemService
     const removeItemsFromEditor = (editor: ICodeEditor) => {
       const editorId = editor.getId();
       for (const itemId of this.itemIdsOfEditorId[editorId] ?? [])
-        this._removeItemFromEditor(editor, itemId);
+        {this._removeItemFromEditor(editor, itemId);}
     };
 
     // смонтировать на редактор все consistent-элементы для URI модели
     const putItemsOnEditor = (editor: ICodeEditor, uri: URI | null) => {
-      if (!uri) return;
+      if (!uri) {return;}
       for (const consistentItemId of this.consistentItemIdsOfURI[uri.fsPath] ?? [])
-        this._putItemOnEditor(editor, consistentItemId);
+        {this._putItemOnEditor(editor, consistentItemId);}
     };
 
     // смена вкладки / модели в редакторе
@@ -75,7 +75,7 @@ class ConsistentItemService extends Disposable implements IConsistentItemService
         editor.onDidDispose(() => {
           // виджеты редактора уже уничтожены — только чистим записи
           for (const itemId of this.itemIdsOfEditorId[editor.getId()] ?? [])
-            delete this.disposeFnOfItemId[itemId];
+            {delete this.disposeFnOfItemId[itemId];}
         }),
       );
     };
@@ -88,7 +88,7 @@ class ConsistentItemService extends Disposable implements IConsistentItemService
     };
 
     // уже открытые редакторы и каждый новый
-    for (let editor of this._editorService.listCodeEditors()) initializeEditor(editor);
+    for (const editor of this._editorService.listCodeEditors()) {initializeEditor(editor);}
     this._register(
       this._editorService.onCodeEditorAdd((editor) => {
         initializeEditor(editor);
@@ -112,7 +112,7 @@ class ConsistentItemService extends Disposable implements IConsistentItemService
     const itemId = generateUuid();
     const editorId = editor.getId();
 
-    if (!(editorId in this.itemIdsOfEditorId)) this.itemIdsOfEditorId[editorId] = new Set();
+    if (!Object.hasOwn(this.itemIdsOfEditorId, editorId)) {this.itemIdsOfEditorId[editorId] = new Set();}
     this.itemIdsOfEditorId[editorId]!.add(itemId);
 
     this.consistentItemIdOfItemId[itemId] = consistentItemId;
@@ -145,20 +145,20 @@ class ConsistentItemService extends Disposable implements IConsistentItemService
   addConsistentItemToURI({ uri, fn }: AddItemInputs) {
     const consistentItemId = `${this.consistentItemIdPool++}`;
 
-    if (!(uri.fsPath in this.consistentItemIdsOfURI))
-      this.consistentItemIdsOfURI[uri.fsPath] = new Set();
+    if (!Object.hasOwn(this.consistentItemIdsOfURI, uri.fsPath))
+      {this.consistentItemIdsOfURI[uri.fsPath] = new Set();}
     this.consistentItemIdsOfURI[uri.fsPath]!.add(consistentItemId);
 
     this.infoOfConsistentItemId[consistentItemId] = { fn, uri };
 
     const editors = this.getEditorsOnURI(uri);
-    for (const editor of editors) this._putItemOnEditor(editor, consistentItemId);
+    for (const editor of editors) {this._putItemOnEditor(editor, consistentItemId);}
 
     return consistentItemId;
   }
 
   removeConsistentItemFromURI(consistentItemId: string) {
-    if (!(consistentItemId in this.infoOfConsistentItemId)) return;
+    if (!Object.hasOwn(this.infoOfConsistentItemId, consistentItemId)) {return;}
 
     const { uri } = this.infoOfConsistentItemId[consistentItemId];
     const editors = this.getEditorsOnURI(uri);
@@ -166,7 +166,7 @@ class ConsistentItemService extends Disposable implements IConsistentItemService
     for (const editor of editors) {
       for (const itemId of this.itemIdsOfEditorId[editor.getId()] ?? []) {
         if (this.consistentItemIdOfItemId[itemId] === consistentItemId)
-          this._removeItemFromEditor(editor, itemId);
+          {this._removeItemFromEditor(editor, itemId);}
       }
     }
 

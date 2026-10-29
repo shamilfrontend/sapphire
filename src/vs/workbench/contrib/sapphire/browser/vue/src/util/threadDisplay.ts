@@ -1,11 +1,12 @@
-/*--------------------------------------------------------------------------------------
- *  Sapphire — shared chat title and stream indicator for Режим Агент and tabs.
- *--------------------------------------------------------------------------------------*/
+/*---------------------------------------------------------------------------------------------
+ *  Copyright (c) Microsoft Corporation. All rights reserved.
+ *  Licensed under the MIT License. See License.txt in the project root for license information.
+ *--------------------------------------------------------------------------------------------*/
 
 import { IsRunningType, ThreadType } from '../../../chatThreadService.js';
 
 export const threadTitle = (thread: ThreadType | undefined): string => {
-  if (!thread) return 'Новый чат';
+  if (!thread) {return 'Новый чат';}
   const firstUserMsg = thread.messages?.find((msg) => msg.role === 'user');
   if (firstUserMsg && firstUserMsg.role === 'user' && firstUserMsg.displayContent?.trim()) {
     return firstUserMsg.displayContent.trim();
@@ -32,6 +33,6 @@ export function threadActivity(
   ) {
     return 'running';
   }
-  if (isRunning === 'awaiting_user') return 'awaiting';
+  if (isRunning === 'awaiting_user') {return 'awaiting';}
   return 'idle';
 }

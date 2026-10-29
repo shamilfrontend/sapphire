@@ -1,7 +1,7 @@
-/*--------------------------------------------------------------------------------------
- *  Copyright 2025 Glass Devtools, Inc. All rights reserved.
- *  Licensed under the Apache License, Version 2.0. See LICENSE.txt for more information.
- *--------------------------------------------------------------------------------------*/
+/*---------------------------------------------------------------------------------------------
+ *  Copyright (c) Microsoft Corporation. All rights reserved.
+ *  Licensed under the MIT License. See License.txt in the project root for license information.
+ *--------------------------------------------------------------------------------------------*/
 
 import { ICodeEditor } from '../../../../editor/browser/editorBrowser.js';
 import { EditorOption } from '../../../../editor/common/config/editorOptions.js';
@@ -92,16 +92,16 @@ export const findTextInCode = (
     return returnAns(fileContents, idx);
   }
 
-  if (!canFallbackToRemoveWhitespace) return 'Not found' as const;
+  if (!canFallbackToRemoveWhitespace) {return 'Not found' as const;}
 
   // fallback: без пробелов
   text = removeWhitespaceExceptNewlines(text);
   fileContents = removeWhitespaceExceptNewlines(fileContents);
   idx = fileContents.indexOf(text, startingAtLineIdx(fileContents));
 
-  if (idx === -1) return 'Not found' as const;
+  if (idx === -1) {return 'Not found' as const;}
   const lastIdx = fileContents.lastIndexOf(text);
-  if (lastIdx !== idx) return 'Not unique' as const;
+  if (lastIdx !== idx) {return 'Not unique' as const;}
 
   return returnAns(fileContents, idx);
 };

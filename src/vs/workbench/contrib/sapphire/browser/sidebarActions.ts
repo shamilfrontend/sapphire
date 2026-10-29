@@ -1,7 +1,7 @@
-/*--------------------------------------------------------------------------------------
- *  Copyright 2025 Glass Devtools, Inc. All rights reserved.
- *  Licensed under the Apache License, Version 2.0. See LICENSE.txt for more information.
- *--------------------------------------------------------------------------------------*/
+/*---------------------------------------------------------------------------------------------
+ *  Copyright (c) Microsoft Corporation. All rights reserved.
+ *  Licensed under the MIT License. See License.txt in the project root for license information.
+ *--------------------------------------------------------------------------------------------*/
 
 import { KeyCode, KeyMod } from '../../../../base/common/keyCodes.js';
 
@@ -20,11 +20,14 @@ import { ICommandService } from '../../../../platform/commands/common/commands.j
 import {
   SAPPHIRE_CMD_SHIFT_L_ACTION_ID,
   SAPPHIRE_CTRL_L_ACTION_ID,
+  SAPPHIRE_MAXIMIZE_CHAT_ACTION_ID,
   SAPPHIRE_OPEN_SIDEBAR_ACTION_ID,
+  SAPPHIRE_TOGGLE_CHAT_ACTION_ID,
 } from './actionIDs.js';
 import { localize2 } from '../../../../nls.js';
 import { IChatThreadService } from './chatThreadService.js';
 import { IViewsService } from '../../../services/views/common/viewsService.js';
+import { IWorkbenchLayoutService, Parts } from '../../../services/layout/browser/layoutService.js';
 
 // ---------- Команды и сочетания клавиш ----------
 
@@ -32,18 +35,18 @@ export const roundRangeToLines = (
   range: IRange | null | undefined,
   options: { emptySelectionBehavior: 'null' | 'line' },
 ) => {
-  if (!range) return null;
+  if (!range) {return null;}
 
   // Пустое выделение — по опции null или вся строка
   if (range.endColumn === range.startColumn && range.endLineNumber === range.startLineNumber) {
-    if (options.emptySelectionBehavior === 'null') return null;
+    if (options.emptySelectionBehavior === 'null') {return null;}
     if (options.emptySelectionBehavior === 'line')
-      return {
+      {return {
         startLineNumber: range.startLineNumber,
         startColumn: 1,
         endLineNumber: range.startLineNumber,
         endColumn: 1,
-      };
+      };}
   }
 
   // IRange с 1; при triple-click колонка 1 на следующей строке — берём предыдущую строку
@@ -76,6 +79,33 @@ registerAction2(
   },
 );
 
+// Кнопка чата в тулбаре. Скрытая панель открывает Sapphire, а не last-active
+// (после Copilot Chat это workbench.panel.chat). Видимую панель прячем.
+registerAction2(
+  class extends Action2 {
+    constructor() {
+      super({
+        id: SAPPHIRE_TOGGLE_CHAT_ACTION_ID,
+        title: localize2('sapphireToggleChat', 'Sapphire: Переключить чат'),
+        f1: true,
+      });
+    }
+
+    async run(accessor: ServicesAccessor): Promise<void> {
+      const layoutService = accessor.get(IWorkbenchLayoutService);
+      if (layoutService.isVisible(Parts.AUXILIARYBAR_PART)) {
+        layoutService.setPartHidden(true, Parts.AUXILIARYBAR_PART);
+        return;
+      }
+
+      const viewsService = accessor.get(IViewsService);
+      const chatThreadService = accessor.get(IChatThreadService);
+      await viewsService.openViewContainer(SAPPHIRE_VIEW_CONTAINER_ID);
+      await chatThreadService.focusCurrentChat();
+    }
+  },
+);
+
 // Ctrl/Cmd+L
 registerAction2(
   class extends Action2 {
@@ -100,7 +130,7 @@ registerAction2(
       // Зафиксировать выделение до открытия панели чата
       const editor = editorService.getActiveCodeEditor();
       const model = editor?.getModel();
-      if (!model) return;
+      if (!model) {return;}
 
       const selectionRange = roundRangeToLines(editor?.getSelection(), {
         emptySelectionBehavior: 'null',
@@ -200,11 +230,11 @@ registerAction2(
       // Добавить текущее выделение в новый тред
       const editor = editorService.getActiveCodeEditor();
       const model = editor?.getModel();
-      if (!model) return;
+      if (!model) {return;}
       const selectionRange = roundRangeToLines(editor?.getSelection(), {
         emptySelectionBehavior: 'null',
       });
-      if (!selectionRange) return;
+      if (!selectionRange) {return;}
       editor?.setSelection({
         startLineNumber: selectionRange.startLineNumber,
         endLineNumber: selectionRange.endLineNumber,
@@ -217,6 +247,31 @@ registerAction2(
         language: model.getLanguageId(),
         range: [selectionRange.startLineNumber, selectionRange.endLineNumber],
       });
+    }
+  },
+);
+
+// Развернуть чат на всю область редактора (кнопка Maximize Chat на пустом экране)
+registerAction2(
+  class extends Action2 {
+    constructor() {
+      super({
+        id: SAPPHIRE_MAXIMIZE_CHAT_ACTION_ID,
+        f1: true,
+        title: localize2('sapphireMaximizeChat', 'Sapphire: Развернуть чат'),
+      });
+    }
+
+    async run(accessor: ServicesAccessor): Promise<void> {
+      const viewsService = accessor.get(IViewsService);
+      const layoutService = accessor.get(IWorkbenchLayoutService);
+      const chatThreadService = accessor.get(IChatThreadService);
+
+      if (!viewsService.isViewContainerVisible(SAPPHIRE_VIEW_CONTAINER_ID)) {
+        await viewsService.openViewContainer(SAPPHIRE_VIEW_CONTAINER_ID);
+      }
+      layoutService.setAuxiliaryBarMaximized(true);
+      await chatThreadService.focusCurrentChat();
     }
   },
 );

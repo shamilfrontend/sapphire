@@ -1,7 +1,7 @@
-/*--------------------------------------------------------------------------------------
- *  Copyright 2025 Glass Devtools, Inc. All rights reserved.
- *  Licensed under the Apache License, Version 2.0. See LICENSE.txt for more information.
- *--------------------------------------------------------------------------------------*/
+/*---------------------------------------------------------------------------------------------
+ *  Copyright (c) Microsoft Corporation. All rights reserved.
+ *  Licensed under the MIT License. See License.txt in the project root for license information.
+ *--------------------------------------------------------------------------------------------*/
 
 // Регистрация в app.ts.
 // Отдельный сервис не подходит: нужны main process и node-зависимости.
@@ -82,45 +82,53 @@ export class MCPChannel implements IServerChannel {
   constructor() {}
 
   // Рендерер подписывается на события через listen
-  listen(_: unknown, event: string): Event<any> {
+  listen<T>(_: unknown, event: string): Event<T> {
     // События серверов
-    if (event === 'onAdd_server') return this.mcpEmitters.serverEvent.onAdd.event;
-    if (event === 'onUpdate_server') return this.mcpEmitters.serverEvent.onUpdate.event;
-    if (event === 'onDelete_server') return this.mcpEmitters.serverEvent.onDelete.event;
+    if (event === 'onAdd_server') {return this.mcpEmitters.serverEvent.onAdd.event as Event<T>;}
+    if (event === 'onUpdate_server') {return this.mcpEmitters.serverEvent.onUpdate.event as Event<T>;}
+    if (event === 'onDelete_server') {return this.mcpEmitters.serverEvent.onDelete.event as Event<T>;}
     // else if (event === 'onLoading_server') return this.mcpEmitters.serverEvent.onChangeLoading.event;
     // Неизвестное событие
     throw new Error(`Event not found: ${event}`);
   }
 
   // Рендерер вызывает команды через call (см. mcpService.ts)
-  async call(_: unknown, command: string, params: any): Promise<any> {
+  async call<T>(_: unknown, command: string, params: unknown): Promise<T> {
     try {
       if (command === 'refreshMCPServers') {
-        await this._refreshMCPServers(params);
+        await this._refreshMCPServers(params as {
+          mcpConfigFileJSON: MCPConfigFileJSON;
+          userStateOfName: MCPUserStateOfName;
+          addedServerNames: string[];
+          removedServerNames: string[];
+          updatedServerNames: string[];
+        });
       } else if (command === 'closeAllMCPServers') {
         await this._closeAllMCPServers();
       } else if (command === 'toggleMCPServer') {
-        await this._toggleMCPServer(params.serverName, params.isOn);
+        const toggle = params as { serverName: string; isOn: boolean };
+        await this._toggleMCPServer(toggle.serverName, toggle.isOn);
       } else if (command === 'callTool') {
-        const p: MCPToolCallParams = params;
+        const p = params as MCPToolCallParams;
         const callId = p.callId ?? generateUuid();
         const abort = new AbortController();
         this._activeToolCalls.set(callId, abort);
         try {
-          return await this._safeCallTool(p.serverName, p.toolName, p.params, abort.signal);
+          return (await this._safeCallTool(p.serverName, p.toolName, p.params, abort.signal)) as T;
         } finally {
           this._activeToolCalls.delete(callId);
         }
       } else if (command === 'cancelTool') {
-        const callId = params?.callId as string | undefined;
+        const callId = (params as { callId?: string } | undefined)?.callId;
         if (callId) {
           this._activeToolCalls.get(callId)?.abort();
           this._activeToolCalls.delete(callId);
         }
-        return;
+        return undefined as T;
       } else {
         throw new Error(`Sapphire sendLLM: command "${command}" not recognized.`);
       }
+      return undefined as T;
     } catch (e) {
       console.error('mcp channel: Call Error:', e);
       // Пробрасываем ошибку, чтобы рендерер видел сбой/таймаут, а не undefined.
@@ -156,7 +164,7 @@ export class MCPChannel implements IServerChannel {
     await Promise.all(
       allChanges.map(async ({ serverName, type }) => {
         // Не запускать повторное обновление того же сервера
-        if (this._refreshingServerNames.has(serverName)) return;
+        if (this._refreshingServerNames.has(serverName)) {return;}
         this._refreshingServerNames.add(serverName);
 
         const prevServer = this.infoOfClientId[serverName]?.mcpServer;
@@ -294,7 +302,7 @@ export class MCPChannel implements IServerChannel {
 
   private async _closeClient(serverName: string) {
     const info = this.infoOfClientId[serverName];
-    if (!info) return;
+    if (!info) {return;}
     const { _client: client } = info;
     if (client) {
       await client.close();
@@ -363,13 +371,13 @@ export class MCPChannel implements IServerChannel {
   private async _callTool(
     serverName: string,
     toolName: string,
-    params: any,
+    params: Record<string, unknown>,
     signal?: AbortSignal,
   ): Promise<RawMCPToolCall> {
     const server = this.infoOfClientId[serverName];
-    if (!server) throw new Error(`Server ${serverName} not found`);
+    if (!server) {throw new Error(`Server ${serverName} not found`);}
     const { _client: client } = server;
-    if (!client) throw new Error(`Client for server ${serverName} not found`);
+    if (!client) {throw new Error(`Client for server ${serverName} not found`);}
 
     // Вызов инструмента с аргументами от агента
     const response = await client.callTool(
@@ -411,7 +419,7 @@ export class MCPChannel implements IServerChannel {
   private async _safeCallTool(
     serverName: string,
     toolName: string,
-    params: any,
+    params: Record<string, unknown>,
     signal?: AbortSignal,
   ): Promise<RawMCPToolCall> {
     try {
@@ -424,11 +432,11 @@ export class MCPChannel implements IServerChannel {
       if (typeof err === 'object' && err !== null && (err as { code?: unknown }).code) {
         const code = (err as { code: unknown }).code;
         let codeDescription = '';
-        if (code === -32700) codeDescription = 'Parse Error';
-        if (code === -32600) codeDescription = 'Invalid Request';
-        if (code === -32601) codeDescription = 'Method Not Found';
-        if (code === -32602) codeDescription = 'Invalid Parameters';
-        if (code === -32603) codeDescription = 'Internal Error';
+        if (code === -32700) {codeDescription = 'Parse Error';}
+        if (code === -32600) {codeDescription = 'Invalid Request';}
+        if (code === -32601) {codeDescription = 'Method Not Found';}
+        if (code === -32602) {codeDescription = 'Invalid Parameters';}
+        if (code === -32603) {codeDescription = 'Internal Error';}
         errorMessage = `${codeDescription}. Full response:\n${JSON.stringify(err, null, 2)}`;
       } else if (typeof err === 'string') {
         errorMessage = err;

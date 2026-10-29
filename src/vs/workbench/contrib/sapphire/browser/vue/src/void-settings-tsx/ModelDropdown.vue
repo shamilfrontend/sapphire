@@ -17,6 +17,7 @@ import {
   modelFilterOfFeatureName,
   ModelOption,
 } from '../../../../../../../workbench/contrib/sapphire/common/sapphireSettingsService.js';
+import { getModelDisplayName } from '../../../../../../../workbench/contrib/sapphire/common/modelCapabilities.js';
 import WarningBox from './WarningBox.vue';
 import ErrorBoundary from '../sidebar-tsx/ErrorBoundary.vue';
 
@@ -76,8 +77,13 @@ const onChangeOption = (newOption: ModelOption) => {
   sapphireSettingsService.setModelSelectionOfFeature(props.featureName, newOption.selection);
 };
 
-const optionName = (option: ModelOption) => option.selection.modelName;
-const optionDetail = (option: ModelOption) => option.selection.providerName;
+const optionName = (option: ModelOption) =>
+  getModelDisplayName(option.selection.providerName, option.selection.modelName);
+const optionDetail = (option: ModelOption) => {
+  const { providerName, modelName } = option.selection;
+  const displayName = getModelDisplayName(providerName, modelName);
+  return displayName !== modelName ? modelName : providerName;
+};
 const optionEquals = (a: ModelOption, b: ModelOption) => optionsEqual([a], [b]);
 
 const openSettings = () => {

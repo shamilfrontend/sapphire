@@ -1,31 +1,24 @@
-/*--------------------------------------------------------------------------------------
- *  Copyright 2025 Glass Devtools, Inc. All rights reserved.
- *  Licensed under the Apache License, Version 2.0. See LICENSE.txt for more information.
- *--------------------------------------------------------------------------------------*/
+/*---------------------------------------------------------------------------------------------
+ *  Copyright (c) Microsoft Corporation. All rights reserved.
+ *  Licensed under the MIT License. See License.txt in the project root for license information.
+ *--------------------------------------------------------------------------------------------*/
 
 import assert from 'assert';
 import { ensureNoDisposablesAreLeakedInTestSuite } from '../../../../../base/test/common/utils.js';
 import {
-  agentEmptyTurnPauseMessage,
-  agentLengthPauseMessage,
   agentLoopStopMessage,
-  agentToolErrorsPauseMessage,
   asksUserToChoose,
   decideLoopContinuation,
   decideToolBatch,
-  MAX_CONSECUTIVE_TOOL_ERRORS,
   shouldAutoContinueOnLength,
   shouldAutoContinueTurn,
   shouldTranslateReasoningToRussian,
-  shouldForceWrapUp,
   streamingReasoningDisplay,
   toolBatchSignature,
-  updateConsecutiveToolErrors,
   userMessageLooksRussian,
 } from '../../common/agentLoopPolicy.js';
 import { promoteEmptyDisplayFromReasoning } from '../../common/chatThreadServiceTypes.js';
 
-const MAX_STEPS = 25;
 const REPEAT_LIMIT = 3;
 
 const readA = { name: 'read_file', rawParams: { uri: '/proj/a.ts' } };
@@ -62,8 +55,6 @@ suite('agentLoopPolicy', () => {
     test('a fresh batch runs', () => {
       assert.strictEqual(
         decideToolBatch({
-          step: 1,
-          maxSteps: MAX_STEPS,
           batch: [readA],
           recentSignatures: [],
           repeatLimit: REPEAT_LIMIT,
@@ -72,12 +63,10 @@ suite('agentLoopPolicy', () => {
       );
     });
 
-    test('the third identical batch stops as a repeat and is not a step-cap stop', () => {
+    test('the third identical batch stops as a repeat', () => {
       const signature = toolBatchSignature([readA, readB]);
       assert.strictEqual(
         decideToolBatch({
-          step: 3,
-          maxSteps: MAX_STEPS,
           batch: [readA, readB],
           recentSignatures: [signature, signature],
           repeatLimit: REPEAT_LIMIT,
@@ -90,8 +79,6 @@ suite('agentLoopPolicy', () => {
       const signature = toolBatchSignature([readA]);
       assert.strictEqual(
         decideToolBatch({
-          step: 2,
-          maxSteps: MAX_STEPS,
           batch: [readA],
           recentSignatures: [signature],
           repeatLimit: REPEAT_LIMIT,
@@ -104,8 +91,6 @@ suite('agentLoopPolicy', () => {
       const signature = toolBatchSignature([readA, readB]);
       assert.strictEqual(
         decideToolBatch({
-          step: 4,
-          maxSteps: MAX_STEPS,
           batch: [readB, readA],
           recentSignatures: [signature, signature],
           repeatLimit: REPEAT_LIMIT,
@@ -114,8 +99,6 @@ suite('agentLoopPolicy', () => {
       );
       assert.strictEqual(
         decideToolBatch({
-          step: 4,
-          maxSteps: MAX_STEPS,
           batch: [readB],
           recentSignatures: [signature, signature],
           repeatLimit: REPEAT_LIMIT,
@@ -129,118 +112,11 @@ suite('agentLoopPolicy', () => {
       const other = toolBatchSignature([readB]);
       assert.strictEqual(
         decideToolBatch({
-          step: 4,
-          maxSteps: MAX_STEPS,
           batch: [readA],
           recentSignatures: [repeated, repeated, other],
           repeatLimit: REPEAT_LIMIT,
         }),
         'run',
-      );
-    });
-
-    test('step 25 with tools hits the step cap', () => {
-      assert.strictEqual(
-        decideToolBatch({
-          step: 25,
-          maxSteps: MAX_STEPS,
-          batch: [readA],
-          recentSignatures: [],
-          repeatLimit: REPEAT_LIMIT,
-        }),
-        'stop_limit',
-      );
-    });
-
-    test('step 24 still runs', () => {
-      assert.strictEqual(
-        decideToolBatch({
-          step: 24,
-          maxSteps: MAX_STEPS,
-          batch: [readB],
-          recentSignatures: [],
-          repeatLimit: REPEAT_LIMIT,
-        }),
-        'run',
-      );
-    });
-
-    test('an identical batch on the last step stops as a repeat', () => {
-      const signature = toolBatchSignature([readA]);
-      assert.strictEqual(
-        decideToolBatch({
-          step: 25,
-          maxSteps: MAX_STEPS,
-          batch: [readA],
-          recentSignatures: [signature, signature],
-          repeatLimit: REPEAT_LIMIT,
-        }),
-        'stop_repeat',
-      );
-    });
-  });
-
-  suite('shouldForceWrapUp', () => {
-    test('agent step 24 asks for a wrap-up once', () => {
-      assert.strictEqual(
-        shouldForceWrapUp({
-          step: 24,
-          maxSteps: MAX_STEPS,
-          chatMode: 'agent',
-          alreadyNudged: false,
-        }),
-        true,
-      );
-      assert.strictEqual(
-        shouldForceWrapUp({
-          step: 24,
-          maxSteps: MAX_STEPS,
-          chatMode: 'agent',
-          alreadyNudged: true,
-        }),
-        false,
-      );
-    });
-
-    test('debug step 24 asks for a wrap-up once', () => {
-      assert.strictEqual(
-        shouldForceWrapUp({
-          step: 24,
-          maxSteps: MAX_STEPS,
-          chatMode: 'debug',
-          alreadyNudged: false,
-        }),
-        true,
-      );
-      assert.strictEqual(
-        shouldForceWrapUp({
-          step: 24,
-          maxSteps: MAX_STEPS,
-          chatMode: 'debug',
-          alreadyNudged: true,
-        }),
-        false,
-      );
-    });
-
-    test('earlier steps and plan mode do not force a wrap-up', () => {
-      assert.strictEqual(
-        shouldForceWrapUp({
-          step: 23,
-          maxSteps: MAX_STEPS,
-          chatMode: 'agent',
-          alreadyNudged: false,
-        }),
-        false,
-      );
-      assert.strictEqual(
-        shouldForceWrapUp({
-          step: 24,
-          maxSteps: MAX_STEPS,
-          chatMode: 'plan',
-          alreadyNudged: false,
-        }),
-        false,
       );
     });
   });
@@ -421,17 +297,6 @@ suite('agentLoopPolicy', () => {
     });
   });
 
-  suite('agentLengthPauseMessage', () => {
-    test('names the open step when provided', () => {
-      assert.ok(
-        agentLengthPauseMessage({ progressLabel: '2 из 4 · Генератор Excel' }).includes(
-          '2 из 4 · Генератор Excel',
-        ),
-      );
-      assert.ok(agentLengthPauseMessage({}).includes('лимиту длины'));
-    });
-  });
-
   suite('promoteEmptyDisplayFromReasoning', () => {
     test('empty content is shown as the reply and the reasoning trace is cleared', () => {
       assert.deepStrictEqual(promoteEmptyDisplayFromReasoning('', 'Итог: подключил пересчёт.'), {
@@ -456,51 +321,16 @@ suite('agentLoopPolicy', () => {
   });
 
   suite('agentLoopStopMessage', () => {
-    test('names the cap and the repeat count', () => {
+    test('names the repeat count', () => {
       assert.ok(
-        agentLoopStopMessage('stop_limit', {
-          maxSteps: MAX_STEPS,
-          repeatLimit: REPEAT_LIMIT,
-        }).includes('25'),
-      );
-      assert.ok(
-        agentLoopStopMessage('stop_repeat', {
-          maxSteps: MAX_STEPS,
-          repeatLimit: REPEAT_LIMIT,
-        }).includes('3'),
+        agentLoopStopMessage({ repeatLimit: REPEAT_LIMIT }).includes('3'),
       );
     });
 
-    test('points the user at Continue', () => {
+    test('does not reference a Continue button', () => {
       assert.ok(
-        agentLoopStopMessage('stop_limit', {
-          maxSteps: MAX_STEPS,
-          repeatLimit: REPEAT_LIMIT,
-        }).includes('Продолжить'),
+        !agentLoopStopMessage({ repeatLimit: REPEAT_LIMIT }).includes('Продолжить'),
       );
-      assert.ok(
-        agentLoopStopMessage('stop_repeat', {
-          maxSteps: MAX_STEPS,
-          repeatLimit: REPEAT_LIMIT,
-        }).includes('Продолжить'),
-      );
-      assert.ok(agentLengthPauseMessage({}).includes('Продолжить'));
-      assert.ok(agentEmptyTurnPauseMessage({}).includes('Продолжить'));
-      assert.ok(
-        agentToolErrorsPauseMessage({ maxErrors: MAX_CONSECUTIVE_TOOL_ERRORS }).includes(
-          'Продолжить',
-        ),
-      );
-    });
-  });
-
-  suite('updateConsecutiveToolErrors', () => {
-    test('success resets; error increments; rejected alone keeps streak', () => {
-      assert.strictEqual(updateConsecutiveToolErrors(2, ['success']), 0);
-      assert.strictEqual(updateConsecutiveToolErrors(2, ['tool_error']), 3);
-      assert.strictEqual(updateConsecutiveToolErrors(2, ['invalid_params']), 3);
-      assert.strictEqual(updateConsecutiveToolErrors(2, ['rejected']), 2);
-      assert.strictEqual(updateConsecutiveToolErrors(2, ['tool_error', 'success']), 0);
     });
   });
 
@@ -521,11 +351,7 @@ suite('agentLoopPolicy', () => {
       consecutiveEmptyTurns: 0,
       consecutiveLengthContinues: 0,
       summaryNudged: false,
-      consecutiveToolErrors: 0,
-      step: 1,
-      maxSteps: MAX_STEPS,
       chatMode: 'agent' as const,
-      lengthPauseAnnounced: false,
       planDraftedInRun: false,
     };
 
@@ -564,25 +390,6 @@ suite('agentLoopPolicy', () => {
         }),
         { action: 'pause', reason: 'stop_repeat' },
       );
-    });
-
-    test('after tools on step max-1 forces wrap-up with tools disabled', () => {
-      const decision = decideLoopContinuation({
-        ...base,
-        toolsExecuted: true,
-        hasToolCalls: true,
-        batchDecision: 'run',
-        ranAny: true,
-        toolsRanInRun: true,
-        step: 24,
-        summaryNudged: false,
-      });
-      assert.strictEqual(decision.action, 'continue');
-      if (decision.action === 'continue') {
-        assert.ok(decision.nudges.includes('wrap_up'));
-        assert.strictEqual(decision.disableTools, true);
-        assert.strictEqual(decision.markSummaryNudged, true);
-      }
     });
 
     test('empty plan continue and length continue', () => {
@@ -669,55 +476,6 @@ suite('agentLoopPolicy', () => {
           summaryNudged: false,
         }),
         { action: 'natural_end' },
-      );
-    });
-
-    test('tool_errors pause at the cap', () => {
-      assert.deepStrictEqual(
-        decideLoopContinuation({
-          ...base,
-          consecutiveToolErrors: MAX_CONSECUTIVE_TOOL_ERRORS,
-        }),
-        { action: 'pause', reason: 'tool_errors' },
-      );
-    });
-
-    test('absolute turn cap without tools wraps up once then pauses', () => {
-      assert.deepStrictEqual(
-        decideLoopContinuation({
-          ...base,
-          step: MAX_STEPS,
-          summaryNudged: false,
-          assistantText: '',
-        }),
-        {
-          action: 'continue',
-          nudges: ['wrap_up'],
-          disableTools: true,
-          markSummaryNudged: true,
-        },
-      );
-      assert.deepStrictEqual(
-        decideLoopContinuation({
-          ...base,
-          step: MAX_STEPS,
-          summaryNudged: true,
-          assistantText: '',
-        }),
-        { action: 'pause', reason: 'stop_limit' },
-      );
-    });
-
-    test('empty_turn_pause when empty budget is exhausted with open todos', () => {
-      assert.deepStrictEqual(
-        decideLoopContinuation({
-          ...base,
-          planHasOpenTodos: true,
-          consecutiveEmptyTurns: 2,
-          assistantText: '',
-          reasoningText: 'Просто думаю дальше без вопроса.',
-        }),
-        { action: 'pause', reason: 'empty_turn_pause' },
       );
     });
 

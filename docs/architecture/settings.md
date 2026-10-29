@@ -10,7 +10,7 @@
 | **ModelSelection** | пара `{ providerName, modelName }` |
 | **ProviderName** | ключ провайдера: `openAI`, `deepseek`, `anthropic`, … |
 | **ModelName** | ID модели, напр. `deepseek-chat` |
-| **ChatMode** | `normal` \| `plan` \| `agent` \| `debug` |
+| **ChatMode** | `normal` \| `plan` \| `agent` |
 | **LayoutMode** | `ide` \| `agents` |
 | **RefreshProvider** | провайдер, у которого обновляют список моделей |
 

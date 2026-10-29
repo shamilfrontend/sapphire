@@ -1,6 +1,7 @@
-/*--------------------------------------------------------------------------------------
- *  Sapphire — unit tests for chat prep cancel / timeout guard.
- *--------------------------------------------------------------------------------------*/
+/*---------------------------------------------------------------------------------------------
+ *  Copyright (c) Microsoft Corporation. All rights reserved.
+ *  Licensed under the MIT License. See License.txt in the project root for license information.
+ *--------------------------------------------------------------------------------------------*/
 
 import assert from 'assert';
 import { ensureNoDisposablesAreLeakedInTestSuite } from '../../../../../base/test/common/utils.js';
@@ -15,6 +16,8 @@ import {
 } from '../../common/chatPrepGuard.js';
 import {
   canEnqueueFollowUp,
+  hasActiveChatWork,
+  isActiveChatRequest,
   shouldClearStuckStream,
   shouldClearStuckStreamOnStaleEpoch,
   shouldFlushDeadQueue,
@@ -241,6 +244,35 @@ suite('chatStreamGuards', () => {
     assert.strictEqual(shouldClearStuckStream('tool'), true);
     assert.strictEqual(shouldClearStuckStream('awaiting_user'), false);
     assert.strictEqual(shouldClearStuckStream(undefined), false);
+  });
+
+  test('active chat request blocks index LLM, awaiting_user does not', () => {
+    assert.strictEqual(isActiveChatRequest('LLM'), true);
+    assert.strictEqual(isActiveChatRequest('tool'), true);
+    assert.strictEqual(isActiveChatRequest('preparing'), true);
+    assert.strictEqual(isActiveChatRequest('awaiting_user'), false);
+    assert.strictEqual(isActiveChatRequest(undefined), false);
+    assert.strictEqual(isActiveChatRequest('idle', 'not_needed'), false);
+    assert.strictEqual(isActiveChatRequest('idle', undefined), false);
+    assert.strictEqual(isActiveChatRequest('idle', Promise.resolve(() => {})), true);
+  });
+
+  test('hasActiveChatWork scans every thread', () => {
+    assert.strictEqual(hasActiveChatWork({}), false);
+    assert.strictEqual(
+      hasActiveChatWork({
+        a: { isRunning: 'awaiting_user' },
+        b: { isRunning: 'idle', interrupt: 'not_needed' },
+      }),
+      false,
+    );
+    assert.strictEqual(
+      hasActiveChatWork({
+        a: { isRunning: 'awaiting_user' },
+        b: { isRunning: 'preparing' },
+      }),
+      true,
+    );
   });
 
   test('stale-epoch finally clears only idle', () => {

@@ -52,7 +52,6 @@ hero:
 </div>
 
 <p class="feature-more">
-<a href="/guide/modes#debug">Отладка</a>
 <a href="/guide/tools">MCP</a>
 <a href="/guide/office">Офисные файлы</a>
 </p>

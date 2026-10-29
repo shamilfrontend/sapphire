@@ -1,7 +1,7 @@
-/*--------------------------------------------------------------------------------------
- *  Copyright 2025 Glass Devtools, Inc. All rights reserved.
- *  Licensed under the Apache License, Version 2.0. See LICENSE.txt for more information.
- *--------------------------------------------------------------------------------------*/
+/*---------------------------------------------------------------------------------------------
+ *  Copyright (c) Microsoft Corporation. All rights reserved.
+ *  Licensed under the MIT License. See License.txt in the project root for license information.
+ *--------------------------------------------------------------------------------------------*/
 
 import { GoogleGenerativeAI, SchemaType, type Content, type Part, type Tool } from '@google/generative-ai';
 import { getModelCapabilities, getReservedOutputTokenSpace, getSendableReasoningInfo } from '../../common/modelCapabilities.js';
@@ -46,12 +46,12 @@ const providerTitle = () => displayInfoOfProviderName('gemini').title;
 
 const parseDataUrl = (url: string): { mime: string; data: string } | null => {
 	const match = /^data:(image\/[a-zA-Z0-9.+-]+);base64,(.+)$/i.exec(url);
-	if (!match) return null;
+	if (!match) {return null;}
 	return { mime: match[1], data: match[2] };
 };
 
 const userParts = (content: string | GatewayChatContentPart[]): Part[] => {
-	if (typeof content === 'string') return [{ text: content || ' ' }];
+	if (typeof content === 'string') {return [{ text: content || ' ' }];}
 	const parts: Part[] = [];
 	for (const part of content) {
 		if (part.type === 'text') {
@@ -59,14 +59,14 @@ const userParts = (content: string | GatewayChatContentPart[]): Part[] => {
 			continue;
 		}
 		const image = parseDataUrl(part.image_url.url);
-		if (image) parts.push({ inlineData: { mimeType: image.mime, data: image.data } });
+		if (image) {parts.push({ inlineData: { mimeType: image.mime, data: image.data } });}
 	}
 	return parts.length ? parts : [{ text: ' ' }];
 };
 
 const toGeminiContents = (messages: LLMChatMessage[], separateSystemMessage: string | undefined): { system: string; contents: Content[] } => {
 	const systemParts: string[] = [];
-	if (separateSystemMessage?.trim()) systemParts.push(separateSystemMessage.trim());
+	if (separateSystemMessage?.trim()) {systemParts.push(separateSystemMessage.trim());}
 	const toolNameById = new Map<string, string>();
 	const contents: Content[] = [];
 
@@ -93,13 +93,13 @@ const toGeminiContents = (messages: LLMChatMessage[], separateSystemMessage: str
 			const text = typeof message.content === 'string'
 				? message.content
 				: message.content.map((part) => part.text).join('');
-			if (text) parts.push({ text });
+			if (text) {parts.push({ text });}
 			for (const toolCall of message.tool_calls ?? []) {
 				toolNameById.set(toolCall.id, toolCall.function.name);
 				let args: Record<string, unknown> = {};
 				try {
 					const parsed: unknown = JSON.parse(toolCall.function.arguments || '{}');
-					if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) args = parsed as Record<string, unknown>;
+					if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {args = parsed as Record<string, unknown>;}
 				} catch {
 					args = {};
 				}
@@ -126,7 +126,7 @@ const geminiTools = (params: GeminiChatParams): Tool[] | undefined => {
 		allowedToolNames: params.allowedToolNames,
 		disableAllTools: params.disableAllTools,
 	});
-	if (!tools?.length) return undefined;
+	if (!tools?.length) {return undefined;}
 	return [{
 		functionDeclarations: tools.map((tool) => ({
 			name: tool.name,
@@ -176,7 +176,7 @@ export const sendGeminiChat = async (params: GeminiChatParams): Promise<void> =>
 		generationConfig: {
 			maxOutputTokens: Math.max(reserved, budget + 256),
 			...(budget > 0 ? { thinkingConfig: { thinkingBudget: budget } } : {}),
-		} as never,
+		},
 	});
 
 	const abort = new AbortController();
@@ -229,8 +229,8 @@ export const sendGeminiChat = async (params: GeminiChatParams): Promise<void> =>
 			for (const part of parts) {
 				const thought = (part as { thought?: boolean }).thought;
 				if (part.text) {
-					if (thought) fullReasoning += part.text;
-					else fullText += part.text;
+					if (thought) {fullReasoning += part.text;}
+					else {fullText += part.text;}
 				}
 				if (part.functionCall?.name) {
 					const args = part.functionCall.args ?? {};
@@ -262,7 +262,7 @@ export const sendGeminiChat = async (params: GeminiChatParams): Promise<void> =>
 			...(usage ? { usage } : {}),
 		});
 	} catch (error) {
-		if (abort.signal.aborted && !connectTimedOut && !idleTimedOut) return;
+		if (abort.signal.aborted && !connectTimedOut && !idleTimedOut) {return;}
 		if (connectTimedOut) {
 			params.onError({ message: LLM_ERROR_HINTS.connectTimeout, fullError: error instanceof Error ? error : null });
 			return;

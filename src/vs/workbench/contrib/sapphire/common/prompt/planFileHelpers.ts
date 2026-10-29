@@ -1,7 +1,7 @@
-/*--------------------------------------------------------------------------------------
- *  Copyright 2025 Glass Devtools, Inc. All rights reserved.
- *  Licensed under the Apache License, Version 2.0. See LICENSE.txt for more information.
- *--------------------------------------------------------------------------------------*/
+/*---------------------------------------------------------------------------------------------
+ *  Copyright (c) Microsoft Corporation. All rights reserved.
+ *  Licensed under the MIT License. See License.txt in the project root for license information.
+ *--------------------------------------------------------------------------------------------*/
 
 import { PlanTodoItem, PlanTodoStatus } from '../toolsServiceTypes.js';
 import { WORKSPACE_DOT_DIR } from '../workspaceDotDir.js';
@@ -44,11 +44,11 @@ export const planTodosHaveOpen = (todos: readonly PlanTodoItem[]): boolean =>
 
 /** Подпись вида `2 из 4 · …` для текущего шага; undefined, если всё done. */
 export const planProgressLabel = (todos: readonly PlanTodoItem[]): string | undefined => {
-  if (todos.length === 0) return undefined;
+  if (todos.length === 0) {return undefined;}
   const inProgress = todos.find((t) => t.status === 'in_progress');
   const open = todos.find((t) => t.status !== 'completed' && t.status !== 'cancelled');
   const current = inProgress ?? open;
-  if (!current) return undefined;
+  if (!current) {return undefined;}
   const idx = todos.findIndex((t) => t.id === current.id);
   const n = idx >= 0 ? idx + 1 : 1;
   return `${n} из ${todos.length} · ${current.content}`;
@@ -94,7 +94,7 @@ const parseYamlScalar = (raw: string | undefined): string => {
       return t.replace(/^"|"$/g, '');
     }
   }
-  if (t.startsWith("'") && t.endsWith("'")) {
+  if (t.startsWith('\'') && t.endsWith('\'')) {
     return t.slice(1, -1);
   }
   return t;

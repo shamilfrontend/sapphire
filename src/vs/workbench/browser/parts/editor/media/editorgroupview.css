@@ -187,7 +187,7 @@
 	padding: 0 12px;
 	border: none;
 	border-radius: 999px;
-	background-color: #0e639c;
+	background-color: #007acc;
 	color: #fff;
 	font-size: 12px;
 	font-weight: 500;
@@ -196,7 +196,7 @@
 }
 
 .monaco-workbench .part.editor > .content .editor-group-container > .editor-group-watermark-wrapper .editor-group-watermark .shortcuts .sapphire-openfolder-button:hover {
-	background-color: #1177bb;
+	background-color: #1a8ad4;
 }
 
 .monaco-workbench .part.editor > .content .editor-group-container > .editor-group-watermark-wrapper .editor-group-watermark .shortcuts .sapphire-recent-list {

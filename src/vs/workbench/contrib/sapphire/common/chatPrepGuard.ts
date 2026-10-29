@@ -1,6 +1,7 @@
-/*--------------------------------------------------------------------------------------
- *  Sapphire — отмена и таймаут prep перед agent loop (heuristic, getModelSafe, office).
- *--------------------------------------------------------------------------------------*/
+/*---------------------------------------------------------------------------------------------
+ *  Copyright (c) Microsoft Corporation. All rights reserved.
+ *  Licensed under the MIT License. See License.txt in the project root for license information.
+ *--------------------------------------------------------------------------------------------*/
 
 import { CancellationToken } from '../../../../base/common/cancellation.js';
 import { CancellationError } from '../../../../base/common/errors.js';
@@ -40,28 +41,23 @@ export function racePrepAwait<T>(
 
   return new Promise<T>((resolve, reject) => {
     let settled = false;
-    let timeoutHandle: ReturnType<typeof setTimeout> | undefined;
-    let listener: { dispose: () => void } | undefined;
+    // 0 — в следующем macrotask, чтобы UI успел отрисовать preparing / Stop.
+    const timeoutHandle = setTimeout(() => {
+      settle(() => reject(new ChatPrepTimeoutError()));
+    }, Math.max(0, timeoutMs));
+    const listener = token.onCancellationRequested(() => {
+      settle(() => reject(new CancellationError()));
+    });
 
-    const settle = (fn: () => void) => {
+    function settle(fn: () => void) {
       if (settled) {
         return;
       }
       settled = true;
-      if (timeoutHandle !== undefined) {
-        clearTimeout(timeoutHandle);
-      }
-      listener?.dispose();
+      clearTimeout(timeoutHandle);
+      listener.dispose();
       fn();
-    };
-
-    listener = token.onCancellationRequested(() => {
-      settle(() => reject(new CancellationError()));
-    });
-    // 0 — в следующем macrotask, чтобы UI успел отрисовать preparing / Stop.
-    timeoutHandle = setTimeout(() => {
-      settle(() => reject(new ChatPrepTimeoutError()));
-    }, Math.max(0, timeoutMs));
+    }
 
     promise.then(
       (value) => settle(() => resolve(value)),

@@ -1,7 +1,7 @@
-/*--------------------------------------------------------------------------------------
- *  Copyright 2025 Glass Devtools, Inc. All rights reserved.
- *  Licensed under the Apache License, Version 2.0. See LICENSE.txt for more information.
- *--------------------------------------------------------------------------------------*/
+/*---------------------------------------------------------------------------------------------
+ *  Copyright (c) Microsoft Corporation. All rights reserved.
+ *  Licensed under the MIT License. See License.txt in the project root for license information.
+ *--------------------------------------------------------------------------------------------*/
 
 import { deepClone } from '../../../../base/common/objects.js';
 import { generateUuid } from '../../../../base/common/uuid.js';
@@ -12,6 +12,7 @@ import {
 } from '../common/chatFolders.js';
 import { buildChatHistorySummary } from '../common/chatHistorySummary.js';
 import { chatTrace } from '../common/chatSendTrace.js';
+import { isChatMode, resolveThreadChatMode } from '../common/sapphireSettingsTypes.js';
 import { ChatThreadCollaboratorHost, ChatThreads, ThreadType } from './chatThreadTypes.js';
 
 export const newThreadObject = (): ThreadType => {
@@ -36,7 +37,7 @@ export class ChatThreadLibrary {
   getCurrentThread(): ThreadType {
     const state = this._s.state;
     const thread = state.allThreads[state.currentThreadId];
-    if (!thread) throw new Error(`Current thread should never be undefined`);
+    if (!thread) {throw new Error(`Current thread should never be undefined`);}
     return thread;
   }
 
@@ -45,12 +46,12 @@ export class ChatThreadLibrary {
 
     // focusedMessageIdx из state треда
     const focusedMessageIdx = thread.state.focusedMessageIdx;
-    if (focusedMessageIdx === undefined) return;
+    if (focusedMessageIdx === undefined) {return;}
 
     // сообщение должно быть user и в режиме редактирования
     const focusedMessage = thread.messages[focusedMessageIdx];
-    if (focusedMessage.role !== 'user') return;
-    if (!focusedMessage.state) return;
+    if (focusedMessage.role !== 'user') {return;}
+    if (!focusedMessage.state) {return;}
 
     return focusedMessageIdx;
   }
@@ -60,7 +61,7 @@ export class ChatThreadLibrary {
   }
 
   switchToThread(threadId: string) {
-    if (!this._s.state.allThreads[threadId]) return;
+    if (!this._s.state.allThreads[threadId]) {return;}
     const openThreadIds = this._s._withThreadOpened(threadId, this._s.state.openThreadIds);
     const shouldPersist = openThreadIds !== this._s.state.openThreadIds;
     this._s._setState({ currentThreadId: threadId, openThreadIds });
@@ -76,7 +77,7 @@ export class ChatThreadLibrary {
   closeTab(threadId: string) {
     const { openThreadIds: prevOpen, currentThreadId, allThreads } = this._s.state;
     const idx = prevOpen.indexOf(threadId);
-    if (idx === -1) return;
+    if (idx === -1) {return;}
 
     const openThreadIds = prevOpen.filter((id: string) => id !== threadId);
 
@@ -97,11 +98,18 @@ export class ChatThreadLibrary {
   }
 
   openNewThread(folderId?: string | null) {
-    const { allThreads: currentThreads, openThreadIds } = this._s.state;
+    const { allThreads: currentThreads, openThreadIds, currentThreadId } = this._s.state;
     const newThread = newThreadObject();
     if (folderId && this._s.state.folders.some((folder: ChatFolder) => folder.id === folderId)) {
       newThread.folderId = folderId;
     }
+    // Новый чат стартует с режима текущего, но дальше хранит свой — смена в одном не трогает другой.
+    const source = currentThreads[currentThreadId];
+    const globalMode = this._s._settingsService?.state?.globalSettings?.chatMode;
+    newThread.state.chatMode = resolveThreadChatMode(
+      source?.state.chatMode,
+      isChatMode(globalMode) ? globalMode : 'normal',
+    );
 
     const newThreads: ChatThreads = {
       ...currentThreads,
@@ -150,7 +158,7 @@ export class ChatThreadLibrary {
   duplicateThread(threadId: string) {
     const { allThreads: currentThreads, openThreadIds } = this._s.state;
     const threadToDuplicate = currentThreads[threadId];
-    if (!threadToDuplicate) return;
+    if (!threadToDuplicate) {return;}
     const newThread = {
       ...deepClone(threadToDuplicate),
       id: generateUuid(),
@@ -189,8 +197,8 @@ export class ChatThreadLibrary {
 
   renameFolder(folderId: string, name: string): void {
     const trimmed = name.trim();
-    if (!trimmed) return;
-    if (!this._s.state.folders.some((folder: ChatFolder) => folder.id === folderId)) return;
+    if (!trimmed) {return;}
+    if (!this._s.state.folders.some((folder: ChatFolder) => folder.id === folderId)) {return;}
     const folders = this._s.state.folders.map((folder: ChatFolder) =>
       folder.id === folderId ? { ...folder, name: trimmed } : folder,
     );
@@ -200,7 +208,7 @@ export class ChatThreadLibrary {
 
   deleteFolder(folderId: string): void {
     const folder = this._s.state.folders.find((item: ChatFolder) => item.id === folderId);
-    if (!folder) return;
+    if (!folder) {return;}
     const parentId = folder.parentId;
     const folders = this._s.state.folders
       .filter((item: ChatFolder) => item.id !== folderId)
@@ -218,10 +226,10 @@ export class ChatThreadLibrary {
 
   moveThreadToFolder(threadId: string, folderId: string | null): void {
     const thread = this._s.state.allThreads[threadId];
-    if (!thread) return;
+    if (!thread) {return;}
     if (folderId && !this._s.state.folders.some((folder: ChatFolder) => folder.id === folderId))
-      return;
-    if ((thread.folderId ?? null) === (folderId ?? null)) return;
+      {return;}
+    if ((thread.folderId ?? null) === (folderId ?? null)) {return;}
     const allThreads: ChatThreads = {
       ...this._s.state.allThreads,
       [threadId]: { ...thread, folderId },
@@ -232,11 +240,11 @@ export class ChatThreadLibrary {
 
   moveFolder(folderId: string, newParentId: string | null): void {
     const folder = this._s.state.folders.find((item: ChatFolder) => item.id === folderId);
-    if (!folder) return;
+    if (!folder) {return;}
     if (newParentId && !this._s.state.folders.some((item: ChatFolder) => item.id === newParentId))
-      return;
-    if (folder.parentId === newParentId) return;
-    if (folderWouldCreateCycle(this._s.state.folders, folderId, newParentId)) return;
+      {return;}
+    if (folder.parentId === newParentId) {return;}
+    if (folderWouldCreateCycle(this._s.state.folders, folderId, newParentId)) {return;}
     const siblings = this._s.state.folders.filter(
       (item: ChatFolder) => item.parentId === newParentId && item.id !== folderId,
     );
@@ -251,14 +259,14 @@ export class ChatThreadLibrary {
 
   reorderFolder(folderId: string, beforeSiblingId: string | null): void {
     const folders = reorderFolderAmongSiblings(this._s.state.folders, folderId, beforeSiblingId);
-    if (!folders) return;
+    if (!folders) {return;}
     this._s._setState({ folders });
     this._s._storeAllThreads(this._s.state.allThreads, this._s.state.openThreadIds, folders);
   }
 
   setThreadPinned(threadId: string, pinned: boolean): void {
     const thread = this._s.state.allThreads[threadId];
-    if (!thread || !!thread.pinned === pinned) return;
+    if (!thread || !!thread.pinned === pinned) {return;}
     const allThreads: ChatThreads = {
       ...this._s.state.allThreads,
       [threadId]: { ...thread, pinned },

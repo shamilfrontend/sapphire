@@ -1,7 +1,7 @@
-/*--------------------------------------------------------------------------------------
- *  Copyright 2025 Glass Devtools, Inc. All rights reserved.
- *  Licensed under the Apache License, Version 2.0. See LICENSE.txt for more information.
- *--------------------------------------------------------------------------------------*/
+/*---------------------------------------------------------------------------------------------
+ *  Copyright (c) Microsoft Corporation. All rights reserved.
+ *  Licensed under the MIT License. See License.txt in the project root for license information.
+ *--------------------------------------------------------------------------------------------*/
 
 import { Emitter, Event } from '../../../../base/common/event.js';
 import { Disposable } from '../../../../base/common/lifecycle.js';
@@ -230,7 +230,7 @@ const _validatedModelState = (
         !!settingsAtProvider[key as keyof typeof settingsAtProvider],
     );
 
-    if (didFillInProviderSettings === settingsAtProvider._didFillInProviderSettings) continue;
+    if (didFillInProviderSettings === settingsAtProvider._didFillInProviderSettings) {continue;}
 
     newSettingsOfProvider = {
       ...newSettingsOfProvider,
@@ -242,17 +242,17 @@ const _validatedModelState = (
   }
 
   // optionsOfModel — только настроенные и включённые провайдеры
-  let newModelOptions: ModelOption[] = [];
+  const newModelOptions: ModelOption[] = [];
   const seenModelKeys = new Set<string>();
   for (const providerName of providerNames) {
     const providerTitle = providerName; // намеренно без displayInfo — короткое имя
     const settingsAtProvider = newSettingsOfProvider[providerName];
-    if (!settingsAtProvider._didFillInProviderSettings) continue; // не настроен — без options
-    if (settingsAtProvider.isEnabled === false) continue; // пользователь выключил — без options
+    if (!settingsAtProvider._didFillInProviderSettings) {continue;} // не настроен — без options
+    if (settingsAtProvider.isEnabled === false) {continue;} // пользователь выключил — без options
     for (const { modelName, isHidden } of settingsAtProvider.models) {
-      if (isHidden) continue;
+      if (isHidden) {continue;}
       const key = `${providerName}:${modelName}`;
-      if (seenModelKeys.has(key)) continue;
+      if (seenModelKeys.has(key)) {continue;}
       seenModelKeys.add(key);
       newModelOptions.push({
         name: `${modelName} (${providerTitle})`,
@@ -281,7 +281,7 @@ const _validatedModelState = (
             modelSelectionsEqual(m.selection, modelSelectionAtFeature),
           );
 
-    if (selnIdx !== -1) continue; // модель ещё в списке
+    if (selnIdx !== -1) {continue;} // модель ещё в списке
 
     newModelSelectionOfFeature = {
       ...newModelSelectionOfFeature,
@@ -318,6 +318,34 @@ const defaultState = () => {
     mcpUserStateOfName: {},
   };
   return d;
+};
+
+const assignStoredProviderSettings = <P extends ProviderName>(
+  target: SettingsOfProvider,
+  providerName: P,
+  stored: SettingsOfProvider[P] | undefined,
+): void => {
+  target[providerName] = {
+    ...defaultSettingsOfProvider[providerName],
+    ...stored,
+    isEnabled: stored?.isEnabled ?? true,
+  };
+};
+
+const pruneSettingsOfProvider = (stored: SettingsOfProvider | undefined): SettingsOfProvider => {
+  const pruned: SettingsOfProvider = { ...defaultSettingsOfProvider };
+  for (const providerName of providerNames) {
+    assignStoredProviderSettings(pruned, providerName, stored?.[providerName]);
+  }
+  return pruned;
+};
+
+const pruneOverridesOfModel = (stored: OverridesOfModel | undefined): OverridesOfModel => {
+  const pruned: OverridesOfModel = { ...defaultOverridesOfModel };
+  for (const providerName of providerNames) {
+    pruned[providerName] = stored?.[providerName] ?? {};
+  }
+  return pruned;
 };
 
 export const ISapphireSettingsService = createDecorator<ISapphireSettingsService>('SapphireSettingsService');
@@ -368,7 +396,7 @@ class SapphireSettingsService extends Disposable implements ISapphireSettingsSer
       readS = await this._readState();
 
       if (readS.globalSettings.includeToolLintErrors === undefined)
-        readS.globalSettings.includeToolLintErrors = defaultGlobalSettings.includeToolLintErrors;
+        {readS.globalSettings.includeToolLintErrors = defaultGlobalSettings.includeToolLintErrors;}
 
       // Подставляем дефолты для незаданных типов approval (edits/terminal/MCP/network off)
       readS.globalSettings.autoApprove = {
@@ -385,47 +413,49 @@ class SapphireSettingsService extends Disposable implements ISapphireSettingsSer
       }
       // disableSystemMessage
       if (readS.globalSettings.disableSystemMessage === undefined)
-        readS.globalSettings.disableSystemMessage = false;
+        {readS.globalSettings.disableSystemMessage = false;}
 
       // autoAcceptLLMChanges
       if (readS.globalSettings.autoAcceptLLMChanges === undefined)
-        readS.globalSettings.autoAcceptLLMChanges = false;
+        {readS.globalSettings.autoAcceptLLMChanges = false;}
 
       // звук: chat done / approval
       if (readS.globalSettings.playChatNotificationSound === undefined)
-        readS.globalSettings.playChatNotificationSound = true;
+        {readS.globalSettings.playChatNotificationSound = true;}
 
       // privacy-by-default: не подмешивать файлы в контекст без явного opt-in
       if (readS.globalSettings.autoAttachActiveFile === undefined)
-        readS.globalSettings.autoAttachActiveFile = defaultGlobalSettings.autoAttachActiveFile;
+        {readS.globalSettings.autoAttachActiveFile = defaultGlobalSettings.autoAttachActiveFile;}
 
       if (readS.globalSettings.autoRetrieveRelevantFiles === undefined)
-        readS.globalSettings.autoRetrieveRelevantFiles =
-          defaultGlobalSettings.autoRetrieveRelevantFiles;
+        {readS.globalSettings.autoRetrieveRelevantFiles =
+          defaultGlobalSettings.autoRetrieveRelevantFiles;}
 
       if (readS.globalSettings.enableAutocomplete === undefined)
-        readS.globalSettings.enableAutocomplete = defaultGlobalSettings.enableAutocomplete;
+        {readS.globalSettings.enableAutocomplete = defaultGlobalSettings.enableAutocomplete;}
 
       if (readS.globalSettings.chatMode === undefined)
-        readS.globalSettings.chatMode = defaultGlobalSettings.chatMode;
+        {readS.globalSettings.chatMode = defaultGlobalSettings.chatMode;}
 
       if (readS.globalSettings.projectIndexEnabled === undefined)
-        readS.globalSettings.projectIndexEnabled = true;
+        {readS.globalSettings.projectIndexEnabled = true;}
       if (readS.globalSettings.projectIndexIncludeOffice === undefined)
-        readS.globalSettings.projectIndexIncludeOffice = true;
+        {readS.globalSettings.projectIndexIncludeOffice = true;}
       if (readS.globalSettings.projectIndexLlmPurpose === undefined)
-        readS.globalSettings.projectIndexLlmPurpose = false;
+        {readS.globalSettings.projectIndexLlmPurpose = false;}
 
       if (readS.globalSettings.allowAgentPathsOutsideWorkspace === undefined)
-        readS.globalSettings.allowAgentPathsOutsideWorkspace = false;
+        {readS.globalSettings.allowAgentPathsOutsideWorkspace = false;}
 
       // layoutShell: unknown → IDE
       if (readS.globalSettings.layoutMode !== 'ide' && readS.globalSettings.layoutMode !== 'agents')
-        readS.globalSettings.layoutMode = 'ide';
+        {readS.globalSettings.layoutMode = 'ide';}
 
-      // gather → normal
+      // gather → normal; снятый debug → agent
       if ((readS.globalSettings.chatMode as string) === 'gather')
-        readS.globalSettings.chatMode = 'normal';
+        {readS.globalSettings.chatMode = 'normal';}
+      if ((readS.globalSettings.chatMode as string) === 'debug')
+        {readS.globalSettings.chatMode = 'agent';}
 
       // userRules из aiInstructions
       if (!Array.isArray(readS.globalSettings.userRules)) {
@@ -479,23 +509,10 @@ class SapphireSettingsService extends Disposable implements ISapphireSettingsSer
         // ...readS.settingsOfProvider,
       };
 
-      // только известные провайдеры
-      const prunedSettingsOfProvider = {} as typeof readS.settingsOfProvider;
-      for (const providerName of providerNames) {
-        const merged = {
-          ...defaultSettingsOfProvider[providerName],
-          ...readS.settingsOfProvider[providerName],
-        } as any;
-        if (merged.isEnabled === undefined) {
-          merged.isEnabled = true;
-        }
-        prunedSettingsOfProvider[providerName] = merged;
-      }
+      // только известные провайдеры; отсутствующий isEnabled → включён
+      const prunedSettingsOfProvider = pruneSettingsOfProvider(readS.settingsOfProvider);
       // убрать overrides удалённых провайдеров
-      const prunedOverrides = {} as typeof readS.overridesOfModel;
-      for (const providerName of providerNames) {
-        prunedOverrides[providerName] = readS.overridesOfModel?.[providerName] ?? {};
-      }
+      const prunedOverrides = pruneOverridesOfModel(readS.overridesOfModel);
       readS = {
         ...readS,
         settingsOfProvider: prunedSettingsOfProvider,
@@ -675,8 +692,8 @@ class SapphireSettingsService extends Disposable implements ISapphireSettingsSer
     this._onDidChangeState.fire();
 
     // хуки storage
-    if (this.state.globalSettings.syncApplyToChat) this._onUpdate_syncApplyToChat();
-    if (this.state.globalSettings.syncSCMToChat) this._onUpdate_syncSCMToChat();
+    if (this.state.globalSettings.syncApplyToChat) {this._onUpdate_syncApplyToChat();}
+    if (this.state.globalSettings.syncSCMToChat) {this._onUpdate_syncSCMToChat();}
   };
 
   setModelSelectionOfFeature: SetModelSelectionOfFeatureFn = async (featureName, newVal) => {
@@ -770,7 +787,7 @@ class SapphireSettingsService extends Disposable implements ISapphireSettingsSer
   toggleModelHidden(providerName: ProviderName, modelName: string) {
     const { models } = this.state.settingsOfProvider[providerName];
     const modelIdx = models.findIndex((m) => m.modelName === modelName);
-    if (modelIdx === -1) return;
+    if (modelIdx === -1) {return;}
     const newIsHidden = !models[modelIdx].isHidden;
     const newModels: SapphireStatefulModelInfo[] = [
       ...models.slice(0, modelIdx),
@@ -783,7 +800,7 @@ class SapphireSettingsService extends Disposable implements ISapphireSettingsSer
   addModel(providerName: ProviderName, modelName: string) {
     const { models } = this.state.settingsOfProvider[providerName];
     const existingIdx = models.findIndex((m) => m.modelName === modelName);
-    if (existingIdx !== -1) return; // уже есть — ничего не делаем
+    if (existingIdx !== -1) {return;} // уже есть — ничего не делаем
     const newModels = [...models, { modelName, type: 'custom', isHidden: false } as const];
     this.setSettingOfProvider(providerName, 'models', newModels);
   }
@@ -791,7 +808,7 @@ class SapphireSettingsService extends Disposable implements ISapphireSettingsSer
   deleteModel(providerName: ProviderName, modelName: string): boolean {
     const { models } = this.state.settingsOfProvider[providerName];
     const delIdx = models.findIndex((m) => m.modelName === modelName);
-    if (delIdx === -1) return false;
+    if (delIdx === -1) {return false;}
     const newModels = [
       ...models.slice(0, delIdx), // до удаляемого индекса
       ...models.slice(delIdx + 1, Infinity),
@@ -830,7 +847,7 @@ class SapphireSettingsService extends Disposable implements ISapphireSettingsSer
       ...mcpServerStates,
     };
     serverNames.forEach((serverName) => {
-      if (serverName in newMCPServerStates) {
+      if (Object.hasOwn(newMCPServerStates, serverName)) {
         delete newMCPServerStates[serverName];
       }
     });

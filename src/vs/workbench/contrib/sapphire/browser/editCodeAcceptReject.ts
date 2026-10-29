@@ -1,7 +1,7 @@
-/*--------------------------------------------------------------------------------------
- *  Copyright 2025 Glass Devtools, Inc. All rights reserved.
- *  Licensed under the Apache License, Version 2.0. See LICENSE.txt for more information.
- *--------------------------------------------------------------------------------------*/
+/*---------------------------------------------------------------------------------------------
+ *  Copyright (c) Microsoft Corporation. All rights reserved.
+ *  Licensed under the MIT License. See License.txt in the project root for license information.
+ *--------------------------------------------------------------------------------------------*/
 
 import { IRange } from '../../../../editor/common/core/range.js';
 import { URI } from '../../../../base/common/uri.js';
@@ -16,7 +16,7 @@ export class EditCodeAcceptReject {
     const uri = diffZone._URI;
 
     const streamRequestId = diffZone._streamState.streamRequestIdRef?.current;
-    if (!streamRequestId) return;
+    if (!streamRequestId) {return;}
 
     this._s._llmMessageService.abort(streamRequestId);
 
@@ -27,24 +27,24 @@ export class EditCodeAcceptReject {
   // diffareaid CtrlKZone (стрим у linked DiffZone)
   interruptCtrlKStreaming({ diffareaid }: { diffareaid: number }) {
     const ctrlKZone = this._s.diffAreaOfId[diffareaid];
-    if (ctrlKZone?.type !== 'CtrlKZone') return;
-    if (!ctrlKZone._linkedStreamingDiffZone) return;
+    if (ctrlKZone?.type !== 'CtrlKZone') {return;}
+    if (!ctrlKZone._linkedStreamingDiffZone) {return;}
 
     const linkedStreamingDiffZone = this._s.diffAreaOfId[ctrlKZone._linkedStreamingDiffZone];
-    if (!linkedStreamingDiffZone) return;
-    if (linkedStreamingDiffZone.type !== 'DiffZone') return;
+    if (!linkedStreamingDiffZone) {return;}
+    if (linkedStreamingDiffZone.type !== 'DiffZone') {return;}
 
     this._stopIfStreaming(linkedStreamingDiffZone);
     this._s._undoHistory(linkedStreamingDiffZone._URI);
   }
 
   interruptURIStreaming({ uri }: { uri: URI }) {
-    if (!this._s._uriIsStreaming(uri)) return;
+    if (!this._s._uriIsStreaming(uri)) {return;}
     // Сначала stop стрима, затем undo — без гонки с write
     for (const diffareaid of this._s.diffAreasOfURI[uri.fsPath] || []) {
       const diffArea = this._s.diffAreaOfId[diffareaid];
-      if (diffArea?.type !== 'DiffZone') continue;
-      if (!diffArea._streamState.isStreaming) continue;
+      if (diffArea?.type !== 'DiffZone') {continue;}
+      if (!diffArea._streamState.isStreaming) {continue;}
       this._stopIfStreaming(diffArea);
     }
     this._s._undoHistory(uri);
@@ -71,20 +71,20 @@ export class EditCodeAcceptReject {
     _addToHistory,
   }) => {
     const diffareaids = this._s.diffAreasOfURI[uri.fsPath];
-    if ((diffareaids?.size ?? 0) === 0) return; // нечего делать
+    if ((diffareaids?.size ?? 0) === 0) {return;} // нечего делать
 
     const { onFinishEdit } =
       _addToHistory === false ? { onFinishEdit: () => {} } : this._s._addToHistory(uri);
 
     for (const diffareaid of diffareaids ?? []) {
       const diffArea = this._s.diffAreaOfId[diffareaid];
-      if (!diffArea) continue;
+      if (!diffArea) {continue;}
 
       if (diffArea.type === 'DiffZone') {
         if (behavior === 'reject') {
           this._revertDiffZone(diffArea);
           this._s._diffZones._deleteDiffZone(diffArea);
-        } else if (behavior === 'accept') this._s._diffZones._deleteDiffZone(diffArea);
+        } else if (behavior === 'accept') {this._s._diffZones._deleteDiffZone(diffArea);}
       } else if (diffArea.type === 'CtrlKZone' && removeCtrlKs) {
         this._s._diffZones._deleteCtrlKZone(diffArea);
       }
@@ -97,13 +97,13 @@ export class EditCodeAcceptReject {
   // void.acceptDiff
   public async acceptDiff({ diffid }: { diffid: number }) {
     const diff = this._s.diffOfId[diffid];
-    if (!diff) return;
+    if (!diff) {return;}
 
     const { diffareaid } = diff;
     const diffArea = this._s.diffAreaOfId[diffareaid];
-    if (!diffArea) return;
+    if (!diffArea) {return;}
 
-    if (diffArea.type !== 'DiffZone') return;
+    if (diffArea.type !== 'DiffZone') {return;}
 
     const uri = diffArea._URI;
 
@@ -154,13 +154,13 @@ export class EditCodeAcceptReject {
   // void.rejectDiff
   public async rejectDiff({ diffid }: { diffid: number }) {
     const diff = this._s.diffOfId[diffid];
-    if (!diff) return;
+    if (!diff) {return;}
 
     const { diffareaid } = diff;
     const diffArea = this._s.diffAreaOfId[diffareaid];
-    if (!diffArea) return;
+    if (!diffArea) {return;}
 
-    if (diffArea.type !== 'DiffZone') return;
+    if (diffArea.type !== 'DiffZone') {return;}
 
     const uri = diffArea._URI;
 

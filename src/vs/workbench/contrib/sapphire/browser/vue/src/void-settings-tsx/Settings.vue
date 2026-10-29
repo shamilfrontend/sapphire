@@ -8,8 +8,11 @@ import { computed, ref } from 'vue';
 import {
   cloudProviderNames,
   displayInfoOfFeatureName,
+  isProviderListedAsConnected,
   LayoutMode,
   localProviderNames,
+  providerNames,
+  type ProviderName,
 } from '../../../../common/sapphireSettingsTypes.js';
 import { LLM_IDE_TITLE } from '../../../../common/llmProviderConfig.js';
 import ErrorBoundary from '../sidebar-tsx/ErrorBoundary.vue';
@@ -22,6 +25,7 @@ import LayoutModeCards from '../util/LayoutModeCards.vue';
 import { toolApprovalTypes, ToolApprovalType } from '../../../../common/toolsServiceTypes.js';
 import ModelDump from './ModelDump.vue';
 import SettingsForProvider from './SettingsForProvider.vue';
+import AddProviderForm from './AddProviderForm.vue';
 import { revealSapphireRulesFile } from './userRules.js';
 import UserRulesList from './UserRulesList.vue';
 import { revealSapphireSkillsFile } from './userSkills.js';
@@ -29,6 +33,7 @@ import UserSkillsList from './UserSkillsList.vue';
 import FastApplyMethodDropdown from './FastApplyMethodDropdown.vue';
 import MCPServersList from './MCPServersList.vue';
 import ToolApprovalTypeSwitch from './ToolApprovalTypeSwitch.vue';
+import { openAgentsFile } from '../agents-window-tsx/agentsFileBridge.js';
 
 type Tab = 'models' | 'providers' | 'featureOptions' | 'mcp' | 'rules' | 'skills' | 'layout';
 
@@ -75,13 +80,50 @@ Use Model Context Protocol to provide Agent mode with more tools.
 							`;
 
 const revealMcpConfig = async () => {
+  const uri = await mcpService.getOrCreateMCPConfigFile();
+  if (openAgentsFile({ fsPath: uri.fsPath })) return;
   await mcpService.revealMCPConfigFile();
 };
 
-const providerSections = [
-  { id: 'cloud', title: 'Облачные', providers: cloudProviderNames },
-  { id: 'local', title: 'Локальные', providers: localProviderNames },
-] as const;
+const catalogProviderNames = new Set<ProviderName>([
+  ...cloudProviderNames,
+  ...localProviderNames,
+]);
+
+const isConnected = (providerName: ProviderName) =>
+  isProviderListedAsConnected(settingsState.value.settingsOfProvider[providerName]);
+
+const connectedCloud = computed(() => cloudProviderNames.filter(isConnected));
+const connectedLocal = computed(() => localProviderNames.filter(isConnected));
+const connectedOther = computed(() =>
+  providerNames.filter((name) => !catalogProviderNames.has(name) && isConnected(name)),
+);
+
+const connectedProviderSections = computed(() => {
+  const sections: { id: string; title: string; providers: readonly ProviderName[] }[] = [];
+  if (connectedCloud.value.length) {
+    sections.push({ id: 'cloud', title: 'Облачные', providers: connectedCloud.value });
+  }
+  if (connectedLocal.value.length) {
+    sections.push({ id: 'local', title: 'Локальные', providers: connectedLocal.value });
+  }
+  if (connectedOther.value.length) {
+    sections.push({ id: 'other', title: 'Другие', providers: connectedOther.value });
+  }
+  return sections;
+});
+
+const hasConnectedProviders = computed(() => connectedProviderSections.value.length > 0);
+
+const showAddProvider = ref(false);
+
+const onProviderAdded = () => {
+  showAddProvider.value = false;
+};
+
+const onAddProviderCancel = () => {
+  showAddProvider.value = false;
+};
 </script>
 
 <template>
@@ -160,8 +202,11 @@ const providerSections = [
               на выбранный endpoint.
             </p>
             <div class="flex flex-col gap-10">
+              <p v-if="!hasConnectedProviders" class="text-void-fg-3 text-sm">
+                Нет подключённых провайдеров.
+              </p>
               <section
-                v-for="section in providerSections"
+                v-for="section in connectedProviderSections"
                 :key="section.id"
                 class="flex flex-col gap-6"
               >
@@ -176,6 +221,22 @@ const providerSections = [
                   />
                 </div>
               </section>
+
+              <div class="flex flex-col gap-4">
+                <button
+                  v-if="!showAddProvider"
+                  type="button"
+                  class="px-4 py-2 rounded text-sm font-medium w-fit transition-colors bg-[#0e639c] text-white hover:bg-[#1177bb]"
+                  @click="showAddProvider = true"
+                >
+                  Добавить провайдер
+                </button>
+                <AddProviderForm
+                  v-else
+                  @added="onProviderAdded"
+                  @cancel="onAddProviderCancel"
+                />
+              </div>
             </div>
           </ErrorBoundary>
         </div>
@@ -474,8 +535,8 @@ const providerSections = [
                       <div class="flex flex-col gap-0.5 pointer-events-none">
                         <span class="text-void-fg-3 text-xs">LLM-описания файлов (purpose)</span>
                         <span class="text-void-fg-3 text-[11px] opacity-80 leading-snug">
-                          Не запускаются автоматически. Разрешает ручной запуск из окна индекса
-                          (модель SCM: короткое «зачем файл» и теги).
+                          В фоне, когда в чате нет активных запросов (модель SCM: короткое «зачем
+                          файл» и теги). Пока чат занят, очередь ждёт.
                         </span>
                       </div>
                     </div>

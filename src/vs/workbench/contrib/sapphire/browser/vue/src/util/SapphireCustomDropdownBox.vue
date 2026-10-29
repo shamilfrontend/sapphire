@@ -226,7 +226,10 @@ const selectOption = (option: T) => {
 <template>
   <div
     v-if="selectedOption !== undefined"
-    :class="[fillWidth ? 'block w-full min-w-0 max-w-full' : 'inline-block', 'relative']"
+    :class="[
+      fillWidth ? 'block w-full min-w-0 max-w-full' : 'inline-flex w-max max-w-full min-w-0',
+      'relative',
+    ]"
   >
     <!-- Скрытый блок для расчёта ширины пунктов (fallback без Tailwind) -->
     <div
@@ -267,9 +270,12 @@ const selectOption = (option: T) => {
     <button
       ref="referenceRef"
       type="button"
-      class="flex items-center h-4 bg-transparent whitespace-nowrap hover:brightness-90 w-full min-w-0"
+      :class="[
+        'flex items-center h-4 bg-transparent whitespace-nowrap hover:brightness-90',
+        fillWidth ? 'w-full min-w-0' : 'w-max max-w-full min-w-0',
+      ]"
       :style="{ background: 'transparent', color: triggerColor }"
-      :title="iconOnly || fillWidth ? displayName : undefined"
+      :title="displayName || undefined"
       @click="isOpen = !isOpen"
     >
       <span

@@ -1,7 +1,7 @@
-/*--------------------------------------------------------------------------------------
- *  Copyright 2025 Glass Devtools, Inc. All rights reserved.
- *  Licensed under the Apache License, Version 2.0. See LICENSE.txt for more information.
- *--------------------------------------------------------------------------------------*/
+/*---------------------------------------------------------------------------------------------
+ *  Copyright (c) Microsoft Corporation. All rights reserved.
+ *  Licensed under the MIT License. See License.txt in the project root for license information.
+ *--------------------------------------------------------------------------------------------*/
 
 import type { ProviderName } from './sapphireSettingsTypes.js';
 
@@ -50,8 +50,8 @@ const trimSlash = (url: string): string => url.replace(/\/+$/, '');
 
 const withV1 = (endpoint: string): string => {
 	const base = trimSlash(endpoint.trim());
-	if (!base) return base;
-	if (/\/v1$/i.test(base)) return base;
+	if (!base) {return base;}
+	if (/\/v1$/i.test(base)) {return base;}
 	return `${base}/v1`;
 };
 
@@ -66,7 +66,7 @@ export const resolveOpenAICompatibleBaseURL = (
 	purpose: 'chat' | 'list' = 'chat',
 ): string => {
 	const fixed = FIXED_OPENAI_BASE[providerName];
-	if (fixed) return fixed;
+	if (fixed) {return fixed;}
 
 	const endpoint = (settings.endpoint ?? '').trim();
 	const region = (settings.region ?? '').trim() || (providerName === 'googleVertex' ? 'us-west2' : 'us-east-1');
@@ -95,7 +95,7 @@ export const resolveOpenAICompatibleBaseURL = (
 	}
 
 	if (providerName === 'awsBedrock') {
-		if (endpoint) return withV1(endpoint);
+		if (endpoint) {return withV1(endpoint);}
 		return `https://bedrock-runtime.${region}.amazonaws.com/openai/v1`;
 	}
 
@@ -103,13 +103,13 @@ export const resolveOpenAICompatibleBaseURL = (
 };
 
 export const parseExtraHeaders = (headersJSON: string | undefined): Record<string, string> => {
-	if (!headersJSON?.trim()) return {};
+	if (!headersJSON?.trim()) {return {};}
 	try {
 		const parsed: unknown = JSON.parse(headersJSON);
-		if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return {};
+		if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {return {};}
 		const out: Record<string, string> = {};
 		for (const [key, value] of Object.entries(parsed)) {
-			if (typeof value === 'string') out[key] = value;
+			if (typeof value === 'string') {out[key] = value;}
 		}
 		return out;
 	} catch {

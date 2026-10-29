@@ -13,6 +13,7 @@ import {
   SapphireStatefulModelInfo,
   displayInfoOfProviderName,
 } from '../../../../common/sapphireSettingsTypes.js';
+import { getModelDisplayName } from '../../../../common/modelCapabilities.js';
 import SapphireSwitch from '../util/SapphireSwitch.vue';
 import { useAccessor, useSettingsState } from '../util/services.js';
 import SimpleModelSettingsDialog from './SimpleModelSettingsDialog.vue';
@@ -92,6 +93,12 @@ const providerTitleOf = (providerName: ProviderName) => displayInfoOfProviderNam
 
 const hasOverrides = (providerName: ProviderName, modelName: string) =>
   !!settingsState.value.overridesOfModel?.[providerName]?.[modelName];
+
+const modelLabel = (providerName: ProviderName, modelName: string) =>
+  getModelDisplayName(providerName, modelName);
+
+const showModelId = (providerName: ProviderName, modelName: string) =>
+  modelLabel(providerName, modelName) !== modelName;
 </script>
 
 <template>
@@ -115,8 +122,13 @@ const hasOverrides = (providerName: ProviderName, modelName: string) =>
           <div
             class="flex items-center justify-between gap-4 hover:bg-black/10 dark:hover:bg-gray-300/10 py-1 px-3 rounded-sm overflow-hidden cursor-default truncate group"
           >
-            <div class="flex flex-grow items-center gap-4 min-w-0">
-              <span class="w-fit max-w-[400px] truncate">{{ m.modelName }}</span>
+            <div class="flex flex-grow items-center gap-2 min-w-0">
+              <span class="w-fit max-w-[280px] truncate">{{ modelLabel(m.providerName, m.modelName) }}</span>
+              <span
+                v-if="showModelId(m.providerName, m.modelName)"
+                class="text-xs text-void-fg-3 truncate max-w-[160px]"
+                >{{ m.modelName }}</span
+              >
             </div>
 
             <div class="flex items-center gap-2 w-fit">
