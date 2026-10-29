@@ -32,7 +32,7 @@
 - Картинки (paste/attach) при `supportsVision` — [Vision](/architecture/chat-image-attach)
 - Drag-and-drop файлов и изображений в панель
 - Скорость генерации: приблизительные ток/с рядом с «Думаю» и точное значение из `completion_tokens` в usage под ответом
-- Лимит запуска агента: 25 LLM-шагов; см. [режимы](/guide/modes)
+- Остановка агента при повторе одного и того же набора инструментов — см. [режимы](/guide/modes#лимиты-агента)
 
 Подробнее: [контекст](/guide/context), [Apply](/guide/apply).
 
