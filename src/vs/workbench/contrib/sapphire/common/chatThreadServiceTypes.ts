@@ -112,7 +112,7 @@ export type ChatMessage =
        * Мягкая пауза — ждём продолжения от пользователя (не обычный ответ).
        * В старых тредах поля нет.
        */
-      pauseReason?: 'stop_limit' | 'stop_repeat' | 'length_pause' | 'empty_turn_pause' | 'tool_errors';
+      pauseReason?: 'stop_repeat';
     }
   | {
       /** Сохранённый context compaction — заменяет старые turn'ы в LLM и UI. */

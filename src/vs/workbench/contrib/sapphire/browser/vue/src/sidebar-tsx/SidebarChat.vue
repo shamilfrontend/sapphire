@@ -348,19 +348,6 @@ const collapsePlanUriFsPath = computed(() =>
   planUriFsPathToCollapseInThread(currentThread.value?.state.activePlan),
 );
 
-const lastPauseIdx = computed(() => {
-  let idx = -1;
-  previousMessages.value.forEach((m, i) => {
-    if (m.role === 'assistant' && m.pauseReason) idx = i;
-  });
-  return idx;
-});
-const resumedAfterPause = computed(
-  () =>
-    lastPauseIdx.value >= 0 &&
-    previousMessages.value.slice(lastPauseIdx.value + 1).some((m) => m.role === 'user'),
-);
-
 const streamingChatIdx = computed(() => previousMessages.value.length);
 const showStreamingBubble = computed(
   () => !!(reasoningSoFar.value || displayContentSoFar.value || isRunning.value),
@@ -631,7 +618,6 @@ const onComposerFileInput = async (e: Event) => {
                 :chatIsRunning="isRunning"
                 :threadId="threadId"
                 :_scrollToBottom="() => scrollToBottom(scrollContainerRef)"
-                :showContinueButton="i === lastPauseIdx && !isRunning && !resumedAfterPause"
                 :collapsePlanUriFsPath="collapsePlanUriFsPath"
               />
             </template>

@@ -55,3 +55,11 @@ dist
 .v[0-9]*/
 # Local agent validation evidence
 .agent-validation/
+# Graphify knowledge graph output
+graphify-out/
+# JetBrains IDE
+.idea/
+# Local Sapphire index
+.sapphire/
+# Cursor debug logs
+.cursor/*.log

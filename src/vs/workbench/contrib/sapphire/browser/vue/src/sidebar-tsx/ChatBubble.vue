@@ -35,7 +35,6 @@ const props = defineProps<{
   threadId: string;
   currCheckpointIdx: number | undefined;
   _scrollToBottom: (() => void) | null;
-  showContinueButton?: boolean;
   /** fsPath плана для схлопывания create_plan/update_plan в ленте (пин или building/built). */
   collapsePlanUriFsPath?: string | null;
 }>();
@@ -96,7 +95,6 @@ const asComponent = (wrapper: ResultWrapper<ToolName> | null) => wrapper as unkn
       :isCheckpointGhost="isCheckpointGhost"
       :messageIdx="messageIdx"
       :isCommitted="isCommitted"
-      :showContinueButton="showContinueButton"
     />
 
     <template v-else-if="chatMessage.role === 'tool'">

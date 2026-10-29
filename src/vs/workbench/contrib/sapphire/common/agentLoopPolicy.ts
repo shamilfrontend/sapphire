@@ -27,18 +27,11 @@ const MAX_CONSECUTIVE_EMPTY_TURNS = 3;
 /** Подряд оборванных по length ходов до паузы; на четвёртом — остановка. */
 const MAX_CONSECUTIVE_LENGTH_CONTINUES = 3;
 
-/** Подряд ошибок инструментов (tool_error / invalid_params) до паузы прогона. */
-export const MAX_CONSECUTIVE_TOOL_ERRORS = 6;
-
-type AgentLoopStopReason = 'stop_repeat' | 'stop_limit';
+type AgentLoopStopReason = 'stop_repeat';
 
 type LoopContinuationNudge = 'wrap_up' | 'continue_plan' | 'length_continue' | 'draft_plan';
 
-export type LoopContinuationPauseReason =
-  | AgentLoopStopReason
-  | 'length_pause'
-  | 'empty_turn_pause'
-  | 'tool_errors';
+export type LoopContinuationPauseReason = AgentLoopStopReason;
 
 export type LoopContinuation =
   | { action: 'run_tools' }
@@ -102,12 +95,9 @@ function consecutiveTailCount(signatures: readonly string[], signature: string):
 /**
  * Выполнять ли этот батч инструментов.
  * `recentSignatures` — уже принятые батчи в этом прогоне (старые первыми), без текущего `batch`.
- * `step` — номер LLM-хода (с 1).
- * Сначала проверяется повтор идентичного батча, затем лимит шагов.
+ * Останавливает только повтор идентичного батча (защита от зацикливания).
  */
 export function decideToolBatch(opts: {
-  step: number;
-  maxSteps: number;
   batch: readonly AgentToolBatchCall[];
   recentSignatures: readonly string[];
   repeatLimit: number;
@@ -117,23 +107,7 @@ export function decideToolBatch(opts: {
   if (repeatCount >= opts.repeatLimit) {
     return 'stop_repeat';
   }
-  if (opts.step >= opts.maxSteps) {
-    return 'stop_limit';
-  }
   return 'run';
-}
-
-/** После инструментов на этом шаге следующий LLM-ход — скрытый wrap-up (agent). */
-export function shouldForceWrapUp(opts: {
-  step: number;
-  maxSteps: number;
-  chatMode: ChatMode | null;
-  alreadyNudged: boolean;
-}): boolean {
-  if (opts.alreadyNudged || opts.chatMode !== 'agent') {
-    return false;
-  }
-  return opts.step >= opts.maxSteps - 1;
 }
 
 /** Доля кириллицы среди кириллицы и латиницы; 0, если букв нет. */
@@ -263,57 +237,8 @@ export function shouldAutoContinueOnLength(opts: {
   return true;
 }
 
-export function agentLoopStopMessage(
-  reason: AgentLoopStopReason,
-  opts: { maxSteps: number; repeatLimit: number },
-): string {
-  if (reason === 'stop_repeat') {
-    return `Агент остановился: один и тот же набор инструментов запрошен ${opts.repeatLimit} раза подряд. Нажмите «Продолжить» или напишите, если нужно продолжить иначе.`;
-  }
-  return `Агент остановился: за один запрос больше ${opts.maxSteps} шагов. Нажмите «Продолжить» или напишите, чтобы продолжить с этого места.`;
-}
-
-/** Сообщение паузы при исчерпании бюджета length-continue (или остановке с открытыми шагами плана). */
-export function agentLengthPauseMessage(opts: { progressLabel?: string }): string {
-  const step = opts.progressLabel ? ` Открытый шаг: ${opts.progressLabel}.` : '';
-  return `Ответ оборвался по лимиту длины.${step} Нажмите «Продолжить» или напишите «продолжай», чтобы продолжить с этого места.`;
-}
-
-/** Пауза после серии пустых ходов без инструментов при открытом плане. */
-export function agentEmptyTurnPauseMessage(opts: { progressLabel?: string }): string {
-  const step = opts.progressLabel ? ` Открытый шаг: ${opts.progressLabel}.` : '';
-  return `Агент остановился: несколько ходов подряд без инструментов.${step} Нажмите «Продолжить» или напишите, чтобы продолжить с этого места.`;
-}
-
-/** Пауза при слишком большом числе подряд ошибок инструментов. */
-export function agentToolErrorsPauseMessage(opts: { maxErrors: number }): string {
-  return `Агент остановился: ${opts.maxErrors} ошибки инструментов подряд. Нажмите «Продолжить» или напишите, чтобы продолжить иначе.`;
-}
-
-/**
- * Обновить счётчик подряд идущих ошибок инструментов после батча.
- * Любой success сбрасывает; tool_error/invalid_params без success увеличивает на 1.
- */
-export function updateConsecutiveToolErrors(
-  prev: number,
-  outcomes: readonly ('success' | 'tool_error' | 'invalid_params' | 'rejected' | 'other')[],
-): number {
-  let hadSuccess = false;
-  let hadError = false;
-  for (const outcome of outcomes) {
-    if (outcome === 'success') {
-      hadSuccess = true;
-    } else if (outcome === 'tool_error' || outcome === 'invalid_params') {
-      hadError = true;
-    }
-  }
-  if (hadSuccess) {
-    return 0;
-  }
-  if (hadError) {
-    return prev + 1;
-  }
-  return prev;
+export function agentLoopStopMessage(opts: { repeatLimit: number }): string {
+  return `Агент остановился: один и тот же набор инструментов запрошен ${opts.repeatLimit} раза подряд. Напишите, если нужно продолжить иначе.`;
 }
 
 type DecideLoopContinuationInput = {
@@ -333,12 +258,7 @@ type DecideLoopContinuationInput = {
   consecutiveEmptyTurns: number;
   consecutiveLengthContinues: number;
   summaryNudged: boolean;
-  consecutiveToolErrors: number;
-  maxConsecutiveToolErrors?: number;
-  step: number;
-  maxSteps: number;
   chatMode: ChatMode | null;
-  lengthPauseAnnounced: boolean;
   /**
    * В этом прогоне уже был success create_plan/update_plan, либо есть activePlan.
    * В Plan mode без этого флага текст без tool_calls не должен давать natural_end.
@@ -351,18 +271,13 @@ type DecideLoopContinuationInput = {
  * Вызывающий код считает batchDecision, wantsLengthContinue и т.д., затем только исполняет action.
  */
 export function decideLoopContinuation(input: DecideLoopContinuationInput): LoopContinuation {
-  const maxToolErrors = input.maxConsecutiveToolErrors ?? MAX_CONSECUTIVE_TOOL_ERRORS;
   const isAgentLike = input.chatMode === 'agent';
 
   if (input.awaitingUserApproval) {
     return { action: 'await_user' };
   }
 
-  if (input.consecutiveToolErrors >= maxToolErrors) {
-    return { action: 'pause', reason: 'tool_errors' };
-  }
-
-  // Мягкая остановка: одинаковый батч или лимит шагов — wrap-up без инструментов, затем пауза.
+  // Мягкая остановка: одинаковый батч — wrap-up без инструментов, затем пауза.
   if (
     input.hasToolCalls &&
     !input.toolsExecuted &&
@@ -391,18 +306,6 @@ export function decideLoopContinuation(input: DecideLoopContinuationInput): Loop
     let disableTools = false;
     let markSummaryNudged = false;
     let bumpLengthContinues = false;
-    if (
-      shouldForceWrapUp({
-        step: input.step,
-        maxSteps: input.maxSteps,
-        chatMode: input.chatMode,
-        alreadyNudged: input.summaryNudged,
-      })
-    ) {
-      nudges.push('wrap_up');
-      disableTools = true;
-      markSummaryNudged = true;
-    }
     if (input.hadTruncatedToolCall && input.wantsLengthContinue) {
       nudges.push('length_continue');
       bumpLengthContinues = true;
@@ -436,27 +339,6 @@ export function decideLoopContinuation(input: DecideLoopContinuationInput): Loop
     }
 
     if (
-      input.finishReason === 'length' &&
-      (input.planHasOpenTodos || input.hadTruncatedToolCall) &&
-      !input.lengthPauseAnnounced
-    ) {
-      return { action: 'pause', reason: 'length_pause' };
-    }
-
-    // Абсолютный лимит ходов без исполняемых инструментов — один wrap-up, затем пауза.
-    if (!input.hasToolCalls && input.step >= input.maxSteps && isAgentLike) {
-      if (!input.summaryNudged) {
-        return {
-          action: 'continue',
-          nudges: ['wrap_up'],
-          disableTools: true,
-          markSummaryNudged: true,
-        };
-      }
-      return { action: 'pause', reason: 'stop_limit' };
-    }
-
-    if (
       shouldAutoContinueTurn({
         chatMode: input.chatMode,
         hasToolCalls: false,
@@ -487,16 +369,6 @@ export function decideLoopContinuation(input: DecideLoopContinuationInput): Loop
         disableTools: true,
         markSummaryNudged: true,
       };
-    }
-
-    if (
-      input.planHasOpenTodos &&
-      input.consecutiveEmptyTurns >= 2 &&
-      !input.lengthPauseAnnounced &&
-      !asksUserToChoose(input.assistantText, { allowBareQuestion: true }) &&
-      !asksUserToChoose(input.reasoningText, { allowBareQuestion: false })
-    ) {
-      return { action: 'pause', reason: 'empty_turn_pause' };
     }
 
     // Plan mode: не заканчивать текстом без create_plan (один nudge, затем natural_end).

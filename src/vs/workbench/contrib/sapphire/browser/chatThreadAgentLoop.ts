@@ -77,21 +77,16 @@ import {
   AGENT_DRAFT_PLAN_NUDGE,
   AGENT_LENGTH_CONTINUE_NUDGE,
   AGENT_WRAP_UP_NUDGE,
-  agentEmptyTurnPauseMessage,
-  agentLengthPauseMessage,
   agentLoopStopMessage,
-  agentToolErrorsPauseMessage,
   cyrillicShare,
   decideLoopContinuation,
   decideToolBatch,
   LoopContinuation,
   LoopContinuationPauseReason,
-  MAX_CONSECUTIVE_TOOL_ERRORS,
   shouldAutoContinueOnLength,
   shouldTranslateReasoningToRussian,
   streamingReasoningDisplay,
   toolBatchSignature,
-  updateConsecutiveToolErrors,
 } from '../common/agentLoopPolicy.js';
 import {
   formatAgentRetryStatusHint,
@@ -101,8 +96,6 @@ import {
 /** Повторы LLM при transient-ошибках (не gatewayRetryExhausted). */
 const CHAT_RETRIES = 3;
 const RETRY_DELAY = 2500;
-/** Максимум LLM-ходов за один непрерывный прогон агента. */
-const MAX_AGENT_LLM_TURNS = 25;
 /** Одинаковых батчей tool_calls подряд до остановки без выполнения последнего. */
 const REPEAT_TOOL_BATCHES = 3;
 
@@ -624,11 +617,10 @@ ${planBody}`;
       `Tool call succeeded, but there was an error stringifying the output.\n${getErrorMessage(error)}`,
   };
 
-  _appendAgentStopMessage(threadId: string, reason: 'stop_repeat' | 'stop_limit') {
+  _appendAgentStopMessage(threadId: string, reason: 'stop_repeat') {
     this._s._addMessageToThread(threadId, {
       role: 'assistant',
-      displayContent: agentLoopStopMessage(reason, {
-        maxSteps: MAX_AGENT_LLM_TURNS,
+      displayContent: agentLoopStopMessage({
         repeatLimit: REPEAT_TOOL_BATCHES,
       }),
       reasoning: '',
@@ -636,53 +628,10 @@ ${planBody}`;
     });
   }
 
-  _appendAgentPauseMessage(
-    threadId: string,
-    reason: LoopContinuationPauseReason,
-    progressLabel?: string,
-  ) {
-    if (reason === 'stop_repeat' || reason === 'stop_limit') {
+  _appendAgentPauseMessage(threadId: string, reason: LoopContinuationPauseReason) {
+    if (reason === 'stop_repeat') {
       this._appendAgentStopMessage(threadId, reason);
-      return;
     }
-    if (reason === 'length_pause') {
-      this._appendAgentLengthPauseMessage(threadId, progressLabel);
-      return;
-    }
-    if (reason === 'empty_turn_pause') {
-      this._s._addMessageToThread(threadId, {
-        role: 'assistant',
-        displayContent: agentEmptyTurnPauseMessage({ progressLabel }),
-        reasoning: '',
-        pauseReason: 'empty_turn_pause',
-      });
-      return;
-    }
-    this._s._addMessageToThread(threadId, {
-      role: 'assistant',
-      displayContent: agentToolErrorsPauseMessage({ maxErrors: MAX_CONSECUTIVE_TOOL_ERRORS }),
-      reasoning: '',
-      pauseReason: 'tool_errors',
-    });
-  }
-
-  private _toolOutcomesForCalls(
-    threadId: string,
-    toolCalls: RawToolCallObj[],
-  ): ('success' | 'tool_error' | 'invalid_params' | 'rejected' | 'other')[] {
-    return toolCalls.map((tc) => {
-      const idx = this._findToolMessageIndex(threadId, tc.id);
-      const message =
-        idx >= 0 ? this._s.state.allThreads[threadId]?.messages[idx] : undefined;
-      if (!message || message.role !== 'tool') {
-        return 'other';
-      }
-      if (message.type === 'success') {return 'success';}
-      if (message.type === 'tool_error') {return 'tool_error';}
-      if (message.type === 'invalid_params') {return 'invalid_params';}
-      if (message.type === 'rejected') {return 'rejected';}
-      return 'other';
-    });
   }
 
   private _applyLoopContinuationNudges(
@@ -739,15 +688,6 @@ ${planBody}`;
       displayContent: '',
       selections: null,
       state: defaultMessageState,
-    });
-  }
-
-  _appendAgentLengthPauseMessage(threadId: string, progressLabel?: string) {
-    this._s._addMessageToThread(threadId, {
-      role: 'assistant',
-      displayContent: agentLengthPauseMessage({ progressLabel }),
-      reasoning: '',
-      pauseReason: 'length_pause',
     });
   }
 
@@ -1633,8 +1573,6 @@ ${planBody}`;
     let summaryNudged = false;
     let consecutiveEmptyTurns = 0;
     let consecutiveLengthContinues = 0;
-    let consecutiveToolErrors = 0;
-    let lengthPauseAnnounced = false;
     let disableToolsNextTurn = false;
     /** Уже есть план (activePlan) или был success create_plan/update_plan в этом прогоне. */
     let planDraftedInRun = !!this._s.state.allThreads[threadId]?.state.activePlan;
@@ -2041,8 +1979,6 @@ ${planBody}`;
 
           const batchDecision = hasToolCalls
             ? decideToolBatch({
-                step: nMessagesSent,
-                maxSteps: MAX_AGENT_LLM_TURNS,
                 batch: toolCalls!,
                 recentSignatures: recentToolSignatures,
                 repeatLimit: REPEAT_TOOL_BATCHES,
@@ -2067,11 +2003,7 @@ ${planBody}`;
             consecutiveEmptyTurns,
             consecutiveLengthContinues,
             summaryNudged,
-            consecutiveToolErrors,
-            step: nMessagesSent,
-            maxSteps: MAX_AGENT_LLM_TURNS,
             chatMode,
-            lengthPauseAnnounced,
             planDraftedInRun,
           };
 
@@ -2092,11 +2024,6 @@ ${planBody}`;
               return;
             }
 
-            consecutiveToolErrors = updateConsecutiveToolErrors(
-              consecutiveToolErrors,
-              this._toolOutcomesForCalls(threadId, toolCalls),
-            );
-
             if (ranAny) {
               toolsRanInRun = true;
               consecutiveEmptyTurns = 0;
@@ -2112,7 +2039,6 @@ ${planBody}`;
               ranAny: !!ranAny,
               awaitingUserApproval: !!awaitingUserApproval,
               toolsRanInRun,
-              consecutiveToolErrors,
               consecutiveEmptyTurns,
               planDraftedInRun,
             });
@@ -2139,19 +2065,7 @@ ${planBody}`;
             shouldSendAnotherMessage = true;
             this._s._setStreamState(threadId, { isRunning: 'idle', interrupt: 'not_needed' });
           } else if (decision.action === 'pause') {
-            if (
-              decision.reason === 'length_pause' ||
-              decision.reason === 'empty_turn_pause'
-            ) {
-              lengthPauseAnnounced = true;
-            }
-            const needsProgress =
-              decision.reason === 'length_pause' || decision.reason === 'empty_turn_pause';
-            const progressLabel = needsProgress
-              ? await this._planProgressLabel(threadId)
-              : undefined;
-            if (!isActive()) {return;}
-            this._appendAgentPauseMessage(threadId, decision.reason, progressLabel);
+            this._appendAgentPauseMessage(threadId, decision.reason);
             this._s._setStreamState(threadId, { isRunning: 'idle', interrupt: 'not_needed' });
           } else {
             // natural_end (run_tools пересчитывает decision выше)
