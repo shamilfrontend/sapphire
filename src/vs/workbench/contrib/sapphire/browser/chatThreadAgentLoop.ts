@@ -5,6 +5,12 @@
 
 import { ChatThreadCollaboratorHost, defaultMessageState } from './chatThreadTypes.js';
 import {
+  agentWorktreeBranchName,
+  agentWorktreePath,
+  gitWorktreeAddCommand,
+  worktreePromptAddon,
+} from '../common/agentWorktree.js';
+import {
   shouldClearStuckStream,
   shouldClearStuckStreamOnStaleEpoch,
 } from '../common/chatStreamGuards.js';
@@ -1372,6 +1378,34 @@ ${planBody}`;
     return this._runToolCallsSequential(threadId, pending, isActive);
   }
 
+  private async _maybeCreateSubagentWorktree(childId: string): Promise<string | undefined> {
+    if (!this._s._settingsService.state.globalSettings.subagentWorktrees) {
+      return undefined;
+    }
+    const root = this._s._workspaceContextService.getWorkspace().folders[0]?.uri.fsPath;
+    if (!root) {
+      return undefined;
+    }
+    const worktreePath = agentWorktreePath(root, childId);
+    const branch = agentWorktreeBranchName(childId);
+    const terminalId = `wt-${childId.slice(0, 8)}`;
+    try {
+      const { resPromise } = await this._s._terminalToolService.runCommand(
+        gitWorktreeAddCommand(worktreePath, branch),
+        { type: 'temporary', cwd: root, terminalId },
+      );
+      const { result, resolveReason } = await resPromise;
+      if (resolveReason.type === 'done' && resolveReason.exitCode === 0) {
+        return worktreePath;
+      }
+      console.warn('[sapphire] worktree add failed:', result);
+      return undefined;
+    } catch (e) {
+      console.warn('[sapphire] worktree add error:', e);
+      return undefined;
+    }
+  }
+
   private async _runSubagent(
     parentThreadId: string,
     params: BuiltinToolCallParams['run_subagent'],
@@ -1398,8 +1432,23 @@ ${planBody}`;
     let interrupted = false;
     ctrl.interrupt = () => {
       interrupted = true;
+      this._s._agentArenaService.patch(childId, {
+        status: 'interrupted',
+        endedAt: Date.now(),
+      });
       void this.abortRunning(childId, { skipFlush: true });
     };
+
+    const worktreePath = opts?.readOnly ? undefined : await this._maybeCreateSubagentWorktree(childId);
+    this._s._agentArenaService.upsert({
+      id: childId,
+      parentThreadId,
+      description: params.description || 'Sub-agent',
+      status: 'running',
+      startedAt: Date.now(),
+      readOnly: !!opts?.readOnly,
+      worktreePath,
+    });
 
     try {
       this._s._setState({
@@ -1409,10 +1458,14 @@ ${planBody}`;
         },
       });
 
+      const prompt = worktreePath
+        ? `${worktreePromptAddon(worktreePath)}\n\n${params.prompt}`
+        : params.prompt;
+
       this._s._addMessageToThread(childId, {
         role: 'user',
-        content: params.prompt,
-        displayContent: params.prompt,
+        content: prompt,
+        displayContent: prompt,
         selections: null,
         state: defaultMessageState,
       });
@@ -1456,7 +1509,21 @@ ${planBody}`;
       if (!summary) {
         summary = '(The sub-agent finished without producing a summary.)';
       }
+      this._s._agentArenaService.patch(childId, {
+        status: 'done',
+        endedAt: Date.now(),
+        summary,
+      });
       return { summary, completed };
+    } catch (e) {
+      if (!(e as { isToolInterrupt?: boolean })?.isToolInterrupt) {
+        this._s._agentArenaService.patch(childId, {
+          status: 'error',
+          endedAt: Date.now(),
+          summary: e instanceof Error ? e.message : String(e),
+        });
+      }
+      throw e;
     } finally {
       // Дочерний subagent-тред не персистится — убираем из state и очереди
       children.delete(childId);

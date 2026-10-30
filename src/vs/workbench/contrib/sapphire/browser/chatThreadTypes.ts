@@ -36,6 +36,8 @@ import {
 } from '../common/chatThreadServiceTypes.js';
 import { IConvertToLLMMessageService } from './convertToLLMMessageService.js';
 import { IEditCodeService } from './editCodeServiceInterface.js';
+import { IAgentArenaService } from './agentArenaService.js';
+import { ITerminalToolService } from './terminalToolService.js';
 
 /*
 
@@ -289,6 +291,8 @@ export interface ChatThreadCollaboratorHost {
   readonly _toolsService: CollaboratorToolsService;
   readonly _userModifiedFilesToCheckInCheckpoints: LRUCache<string, string>;
   readonly _workspaceContextService: IWorkspaceContextService;
+  readonly _agentArenaService: IAgentArenaService;
+  readonly _terminalToolService: ITerminalToolService;
 
   _addMessageToThread(threadId: string, message: ChatMessage): void;
   _addToolEditCheckpoint(opts: { threadId: string; uri: URI }): void;

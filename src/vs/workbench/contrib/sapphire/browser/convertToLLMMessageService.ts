@@ -56,8 +56,20 @@ import {
   FeatureName,
   ModelSelection,
   ProviderName,
-  skillInstructionsForUserText,
+  parseSlashSkillSlugs,
+  resolveSkillContentsBySlugs,
+  skillInstructionsFromUserSkills,
 } from '../common/sapphireSettingsTypes.js';
+import {
+  AgentSkillEntry,
+  combineSkillInstructionBlocks,
+  formatAgentSkillsCatalog,
+  parseSkillMarkdown,
+  resolveAgentSkillBodies,
+  workspaceSkillsAlwaysOnBody,
+  workspaceSkillsFileEntry,
+  WORKSPACE_SKILLS_FILE_SLUG,
+} from '../common/agentSkills.js';
 import { IDirectoryStrService } from '../common/directoryStrService.js';
 import { ITerminalToolService } from './terminalToolService.js';
 import { ISapphireModelService } from '../common/sapphireModelService.js';
@@ -70,6 +82,11 @@ import {
   mergeEnabledMcpServers,
   onlineMcpServerNames,
 } from '../common/prompt/mcpToolDisclosure.js';
+import { IFileService } from '../../../../platform/files/common/files.js';
+import {
+  shouldApplyVerifyUntilGreen,
+  verifyUntilGreenPrompt,
+} from '../common/verifyUntilGreen.js';
 
 type SimpleLLMMessage =
   | {
@@ -375,6 +392,10 @@ export const IConvertToLLMMessageService = createDecorator<IConvertToLLMMessageS
 class ConvertToLLMMessageService extends Disposable implements IConvertToLLMMessageService {
   _serviceBrand: undefined;
 
+  private _diskSkillsCache: AgentSkillEntry[] = [];
+  private _diskSkillsCacheAt = 0;
+  private _diskSkillsInFlight: Promise<AgentSkillEntry[]> | undefined;
+
   constructor(
     @IModelService private readonly modelService: IModelService,
     @IWorkspaceContextService private readonly workspaceContextService: IWorkspaceContextService,
@@ -385,6 +406,7 @@ class ConvertToLLMMessageService extends Disposable implements IConvertToLLMMess
     @ISapphireModelService private readonly sapphireModelService: ISapphireModelService,
     @IMCPService private readonly mcpService: IMCPService,
     @IMemoriesService private readonly memoriesService: IMemoriesService,
+    @IFileService private readonly fileService: IFileService,
   ) {
     super();
   }
@@ -444,21 +466,121 @@ class ConvertToLLMMessageService extends Disposable implements IConvertToLLMMess
     }
   }
 
-  // Always-on skills из настроек + .skills
-  private _getCombinedSkills(): string {
-    const globalSkillInstructions = this.sapphireSettingsService.state.globalSettings.skillInstructions;
-    const sapphireSkillsFileContent = this._getSapphireSkillsFileContents();
-
-    const ans: string[] = [];
-    if (globalSkillInstructions) {ans.push(globalSkillInstructions);}
-    if (sapphireSkillsFileContent) {ans.push(sapphireSkillsFileContent);}
-    return ans.join('\n\n');
+  private _legacyWorkspaceSkillEntry(): AgentSkillEntry | undefined {
+    return workspaceSkillsFileEntry(this._getSapphireSkillsFileContents());
   }
 
-  /** Always-on + скиллы по `/slug` из текста пользователя. */
-  private _getSkillsForUserText(userText: string): string {
-    const skills = this.sapphireSettingsService.state.globalSettings.userSkills ?? [];
-    return skillInstructionsForUserText(skills, this._getCombinedSkills(), userText);
+  private async _discoverDiskAgentSkills(): Promise<AgentSkillEntry[]> {
+    const now = Date.now();
+    if (this._diskSkillsInFlight) {
+      return this._diskSkillsInFlight;
+    }
+    if (now - this._diskSkillsCacheAt < 5_000) {
+      return this._diskSkillsCache;
+    }
+    this._diskSkillsInFlight = (async () => {
+      const found: AgentSkillEntry[] = [];
+      const seen = new Set<string>();
+      const folders = this.workspaceContextService.getWorkspace().folders;
+      for (const folder of folders) {
+        for (const rel of ['.claude/skills', '.agents/skills'] as const) {
+          const root = URI.joinPath(folder.uri, rel);
+          let children;
+          try {
+            const stat = await this.fileService.resolve(root);
+            children = stat.children ?? [];
+          } catch {
+            continue;
+          }
+          for (const child of children) {
+            if (!child.isDirectory) {
+              continue;
+            }
+            const skillMd = URI.joinPath(child.resource, 'SKILL.md');
+            try {
+              const raw = (await this.fileService.readFile(skillMd)).value.toString();
+              const parsed = parseSkillMarkdown(raw, child.name);
+              if (!parsed || seen.has(parsed.slug)) {
+                continue;
+              }
+              seen.add(parsed.slug);
+              found.push({
+                ...parsed,
+                source: rel.startsWith('.claude') ? 'claude' : 'agents',
+              });
+            } catch {
+              // нет SKILL.md или битый файл — пропускаем
+            }
+          }
+        }
+      }
+      this._diskSkillsCache = found;
+      this._diskSkillsCacheAt = Date.now();
+      return found;
+    })();
+    try {
+      return await this._diskSkillsInFlight;
+    } finally {
+      this._diskSkillsInFlight = undefined;
+    }
+  }
+
+  private _catalogEntries(
+    diskSkills: readonly AgentSkillEntry[],
+    legacy: AgentSkillEntry | undefined,
+  ): AgentSkillEntry[] {
+    const userSkills = this.sapphireSettingsService.state.globalSettings.userSkills ?? [];
+    const entries: AgentSkillEntry[] = [...diskSkills];
+    const seen = new Set(entries.map((e) => e.slug));
+    for (const skill of userSkills) {
+      if (!skill.content.trim() || skill.enabled || seen.has(skill.slug)) {
+        continue;
+      }
+      seen.add(skill.slug);
+      entries.push({
+        slug: skill.slug,
+        name: skill.name,
+        description: skill.name,
+        body: skill.content.trim(),
+        source: 'user',
+      });
+    }
+    if (legacy && !workspaceSkillsAlwaysOnBody(legacy.body) && !seen.has(legacy.slug)) {
+      entries.push(legacy);
+    }
+    return entries;
+  }
+
+  /** Always-on: enabled user skills + короткий legacy `.skills`. */
+  private _getCombinedSkills(): string {
+    const userSkills = this.sapphireSettingsService.state.globalSettings.userSkills ?? [];
+    const alwaysOn = skillInstructionsFromUserSkills(userSkills);
+    const shortLegacy = workspaceSkillsAlwaysOnBody(this._getSapphireSkillsFileContents());
+    const catalog = formatAgentSkillsCatalog(this._catalogEntries(this._diskSkillsCache, this._legacyWorkspaceSkillEntry()));
+    return combineSkillInstructionBlocks(alwaysOn, shortLegacy, catalog);
+  }
+
+  /** Always-on + каталог + тела по `/slug` (user skills и Agent Skills на диске). */
+  private async _getSkillsForUserText(userText: string): Promise<string> {
+    const diskSkills = await this._discoverDiskAgentSkills();
+    const legacy = this._legacyWorkspaceSkillEntry();
+    const userSkills = this.sapphireSettingsService.state.globalSettings.userSkills ?? [];
+    const alwaysOn = skillInstructionsFromUserSkills(userSkills);
+    const shortLegacy = workspaceSkillsAlwaysOnBody(this._getSapphireSkillsFileContents());
+    const catalogEntries = this._catalogEntries(diskSkills, legacy);
+    const catalog = formatAgentSkillsCatalog(catalogEntries);
+    const slugs = parseSlashSkillSlugs(userText);
+    const fromUserSlash = resolveSkillContentsBySlugs(userSkills, slugs);
+    const activatable: AgentSkillEntry[] = [...diskSkills];
+    if (legacy && !workspaceSkillsAlwaysOnBody(legacy.body)) {
+      activatable.push(legacy);
+    }
+    // /skills — алиас для legacy workspace file
+    if (slugs.includes('skills') && legacy && !activatable.some((e) => e.slug === WORKSPACE_SKILLS_FILE_SLUG && slugs.includes(WORKSPACE_SKILLS_FILE_SLUG))) {
+      activatable.push({ ...legacy, slug: 'skills' });
+    }
+    const fromDiskSlash = resolveAgentSkillBodies(activatable, slugs);
+    return combineSkillInstructionBlocks(alwaysOn, shortLegacy, catalog, fromUserSlash, fromDiskSlash);
   }
 
   private _latestUserQuery(chatMessages: ChatMessage[]): string {
@@ -531,7 +653,15 @@ class ConvertToLLMMessageService extends Disposable implements IConvertToLLMMess
       chatMode === 'agent'
         ? this._memoriesBlock(latestUserQuery ?? '')
         : '';
-    return systemMessage + memories;
+    const verify =
+      shouldApplyVerifyUntilGreen(
+        chatMode,
+        !!this.sapphireSettingsService.state.globalSettings.verifyUntilGreen,
+        latestUserQuery ?? '',
+      )
+        ? `\n\n${verifyUntilGreenPrompt()}`
+        : '';
+    return systemMessage + memories + verify;
   };
 
   // --- LLM-сообщения чата ---
@@ -653,9 +783,9 @@ class ConvertToLLMMessageService extends Disposable implements IConvertToLLMMess
         modelSelection.modelName
       ];
 
-    // Правила + always-on skills + `/slug` из последнего user-сообщения
+    // Правила + always-on skills + каталог + `/slug` из последнего user-сообщения
     const aiInstructions = this._getCombinedAIInstructions();
-    const skillInstructions = this._getSkillsForUserText(latestUserQuery);
+    const skillInstructions = await this._getSkillsForUserText(latestUserQuery);
     const isReasoningEnabled = getIsReasoningEnabledState(
       'Chat',
       providerName,
@@ -747,7 +877,7 @@ class ConvertToLLMMessageService extends Disposable implements IConvertToLLMMess
     const rulesTokens = estimateTextTokens(this._getCombinedAIInstructions());
     const skillEstimateText =
       draftText?.trim() || this._latestUserQuery(chatMessages);
-    const skillsTokens = estimateTextTokens(this._getSkillsForUserText(skillEstimateText));
+    const skillsTokens = estimateTextTokens(await this._getSkillsForUserText(skillEstimateText));
 
     let conversationTokens = 0;
     for (const m of chatMessages) {

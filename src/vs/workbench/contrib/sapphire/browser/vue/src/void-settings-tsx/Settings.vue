@@ -399,6 +399,38 @@ const onAddProviderCancel = () => {
                     </div>
                   </ErrorBoundary>
 
+                  <!-- Verify until green -->
+                  <ErrorBoundary>
+                    <div class="flex items-center gap-x-2">
+                      <SapphireSwitch
+                        size="xs"
+                        :value="settingsState.globalSettings.verifyUntilGreen"
+                        @change="
+                          sapphireSettingsService.setGlobalSetting('verifyUntilGreen', $event)
+                        "
+                      />
+                      <span class="text-void-fg-3 text-xs pointer-events-none">
+                        Довести до зелёного (diagnostics/тесты после правок; разово — /verify)
+                      </span>
+                    </div>
+                  </ErrorBoundary>
+
+                  <!-- Subagent worktrees -->
+                  <ErrorBoundary>
+                    <div class="flex items-center gap-x-2">
+                      <SapphireSwitch
+                        size="xs"
+                        :value="settingsState.globalSettings.subagentWorktrees"
+                        @change="
+                          sapphireSettingsService.setGlobalSetting('subagentWorktrees', $event)
+                        "
+                      />
+                      <span class="text-void-fg-3 text-xs pointer-events-none">
+                        Worktree для subagent (git worktree в .sapphire/worktrees/)
+                      </span>
+                    </div>
+                  </ErrorBoundary>
+
                   <!-- Автопринятие правок модели -->
                   <ErrorBoundary>
                     <div class="flex items-center gap-x-2">
@@ -671,7 +703,9 @@ const onAddProviderCancel = () => {
               <div>
                 <h3 class="text-lg text-void-fg-1 mb-2">Общие скиллы</h3>
                 <div class="text-void-fg-3 text-xs mb-3">
-                  Файл <code class="text-void-fg-2">.skills</code> в корне workspace — общие скиллы
+                  Файл <code class="text-void-fg-2">.skills</code> в корне workspace — общие скиллы. Также читаются
+                  <code class="text-void-fg-2">.claude/skills/*/SKILL.md</code> и
+                  <code class="text-void-fg-2">.agents/skills/*/SKILL.md</code> (каталог + <code class="text-void-fg-2">/slug</code>)
                   команды. Их можно коммитить в репозиторий.
                 </div>
                 <SapphireButtonBgDarken

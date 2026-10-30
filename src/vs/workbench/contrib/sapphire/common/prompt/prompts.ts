@@ -912,6 +912,9 @@ Language (mandatory): If the user's latest message is in Russian, write BOTH the
       `Use web_search / browse_url for public docs and facts not in the workspace. To open a page the user can see and then click, type, or scroll — including localhost — use browser_navigate, then browser_snapshot, then browser_click / browser_type / browser_scroll with refs from that snapshot. Do not invent refs. Use browser_screenshot when the user should see the page. Use save_memory for durable project decisions or user preferences that should stick across turns.`,
     );
     details.push(
+      `SKILLS lists always-on instructions plus a catalog of available skills (from Settings, .claude/skills/**/SKILL.md, .agents/skills/**/SKILL.md, and long .skills files). To load a catalog skill's full body, the latest user message must include its /slug (for example /design-landing). Do not invent skill contents that were not loaded.`,
+    );
+    details.push(
       `ALWAYS have maximal certainty in a change BEFORE you make it. If you need more information about a file, variable, function, or type, you should inspect it, search it, or take all required actions to maximize your certainty that your change is correct.`,
     );
     details.push(

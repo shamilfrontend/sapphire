@@ -12,6 +12,10 @@ import {
   IContextKeyService,
 } from '../../../../platform/contextkey/common/contextkey.js';
 import { ISCMService } from '../../scm/common/scm.js';
+import { IViewsService } from '../../../services/views/common/viewsService.js';
+import { IChatThreadService } from './chatThreadService.js';
+import { SAPPHIRE_VIEW_CONTAINER_ID } from './sidebarPane.js';
+import { buildLocalReviewPrompt } from '../common/localReview.js';
 import { ProxyChannel } from '../../../../base/parts/ipc/common/ipc.js';
 import { ISapphireSCMService } from '../common/sapphireSCMTypes.js';
 import { IMainProcessService } from '../../../../platform/ipc/common/mainProcessService.js';
@@ -311,8 +315,58 @@ class LoadingGenerateCommitMessageAction extends Action2 {
   }
 }
 
+class ReviewChangesAction extends Action2 {
+  constructor() {
+    super({
+      id: 'sapphire.reviewChanges',
+      title: localize2('sapphireReviewChanges', 'Sapphire: Проверить изменения'),
+      f1: true,
+      menu: [
+        {
+          id: MenuId.SCMTitle,
+          when: ContextKeyExpr.equals('scmProvider', 'git'),
+          group: 'navigation',
+        },
+      ],
+    });
+  }
+
+  async run(accessor: ServicesAccessor): Promise<void> {
+    const notificationService = accessor.get(INotificationService);
+    const scmService = accessor.get(ISCMService);
+    const sapphireScm = accessor.get(ISapphireSCMService);
+    const chatThreads = accessor.get(IChatThreadService);
+    const viewsService = accessor.get(IViewsService);
+    const repo = Array.from(scmService.repositories || []).find(r => r.provider.contextValue.get() === 'git');
+    const root = repo?.provider.rootUri?.fsPath;
+    if (!root) {
+      notificationService.info('Нет git-репозитория для проверки.');
+      return;
+    }
+    try {
+      const packet = await sapphireScm.gitReviewDiff(root);
+      if (packet.kind === 'empty') {
+        notificationService.info('Нет незакоммиченных изменений и нет diff относительно main/master.');
+        return;
+      }
+      viewsService.openViewContainer(SAPPHIRE_VIEW_CONTAINER_ID);
+      chatThreads.openNewThread();
+      const threadId = chatThreads.getCurrentThread().id;
+      chatThreads.setThreadChatMode(threadId, 'normal');
+      await chatThreads.addUserMessageAndStreamResponse({
+        userMessage: buildLocalReviewPrompt(packet),
+        threadId,
+      });
+    } catch (error) {
+      console.error(error);
+      notificationService.error('Не удалось собрать diff для проверки.');
+    }
+  }
+}
+
 registerAction2(GenerateCommitMessageAction);
 registerAction2(LoadingGenerateCommitMessageAction);
+registerAction2(ReviewChangesAction);
 registerSingleton(
   IGenerateCommitMessageService,
   GenerateCommitMessageService,

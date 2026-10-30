@@ -52,6 +52,7 @@ import { IConfigurationService } from '../../../../../../../platform/configurati
 import { IPathService } from '../../../../../../../workbench/services/path/common/pathService.js';
 import { URI } from '../../../../../../../base/common/uri.js';
 import { IChatThreadService, ThreadsState, ThreadStreamState } from '../../../chatThreadService.js';
+import { IAgentArenaService } from '../../../agentArenaService.js';
 import { ITerminalToolService } from '../../../terminalToolService.js';
 import { ILanguageService } from '../../../../../../../editor/common/languages/language.js';
 import { ISapphireModelService } from '../../../../common/sapphireModelService.js';
@@ -261,6 +262,7 @@ const getVueAccessor = (accessor: ServicesAccessor) => {
     ISapphireSettingsService: accessor.get(ISapphireSettingsService),
     IEditCodeService: accessor.get(IEditCodeService),
     IChatThreadService: accessor.get(IChatThreadService),
+    IAgentArenaService: accessor.get(IAgentArenaService),
 
     IInstantiationService: accessor.get(IInstantiationService),
     ICodeEditorService: accessor.get(ICodeEditorService),

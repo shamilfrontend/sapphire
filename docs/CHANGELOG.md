@@ -8,6 +8,11 @@
 
 - Кнопка браузера в title bar слева от Terminal открывает встроенный браузер
 - В Agent tools `browser_navigate`, `browser_snapshot`, `browser_click`, `browser_type`, `browser_scroll`, `browser_screenshot` (localhost разрешён; каждое действие ждёт подтверждения)
+- После Tab автодополнение предлагает следующую правку в другом месте файла: ghost inline edit и Tab, чтобы перейти к ней. Та же модель FIM, что и у Tab
+- Agent Skills open standard: каталог `.claude/skills/**/SKILL.md` и `.agents/skills/**/SKILL.md`; полное тело по `/slug`. Длинный `.skills` больше не всегда в system — только каталог `/workspace-skills`
+- Режим Agent «довести до зелёного»: настройка или `/verify` — после правок цикл diagnostics/тесты → fix до чистоты или лимита раундов
+- Арена subagent: панель активных `run_subagent` / `run_parallel_subagents` в чате (стоп, статус). Опция git worktree для записывающих subagent
+- Команда `Sapphire: Проверить изменения`: локальный review unstaged/staged diff, а если дерево чистое — diff ветки против main/master. Новый чат в режиме Chat, без правок; rules и skills уже в контексте
 
 ### Changed
 

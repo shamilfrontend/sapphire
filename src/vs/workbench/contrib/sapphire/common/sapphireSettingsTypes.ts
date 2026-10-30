@@ -603,6 +603,16 @@ export type GlobalSettings = {
   autoApprove: { [approvalType in ToolApprovalType]?: boolean };
   showInlineSuggestions: boolean;
   includeToolLintErrors: boolean;
+  /**
+   * Agent: после правок цикл diagnostics/тесты → fix до зелёного (или лимита раундов).
+   * Без настройки можно разово включить `/verify` в сообщении.
+   */
+  verifyUntilGreen: boolean;
+  /**
+   * Agent: writable `run_subagent` создаёт git worktree под `.sapphire/worktrees/`
+   * и просит ребёнка править только там.
+   */
+  subagentWorktrees: boolean;
   isOnboardingComplete: boolean;
   /** `ide` — Режим IDE (редактор + чат). `agents` — fullscreen Режим Агент. */
   layoutMode: LayoutMode;
@@ -651,6 +661,8 @@ export const defaultGlobalSettings: GlobalSettings = {
   },
   showInlineSuggestions: true,
   includeToolLintErrors: true,
+  verifyUntilGreen: false,
+  subagentWorktrees: false,
   isOnboardingComplete: false,
   layoutMode: 'ide',
   disableSystemMessage: false,

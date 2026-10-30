@@ -2355,7 +2355,6 @@ export const builtinToolNameToComponent: { [T in BuiltinToolName]: {
         desc1Info
       } = toolNameToDesc(toolMessage.name, toolMessage.params, accessor);
       if (toolMessage.type === 'tool_request') {return null;}
-      if (toolMessage.type === 'running_now') {return null;}
       const componentParams: ToolHeaderParams = {
         title,
         desc1,
@@ -2364,6 +2363,14 @@ export const builtinToolNameToComponent: { [T in BuiltinToolName]: {
         icon: null,
         isRejected: toolMessage.type === 'rejected'
       };
+      if (toolMessage.type === 'running_now') {
+        const tasks = toolMessage.params?.tasks ?? [];
+        componentParams.children = h(ToolChildrenWrapper, null, tasks.map((t, i) => h('div', {
+          key: i,
+          class: 'text-sm opacity-80'
+        }, `… ${t.description || 'задача'}`)));
+        return toolHeader(componentParams);
+      }
       if (toolMessage.type === 'success') {
         const {
           results

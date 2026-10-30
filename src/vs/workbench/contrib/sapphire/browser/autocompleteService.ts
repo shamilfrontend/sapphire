@@ -3,7 +3,8 @@
  *  Licensed under the Apache License, Version 2.0. See LICENSE.txt for more information.
  *--------------------------------------------------------------------------------------*/
 
-import { Disposable } from '../../../../base/common/lifecycle.js';
+import { Disposable, toDisposable } from '../../../../base/common/lifecycle.js';
+import { Emitter } from '../../../../base/common/event.js';
 import { raceTimeout } from '../../../../base/common/async.js';
 import { CancellationToken } from '../../../../base/common/cancellation.js';
 import { basename } from '../../../../base/common/path.js';
@@ -11,7 +12,7 @@ import { ILanguageFeaturesService } from '../../../../editor/common/services/lan
 import { createDecorator } from '../../../../platform/instantiation/common/instantiation.js';
 import { ITextModel } from '../../../../editor/common/model.js';
 import { Position } from '../../../../editor/common/core/position.js';
-import { InlineCompletion } from '../../../../editor/common/languages.js';
+import { InlineCompletion, InlineCompletionEndOfLifeReasonKind } from '../../../../editor/common/languages.js';
 import { IEditorService } from '../../../services/editor/common/editorService.js';
 import { isCodeEditor } from '../../../../editor/browser/editorBrowser.js';
 import { EditorResourceAccessor } from '../../../common/editor.js';
@@ -41,6 +42,13 @@ import {
   getCompletionOptions,
   removeAllWhitespace,
 } from './autocomplete/fimPostprocess.js';
+import {
+  NextEdit,
+  NEXT_EDIT_REQUEST_TIMEOUT_MS,
+  buildNextEditPrompt,
+  nextEditApplies,
+  parseNextEditResponse,
+} from './autocomplete/nextEditSuggest.js';
 
 interface IAutocompleteService {
   readonly _serviceBrand: undefined;
@@ -61,6 +69,16 @@ class AutocompleteService extends Disposable implements IAutocompleteService {
   private _lastCompletionStart = 0;
 
   private _lastCompletionAccept = 0;
+
+  private readonly _onDidChangeInlineCompletions = this._register(new Emitter<void>());
+
+  private _nextEdit: { docUri: string; edit: NextEdit } | undefined;
+
+  private _nextEditRequestId: string | null = null;
+
+  private _nextEditGeneration = 0;
+
+  private _nextEditTimer: ReturnType<typeof setTimeout> | undefined;
   // private _lastPrefix: string = ''
 
   // вызывается провайдером inline completions VS Code
@@ -332,6 +350,138 @@ class AutocompleteService extends Disposable implements IAutocompleteService {
     }
   }
 
+  private _nextEditCompletion(model: ITextModel, position: Position): InlineCompletion | undefined {
+    const pending = this._nextEdit;
+    if (!pending || pending.docUri !== model.uri.fsPath) {
+      return undefined;
+    }
+    if (pending.edit.lineNumber < 1 || pending.edit.lineNumber > model.getLineCount()) {
+      this._nextEdit = undefined;
+      return undefined;
+    }
+    const lineText = model.getLineContent(pending.edit.lineNumber);
+    if (!nextEditApplies(lineText, position.lineNumber, pending.edit)) {
+      if (lineText !== pending.edit.oldText) {
+        this._nextEdit = undefined;
+      }
+      return undefined;
+    }
+    return {
+      insertText: pending.edit.newText,
+      range: {
+        startLineNumber: pending.edit.lineNumber,
+        startColumn: 1,
+        endLineNumber: pending.edit.lineNumber,
+        endColumn: lineText.length + 1,
+      },
+      isInlineEdit: true,
+    };
+  }
+
+  private _scheduleNextEdit(model: ITextModel, position: Position, acceptedText: string): void {
+    if (!this._settingsService.state.globalSettings.enableAutocomplete) {
+      return;
+    }
+    const generation = ++this._nextEditGeneration;
+    this._clearNextEditRequest();
+    this._nextEdit = undefined;
+
+    const lines: string[] = [];
+    const lineCount = model.getLineCount();
+    for (let lineNumber = 1; lineNumber <= lineCount; lineNumber++) {
+      lines.push(model.getLineContent(lineNumber));
+    }
+    const docUri = model.uri.fsPath;
+    const cursorLine = position.lineNumber;
+    const featureName: FeatureName = 'Autocomplete';
+    const modelSelection = this._settingsService.state.modelSelectionOfFeature[featureName];
+    const modelSelectionOptions = modelSelection
+      ? this._settingsService.state.optionsOfModelSelection[featureName][modelSelection.providerName]?.[
+          modelSelection.modelName
+        ]
+      : undefined;
+
+    const requestId = this._llmMessageService.sendLLMMessage({
+      messagesType: 'FIMMessage',
+      featureName,
+      messages: {
+        prefix: buildNextEditPrompt(lines, cursorLine, acceptedText),
+        suffix: '',
+        stopTokens: ['\n\n'],
+      },
+      modelSelection,
+      modelSelectionOptions,
+      overridesOfModel: this._settingsService.state.overridesOfModel,
+      logging: { loggingName: 'NextEdit' },
+      onText: () => {},
+      onFinalMessage: ({ fullText }) => {
+        if (generation !== this._nextEditGeneration) {
+          return;
+        }
+        this._nextEditRequestId = null;
+        const edit = parseNextEditResponse(fullText, cursorLine, lineCount);
+        if (!edit) {
+          return;
+        }
+        this._nextEdit = { docUri, edit };
+        this._onDidChangeInlineCompletions.fire();
+      },
+      onError: () => {
+        if (generation === this._nextEditGeneration) {
+          this._nextEditRequestId = null;
+        }
+      },
+      onAbort: () => {
+        if (generation === this._nextEditGeneration) {
+          this._nextEditRequestId = null;
+        }
+      },
+    });
+    this._nextEditRequestId = requestId;
+    this._nextEditTimer = setTimeout(() => {
+      if (generation !== this._nextEditGeneration) {
+        return;
+      }
+      this._clearNextEditRequest();
+    }, NEXT_EDIT_REQUEST_TIMEOUT_MS);
+  }
+
+  private _clearNextEditRequest(): void {
+    if (this._nextEditTimer !== undefined) {
+      clearTimeout(this._nextEditTimer);
+      this._nextEditTimer = undefined;
+    }
+    if (this._nextEditRequestId) {
+      this._llmMessageService.abort(this._nextEditRequestId);
+      this._nextEditRequestId = null;
+    }
+  }
+
+  private _scheduleNextEditFromActiveEditor(acceptedText: string): void {
+    const activePane = this._editorService.activeEditorPane;
+    if (!activePane) {
+      return;
+    }
+    const control = activePane.getControl();
+    if (!control || !isCodeEditor(control)) {
+      return;
+    }
+    const position = control.getPosition();
+    if (!position) {
+      return;
+    }
+    const resource = EditorResourceAccessor.getCanonicalUri(this._editorService.activeEditor);
+    if (!resource) {
+      return;
+    }
+    const model = this._modelService.getModel(resource);
+    if (!model) {
+      return;
+    }
+    const text = acceptedText.trim() ? acceptedText : model.getLineContent(position.lineNumber);
+    this._scheduleNextEdit(model, position, text);
+  }
+
   private async _getHoverTypeLine(
     model: ITextModel,
     position: Position,
@@ -366,13 +516,25 @@ class AutocompleteService extends Disposable implements IAutocompleteService {
   ) {
     super();
 
+    this._register(toDisposable(() => this._clearNextEditRequest()));
+
     this._register(
       this._langFeatureService.inlineCompletionsProvider.register('*', {
-        provideInlineCompletions: async (model, position, _context, token) => {
+        provideInlineCompletions: async (model, position, context, token) => {
           const items = await this._provideInlineCompletionItems(model, position, token);
-
-          // console.log('item: ', items?.[0]?.insertText)
-          return { items };
+          const nextEdit = context.includeInlineEdits ? this._nextEditCompletion(model, position) : undefined;
+          if (nextEdit && items.length === 0) {
+            return { items: [nextEdit] };
+          }
+          return { items: nextEdit ? [...items, nextEdit] : items };
+        },
+        onDidChangeInlineCompletions: this._onDidChangeInlineCompletions.event,
+        handleEndOfLifetime: (_completions, item, reason) => {
+          if (reason.kind !== InlineCompletionEndOfLifeReasonKind.Accepted || !item.isInlineEdit) {
+            return;
+          }
+          const accepted = typeof item.insertText === 'string' ? item.insertText : '';
+          this._scheduleNextEditFromActiveEditor(accepted);
         },
         disposeInlineCompletions: (_completions, _reason) => {
           // uri и позиция для freeInlineCompletions
@@ -402,6 +564,7 @@ class AutocompleteService extends Disposable implements IAutocompleteService {
               if (matchup) {
                 this._lastCompletionAccept = Date.now();
                 this._autocompletionsOfDocument[docUriStr].delete(autocompletion.id);
+                this._scheduleNextEdit(model, position, acceptedText);
 
                 // предзагрузка следующего абзаца
                 const full = autocompletion.insertText;

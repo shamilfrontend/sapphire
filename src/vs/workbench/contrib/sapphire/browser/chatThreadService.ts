@@ -42,6 +42,8 @@ import {
 } from '../common/chatThreadServiceTypes.js';
 import { IHeuristicFileRetrieveService } from './heuristicFileRetrieveService.js';
 import { ChatThreadAgentLoop } from './chatThreadAgentLoop.js';
+import { IAgentArenaService } from './agentArenaService.js';
+import { ITerminalToolService } from './terminalToolService.js';
 import { ChatThreadCheckpoints } from './chatThreadCheckpoints.js';
 import { ChatThreadCodespanLinks } from './chatThreadCodespanLinks.js';
 import { ChatThreadLibrary } from './chatThreadLibrary.js';
@@ -331,6 +333,8 @@ class ChatThreadService extends Disposable implements IChatThreadService {
     @IHeuristicFileRetrieveService
     private readonly _heuristicFileRetrieveService: IHeuristicFileRetrieveService,
     @IOfficeExtractService private readonly _officeExtractService: IOfficeExtractService,
+    @IAgentArenaService public readonly _agentArenaService: IAgentArenaService,
+    @ITerminalToolService public readonly _terminalToolService: ITerminalToolService,
   ) {
     super();
     const host = this as unknown as ChatThreadCollaboratorHost;

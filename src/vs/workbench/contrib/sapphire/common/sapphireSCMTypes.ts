@@ -4,6 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { createDecorator } from '../../../../platform/instantiation/common/instantiation.js';
+import { GitReviewPacket } from './localReview.js';
 
 export interface ISapphireSCMService {
   readonly _serviceBrand: undefined;
@@ -35,6 +36,11 @@ export interface ISapphireSCMService {
    * Пути из git diff --name-only. Если есть staged, берутся только они — как у gitStat.
    */
   gitChangedFiles(path: string): Promise<string[]>;
+  /**
+   * Локальный пакет для review: сначала working tree против HEAD,
+   * иначе коммиты ветки относительно main/master/origin/HEAD.
+   */
+  gitReviewDiff(path: string): Promise<GitReviewPacket>;
 }
 
 export const ISapphireSCMService = createDecorator<ISapphireSCMService>('sapphireSCMService');

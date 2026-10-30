@@ -21,6 +21,9 @@ import './quickEditActions.js';
 // автодополнение
 import './autocompleteService.js';
 
+// пульт параллельных subagent (арена)
+import './agentArenaService.js';
+
 // панель настроек
 import './sapphireSettingsPane.js';
 

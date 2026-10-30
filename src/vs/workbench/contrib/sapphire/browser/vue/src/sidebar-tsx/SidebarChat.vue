@@ -38,6 +38,7 @@ import {
 import ErrorBoundary from './ErrorBoundary.vue';
 import ErrorDisplay from './ErrorDisplay.vue';
 import QueuedMessagesPanel from './QueuedMessagesPanel.vue';
+import AgentArenaPanel from './AgentArenaPanel.vue';
 import SapphireChatArea from './SapphireChatArea.vue';
 import ScrollToBottomContainer from './ScrollToBottomContainer.vue';
 import ChatBubble from './ChatBubble.vue';
@@ -460,6 +461,7 @@ const onComposerFileInput = async (e: Event) => {
           <div>
             <div class="pt-3">
               <div class="flex flex-col">
+                <AgentArenaPanel :threadId="threadId" />
                 <QueuedMessagesPanel :threadId="threadId" :onEditQueued="onEditQueued" />
                 <SapphireChatArea
                   featureName="Chat"
@@ -534,6 +536,7 @@ const onComposerFileInput = async (e: Event) => {
         <div>
           <div class="pt-3">
             <div class="flex flex-col">
+              <AgentArenaPanel :threadId="threadId" />
               <QueuedMessagesPanel :threadId="threadId" :onEditQueued="onEditQueued" />
               <SapphireChatArea
                 featureName="Chat"
@@ -681,6 +684,7 @@ const onComposerFileInput = async (e: Event) => {
             </div>
             <CommandBarInChat />
             <div class="flex flex-col">
+              <AgentArenaPanel :threadId="threadId" />
               <QueuedMessagesPanel :threadId="threadId" :onEditQueued="onEditQueued" />
               <SapphireChatArea
                 featureName="Chat"
