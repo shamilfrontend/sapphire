@@ -398,7 +398,7 @@ class SapphireSettingsService extends Disposable implements ISapphireSettingsSer
       if (readS.globalSettings.includeToolLintErrors === undefined)
         {readS.globalSettings.includeToolLintErrors = defaultGlobalSettings.includeToolLintErrors;}
 
-      // Подставляем дефолты для незаданных типов approval (edits/terminal/MCP/network off)
+      // Подставляем дефолты для незаданных типов approval (edits/terminal/MCP/network/browser off)
       readS.globalSettings.autoApprove = {
         ...defaultGlobalSettings.autoApprove,
         ...((typeof readS.globalSettings.autoApprove === 'object' &&

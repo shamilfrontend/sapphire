@@ -342,9 +342,64 @@ export const builtinTools: {
 
   browse_url: {
     name: 'browse_url',
-    description: `Fetch and extract readable text from a public http(s) URL. Use after web_search to read a specific page. Do not use for localhost or private network addresses.`,
+    description: `Fetch and extract readable text from a public http(s) URL. Use after web_search to read a specific page. Do not use for localhost or private network addresses. To click, type, or open a local app, use browser_navigate instead.`,
     params: {
       url: { description: 'Full http(s) URL to fetch.' },
+    },
+  },
+
+  browser_navigate: {
+    name: 'browser_navigate',
+    description: `Open an http(s) URL in the integrated browser the user can see, including localhost. Returns pageId and an accessibility snapshot with element refs. Reuses the last page opened by this tool. Call this before browser_click, browser_type, browser_scroll, or browser_screenshot.`,
+    params: {
+      url: { description: 'Absolute http(s) URL. localhost and 127.0.0.1 are allowed. Private LAN addresses are not.' },
+    },
+  },
+
+  browser_snapshot: {
+    name: 'browser_snapshot',
+    description: `Read the current accessibility snapshot of an open browser page, including element refs. Call this after navigation or any DOM change before the next click or type.`,
+    params: {
+      page_id: { description: 'Page id returned by browser_navigate.' },
+    },
+  },
+
+  browser_click: {
+    name: 'browser_click',
+    description: `Click an element in the integrated browser. ref must come from the latest browser_navigate or browser_snapshot. Do not invent refs.`,
+    params: {
+      page_id: { description: 'Page id returned by browser_navigate.' },
+      ref: { description: 'Element ref from the latest snapshot (aria-ref).' },
+      element: { description: 'Short human-readable name of the element, shown in the approval card.' },
+    },
+  },
+
+  browser_type: {
+    name: 'browser_type',
+    description: `Type text into an element in the integrated browser. ref must come from the latest snapshot. Set submit true to press Enter after filling.`,
+    params: {
+      page_id: { description: 'Page id returned by browser_navigate.' },
+      ref: { description: 'Element ref from the latest snapshot (aria-ref).' },
+      element: { description: 'Short human-readable name of the field, shown in the approval card.' },
+      text: { description: 'Text to fill into the element.' },
+      submit: { description: 'Optional. If true, press Enter after filling. Default false.' },
+    },
+  },
+
+  browser_scroll: {
+    name: 'browser_scroll',
+    description: `Scroll the integrated browser page up or down, then return a fresh snapshot.`,
+    params: {
+      page_id: { description: 'Page id returned by browser_navigate.' },
+      direction: { description: 'Either "up" or "down".' },
+    },
+  },
+
+  browser_screenshot: {
+    name: 'browser_screenshot',
+    description: `Capture a screenshot of the integrated browser page for the user. Also returns the accessibility snapshot.`,
+    params: {
+      page_id: { description: 'Page id returned by browser_navigate.' },
     },
   },
 
@@ -624,6 +679,12 @@ const AGENT_ONLY_BUILTIN_TOOLS = new Set<BuiltinToolName>([
   'run_parallel_subagents',
   'web_search',
   'browse_url',
+  'browser_navigate',
+  'browser_snapshot',
+  'browser_click',
+  'browser_type',
+  'browser_scroll',
+  'browser_screenshot',
   'save_memory',
 ]);
 
@@ -848,7 +909,7 @@ Language (mandatory): If the user's latest message is in Russian, write BOTH the
       `Use run_subagent for a focused research or implementation subtask that would clutter this thread. Put ALL context the child needs in prompt (it cannot see this chat). Prefer one clear subtask per call. For independent read-only investigations, prefer run_parallel_subagents (max 4). End your own turn after synthesizing the child's summary — do not re-do the child's work.`,
     );
     details.push(
-      `Use web_search / browse_url for public docs and facts not in the workspace. Use save_memory for durable project decisions or user preferences that should stick across turns.`,
+      `Use web_search / browse_url for public docs and facts not in the workspace. To open a page the user can see and then click, type, or scroll — including localhost — use browser_navigate, then browser_snapshot, then browser_click / browser_type / browser_scroll with refs from that snapshot. Do not invent refs. Use browser_screenshot when the user should see the page. Use save_memory for durable project decisions or user preferences that should stick across turns.`,
     );
     details.push(
       `ALWAYS have maximal certainty in a change BEFORE you make it. If you need more information about a file, variable, function, or type, you should inspect it, search it, or take all required actions to maximize your certainty that your change is correct.`,

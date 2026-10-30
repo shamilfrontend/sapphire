@@ -38,6 +38,18 @@ import {
 } from '../common/toolsServiceTypes.js';
 import { assertPublicHttpUrl } from '../common/webEgressPolicy.js';
 import { IWebEgressService } from '../common/webEgressService.js';
+import { assertAgentBrowserUrl } from '../common/agentBrowserUrl.js';
+import { IEditorService } from '../../../services/editor/common/editorService.js';
+import { IPlaywrightService } from '../../../../platform/browserView/common/playwrightService.js';
+import { IBrowserViewWorkbenchService } from '../../browserView/common/browserView.js';
+import {
+  clickSapphireBrowser,
+  navigateSapphireBrowser,
+  screenshotSapphireBrowser,
+  scrollSapphireBrowser,
+  snapshotSapphireBrowser,
+  typeSapphireBrowser,
+} from './sapphireAgentBrowser.js';
 import {
   assertNotSecretToolUri,
   assertUriInsideWorkspace,
@@ -143,6 +155,34 @@ const validateStr = (argName: string, value: unknown) => {
       `Invalid LLM output format: ${argName} must be a string, but its type is "${typeof value}". Full value: ${JSON.stringify(value)}.`,
     );
   return value;
+};
+
+const requireBrowserPageId = (value: unknown): string => {
+  const pageId = validateStr('pageId', value).trim();
+  if (!pageId) {
+    throw new Error('page_id is required. Call browser_navigate first.');
+  }
+  return pageId;
+};
+
+const requireBrowserRef = (value: unknown): string => {
+  const ref = validateStr('ref', value).trim();
+  if (!ref) {
+    throw new Error('ref is required and must come from the latest browser snapshot.');
+  }
+  return ref;
+};
+
+const browserElementLabel = (value: unknown): string => {
+  if (typeof value !== 'string' || !value.trim()) {
+    return 'element';
+  }
+  return value.trim();
+};
+
+const browserToolText = (result: { pageId: string; url: string; summary: string; imageDataUrl: string | null }): string => {
+  const shot = result.imageDataUrl ? '\nScreenshot captured for the user.' : '';
+  return `pageId: ${result.pageId}\nurl: ${result.url}${shot}\n\n${result.summary}`;
 };
 
 /** Убирает одну пару внешних кавычек, если LLM обернул всю команду в них. */
@@ -482,6 +522,9 @@ class ToolsService implements IToolsService {
     @IProjectIndexService private readonly projectIndexService: IProjectIndexService,
     @IMemoriesService private readonly memoriesService: IMemoriesService,
     @IWebEgressService private readonly webEgressService: IWebEgressService,
+    @IBrowserViewWorkbenchService private readonly browserViewService: IBrowserViewWorkbenchService,
+    @IPlaywrightService private readonly playwrightService: IPlaywrightService,
+    @IEditorService private readonly editorService: IEditorService,
   ) {
     const queryBuilder = instantiationService.createInstance(QueryBuilder);
     const wsFolders = () => workspaceContextService.getWorkspace().folders;
@@ -706,6 +749,46 @@ class ToolsService implements IToolsService {
         // sync precheck; full DNS resolve — в callTool через IWebEgressService
         assertPublicHttpUrl(url);
         return { url };
+      },
+
+      browser_navigate: (params: RawToolParamsObj) => {
+        const url = assertAgentBrowserUrl(validateStr('url', params.url));
+        return { url };
+      },
+
+      browser_snapshot: (params: RawToolParamsObj) => {
+        return { pageId: requireBrowserPageId(params.page_id) };
+      },
+
+      browser_click: (params: RawToolParamsObj) => {
+        return {
+          pageId: requireBrowserPageId(params.page_id),
+          ref: requireBrowserRef(params.ref),
+          element: browserElementLabel(params.element),
+        };
+      },
+
+      browser_type: (params: RawToolParamsObj) => {
+        const submit = String(params.submit ?? '').trim().toLowerCase() === 'true';
+        return {
+          pageId: requireBrowserPageId(params.page_id),
+          ref: requireBrowserRef(params.ref),
+          element: browserElementLabel(params.element),
+          text: validateStr('text', params.text),
+          submit,
+        };
+      },
+
+      browser_scroll: (params: RawToolParamsObj) => {
+        const directionRaw = validateStr('direction', params.direction).trim().toLowerCase();
+        if (directionRaw !== 'up' && directionRaw !== 'down') {
+          throw new Error('browser_scroll: direction must be "up" or "down"');
+        }
+        return { pageId: requireBrowserPageId(params.page_id), direction: directionRaw };
+      },
+
+      browser_screenshot: (params: RawToolParamsObj) => {
+        return { pageId: requireBrowserPageId(params.page_id) };
       },
 
       save_memory: (params: RawToolParamsObj) => {
@@ -1362,6 +1445,71 @@ class ToolsService implements IToolsService {
         return { result: resultPromise, interruptTool: () => cts.cancel() };
       },
 
+      browser_navigate: async ({ url }) => {
+        const result = await navigateSapphireBrowser(
+          this.browserViewService,
+          this.playwrightService,
+          this.editorService,
+          url,
+        );
+        return { result };
+      },
+
+      browser_snapshot: async ({ pageId }) => {
+        const result = await snapshotSapphireBrowser(
+          this.browserViewService,
+          this.playwrightService,
+          this.editorService,
+          pageId,
+        );
+        return { result };
+      },
+
+      browser_click: async ({ pageId, ref }) => {
+        const result = await clickSapphireBrowser(
+          this.browserViewService,
+          this.playwrightService,
+          this.editorService,
+          pageId,
+          ref,
+        );
+        return { result };
+      },
+
+      browser_type: async ({ pageId, ref, text, submit }) => {
+        const result = await typeSapphireBrowser(
+          this.browserViewService,
+          this.playwrightService,
+          this.editorService,
+          pageId,
+          ref,
+          text,
+          submit,
+        );
+        return { result };
+      },
+
+      browser_scroll: async ({ pageId, direction }) => {
+        const result = await scrollSapphireBrowser(
+          this.browserViewService,
+          this.playwrightService,
+          this.editorService,
+          pageId,
+          direction,
+        );
+        return { result };
+      },
+
+      browser_screenshot: async ({ pageId }) => {
+        const result = await screenshotSapphireBrowser(
+          this.browserViewService,
+          this.playwrightService,
+          this.editorService,
+          pageId,
+        );
+        return { result };
+      },
+
       browse_url: async ({ url }) => {
         await this.webEgressService.assertPublicHttpUrl(url);
         const cached = getCached(browseCache, `browse:${url}`);
@@ -1725,6 +1873,12 @@ class ToolsService implements IToolsService {
         const body = result.content.length > 10_000 ? `${result.content.slice(0, 10_000)}\n…[truncated]` : result.content;
         return wrapUntrustedContent('WEB_PAGE', head + body);
       },
+      browser_navigate: (_params, result) => wrapUntrustedContent('BROWSER', browserToolText(result)),
+      browser_snapshot: (_params, result) => wrapUntrustedContent('BROWSER', browserToolText(result)),
+      browser_click: (_params, result) => wrapUntrustedContent('BROWSER', browserToolText(result)),
+      browser_type: (_params, result) => wrapUntrustedContent('BROWSER', browserToolText(result)),
+      browser_scroll: (_params, result) => wrapUntrustedContent('BROWSER', browserToolText(result)),
+      browser_screenshot: (_params, result) => wrapUntrustedContent('BROWSER', browserToolText(result)),
       save_memory: (_params, result) => `Memory saved: key="${result.key}".`,
       run_subagent: (_params, result) => {
         const head = result.completed

@@ -16,7 +16,7 @@ import CopyButton from '../markdown/CopyButton.vue';
 import EditToolAcceptRejectButtonsHTML from '../markdown/EditToolAcceptRejectButtonsHTML.vue';
 import { useEditToolStreamState } from '../markdown/ApplyBlockHoverButtons.js';
 import { ChatMessage, ToolMessage } from '../../../../common/chatThreadServiceTypes.js';
-import { approvalTypeOfBuiltinToolName, BuiltinToolCallParams, BuiltinToolName, BuiltinToolResultType, LintErrorItem, ToolName } from '../../../../common/toolsServiceTypes.js';
+import { approvalTypeOfBuiltinToolName, BrowserToolResult, BuiltinToolCallParams, BuiltinToolName, BuiltinToolResultType, LintErrorItem, ToolName } from '../../../../common/toolsServiceTypes.js';
 import { builtinToolNames, isABuiltinToolName, MAX_FILE_CHARS_PAGE } from '../../../../common/prompt/prompts.js';
 import { resolveThreadChatMode } from '../../../../common/sapphireSettingsTypes.js';
 import { RawToolCallObj } from '../../../../common/sendLLMMessageTypes.js';
@@ -233,6 +233,36 @@ const titleOfBuiltinToolName = {
     done: 'Страница прочитана',
     proposed: 'Открыть URL',
     running: loadingTitleWrapper('Чтение URL')
+  },
+  browser_navigate: {
+    done: 'Страница открыта',
+    proposed: 'Открыть в браузере',
+    running: loadingTitleWrapper('Открытие в браузере')
+  },
+  browser_snapshot: {
+    done: 'Снимок страницы',
+    proposed: 'Снять снимок страницы',
+    running: loadingTitleWrapper('Снимок страницы')
+  },
+  browser_click: {
+    done: 'Клик выполнен',
+    proposed: 'Клик в браузере',
+    running: loadingTitleWrapper('Клик в браузере')
+  },
+  browser_type: {
+    done: 'Текст введён',
+    proposed: 'Ввод в браузере',
+    running: loadingTitleWrapper('Ввод в браузере')
+  },
+  browser_scroll: {
+    done: 'Страница прокручена',
+    proposed: 'Прокрутить страницу',
+    running: loadingTitleWrapper('Прокрутка страницы')
+  },
+  browser_screenshot: {
+    done: 'Скриншот сделан',
+    proposed: 'Скриншот браузера',
+    running: loadingTitleWrapper('Скриншот браузера')
   },
   save_memory: {
     done: 'Память сохранена',
@@ -465,6 +495,42 @@ const toolNameToDesc = (toolName: BuiltinToolName, _toolParams: BuiltinToolCallP
       const toolParams = _toolParams as BuiltinToolCallParams['browse_url'];
       return {
         desc1: toolParams.url
+      };
+    },
+    browser_navigate: () => {
+      const toolParams = _toolParams as BuiltinToolCallParams['browser_navigate'];
+      return {
+        desc1: toolParams.url
+      };
+    },
+    browser_snapshot: () => {
+      const toolParams = _toolParams as BuiltinToolCallParams['browser_snapshot'];
+      return {
+        desc1: toolParams.pageId
+      };
+    },
+    browser_click: () => {
+      const toolParams = _toolParams as BuiltinToolCallParams['browser_click'];
+      return {
+        desc1: toolParams.element
+      };
+    },
+    browser_type: () => {
+      const toolParams = _toolParams as BuiltinToolCallParams['browser_type'];
+      return {
+        desc1: toolParams.element
+      };
+    },
+    browser_scroll: () => {
+      const toolParams = _toolParams as BuiltinToolCallParams['browser_scroll'];
+      return {
+        desc1: toolParams.direction
+      };
+    },
+    browser_screenshot: () => {
+      const toolParams = _toolParams as BuiltinToolCallParams['browser_screenshot'];
+      return {
+        desc1: toolParams.pageId
       };
     },
     save_memory: () => {
@@ -702,7 +768,9 @@ export const ToolRequestAcceptRejectButtons = ({
         ? 'терминал'
         : approvalType === 'network'
           ? 'сеть'
-          : 'MCP';
+          : approvalType === 'browser'
+            ? 'браузер'
+            : 'MCP';
 
   const approvalToggle = approvalType ? h('div', {
     key: approvalType,
@@ -1264,6 +1332,46 @@ const CodeNavToolCard = ({
         class: 'w-full overflow-auto'
       }));
     }
+  } else if (toolMessage.type === 'tool_error') {
+    componentParams.bottomChildren = h(BottomChildren, {
+      title: 'Ошибка'
+    }, h(CodeChildren, null, toolMessage.result));
+  }
+  return toolHeader(componentParams);
+};
+const renderBrowserToolCard = (toolMessage: ToolMessage<BuiltinToolName>): VNodeChild => {
+  const accessor = useAccessor();
+  const title = getTitle(toolMessage);
+  const params = toolMessage.type === 'invalid_params' ? undefined : toolMessage.params;
+  const {
+    desc1,
+    desc1Info
+  } = toolNameToDesc(toolMessage.name, params, accessor);
+  if (toolMessage.type === 'tool_request' || toolMessage.type === 'running_now' || toolMessage.type === 'invalid_params') {
+    return null;
+  }
+  const componentParams: ToolHeaderParams = {
+    title,
+    desc1,
+    desc1Info,
+    isError: false,
+    icon: null,
+    isRejected: toolMessage.type === 'rejected'
+  };
+  if (toolMessage.type === 'success' && toolMessage.result && typeof toolMessage.result === 'object' && 'summary' in toolMessage.result) {
+    const result = toolMessage.result as BrowserToolResult;
+    const preview = result.summary.length > 2000 ? `${result.summary.slice(0, 2000)}\n…` : result.summary;
+    componentParams.info = result.url || result.pageId;
+    const image = result.imageDataUrl ? h('img', {
+      src: result.imageDataUrl,
+      alt: '',
+      class: 'max-h-48 max-w-full rounded border border-void-border-2'
+    }) : null;
+    componentParams.children = h(ToolChildrenWrapper, null, image, h(CodeChildren, {
+      class: 'bg-void-bg-3'
+    }, h('pre', {
+      class: 'font-mono whitespace-pre-wrap'
+    }, preview)));
   } else if (toolMessage.type === 'tool_error') {
     componentParams.bottomChildren = h(BottomChildren, {
       title: 'Ошибка'
@@ -2187,6 +2295,24 @@ export const builtinToolNameToComponent: { [T in BuiltinToolName]: {
       }
       return toolHeader(componentParams);
     }
+  },
+  browser_navigate: {
+    resultWrapper: ({ toolMessage }) => renderBrowserToolCard(toolMessage)
+  },
+  browser_snapshot: {
+    resultWrapper: ({ toolMessage }) => renderBrowserToolCard(toolMessage)
+  },
+  browser_click: {
+    resultWrapper: ({ toolMessage }) => renderBrowserToolCard(toolMessage)
+  },
+  browser_type: {
+    resultWrapper: ({ toolMessage }) => renderBrowserToolCard(toolMessage)
+  },
+  browser_scroll: {
+    resultWrapper: ({ toolMessage }) => renderBrowserToolCard(toolMessage)
+  },
+  browser_screenshot: {
+    resultWrapper: ({ toolMessage }) => renderBrowserToolCard(toolMessage)
   },
   save_memory: {
     resultWrapper: ({

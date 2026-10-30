@@ -66,9 +66,13 @@ suite('availableTools', () => {
     assert.ok(!toolNames('plan').includes('run_parallel_subagents'));
     assert.ok(toolNames('agent').includes('web_search'));
     assert.ok(toolNames('agent').includes('browse_url'));
+    assert.ok(toolNames('agent').includes('browser_navigate'));
+    assert.ok(toolNames('agent').includes('browser_click'));
     assert.ok(toolNames('agent').includes('save_memory'));
     assert.ok(!toolNames('plan').includes('web_search'));
     assert.ok(!toolNames('plan').includes('browse_url'));
+    assert.ok(!toolNames('plan').includes('browser_navigate'));
+    assert.ok(!toolNames('plan').includes('browser_click'));
     assert.ok(!toolNames('plan').includes('save_memory'));
   });
 

@@ -641,12 +641,13 @@ export const defaultGlobalSettings: GlobalSettings = {
   syncSCMToChat: true,
   enableFastApply: true,
   chatMode: 'normal',
-  // Правки / terminal / MCP / network — только с подтверждением (безопасный default).
+  // Правки / terminal / MCP / network / browser — только с подтверждением (безопасный default).
   autoApprove: {
     edits: false,
     terminal: false,
     'MCP tools': false,
     network: false,
+    browser: false,
   },
   showInlineSuggestions: true,
   includeToolLintErrors: true,

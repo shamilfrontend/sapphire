@@ -4,6 +4,11 @@
 
 ## [Unreleased]
 
+### Added
+
+- Кнопка браузера в title bar слева от Terminal открывает встроенный браузер
+- В Agent tools `browser_navigate`, `browser_snapshot`, `browser_click`, `browser_type`, `browser_scroll`, `browser_screenshot` (localhost разрешён; каждое действие ждёт подтверждения)
+
 ### Changed
 
 - Placeholder композера чата всегда указывает офисные форматы (xlsx, docx, pptx, pdf); при `supportsVision` у выбранной модели добавляются картинки (png/jpeg/webp/gif)

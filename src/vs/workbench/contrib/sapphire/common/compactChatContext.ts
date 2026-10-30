@@ -303,6 +303,12 @@ export function compactToolResult(name: string, rawParams: unknown, content: str
     case 'glob_files':
     case 'web_search':
     case 'browse_url':
+    case 'browser_navigate':
+    case 'browser_snapshot':
+    case 'browser_click':
+    case 'browser_type':
+    case 'browser_scroll':
+    case 'browser_screenshot':
     case 'search_symbols':
       digest = searchDigest(name, rawParams, content);
       break;

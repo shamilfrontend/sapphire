@@ -73,7 +73,9 @@ const approvalLabel = (approvalType: ToolApprovalType) =>
       ? 'терминал'
       : approvalType === 'network'
         ? 'сеть'
-        : 'MCP';
+        : approvalType === 'browser'
+          ? 'браузер'
+          : 'MCP';
 
 const mcpIntro = `
 Use Model Context Protocol to provide Agent mode with more tools.

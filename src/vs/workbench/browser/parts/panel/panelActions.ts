@@ -337,7 +337,7 @@ MenuRegistry.appendMenuItems([
 						ContextKeyExpr.equals('config.workbench.layoutControl.type', 'both')
 					)
 				),
-			order: 1
+			order: 2
 		}
 	}
 ]);

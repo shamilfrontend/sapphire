@@ -36,6 +36,12 @@
 | `kill_persistent_terminal` | ✗ | ✓ | terminal | Закрыть persistent terminal |
 | `web_search` | ✗ | ✓ | — | Поиск в публичном интернете (agent-only) |
 | `browse_url` | ✗ | ✓ | — | Текст публичной http(s)-страницы (agent-only) |
+| `browser_navigate` | ✗ | ✓ | browser | Открыть URL во встроенном браузере, включая localhost |
+| `browser_snapshot` | ✗ | ✓ | browser | Снимок страницы с ref элементов |
+| `browser_click` | ✗ | ✓ | browser | Клик по ref из снимка |
+| `browser_type` | ✗ | ✓ | browser | Ввод текста в элемент по ref |
+| `browser_scroll` | ✗ | ✓ | browser | Прокрутка страницы |
+| `browser_screenshot` | ✗ | ✓ | browser | Скриншот страницы |
 | `save_memory` | ✗ | ✓ | — | Долгий факт в workspace memory (agent-only) |
 | `run_subagent` | ✗ | ✓ | — | Дочерний агент со своим tool loop (agent-only) |
 | `run_parallel_subagents` | ✗ | ✓ | — | До 4 read-only subagents параллельно (agent-only) |
@@ -54,4 +60,5 @@
 - `get_project_tour` — шаги онбординга из `.sapphire/index/tour.json` (появляется сам после индексации, если тура нет или он устарел).
 - Планы: `.sapphire/plans/*.plan.md` (YAML frontmatter + markdown, опционально Mermaid).
 - `web_search` / `browse_url` идут в публичную сеть, не на LLM-шлюз. См. [Приватность](/guide/privacy).
+- `browser_*` управляют встроенным браузером (в том числе localhost). Сначала `browser_navigate` или `browser_snapshot`, затем click/type по `ref` из снимка. Каждое действие — approval `browser`.
 - Параллельные subagents — только read-only набор; `run_subagent` у дочернего агента недоступен (без вложенности).

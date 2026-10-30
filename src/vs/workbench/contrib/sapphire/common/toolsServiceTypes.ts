@@ -67,6 +67,14 @@ export type GlobFileHit = {
   size: number;
 };
 
+/** Результат browser_* tools. imageDataUrl только у screenshot, для карточки в чате. */
+export type BrowserToolResult = {
+  pageId: string;
+  url: string;
+  summary: string;
+  imageDataUrl: string | null;
+};
+
 /** Один результат web_search. */
 export type WebSearchHit = {
   title: string;
@@ -104,7 +112,7 @@ export type ShallowDirectoryItem = {
 };
 
 export const approvalTypeOfBuiltinToolName: Partial<{
-  [T in BuiltinToolName]?: 'edits' | 'terminal' | 'MCP tools' | 'network';
+  [T in BuiltinToolName]?: 'edits' | 'terminal' | 'MCP tools' | 'network' | 'browser';
 }> = {
   create_file_or_folder: 'edits',
   delete_file_or_folder: 'edits',
@@ -117,6 +125,12 @@ export const approvalTypeOfBuiltinToolName: Partial<{
   kill_persistent_terminal: 'terminal',
   web_search: 'network',
   browse_url: 'network',
+  browser_navigate: 'browser',
+  browser_snapshot: 'browser',
+  browser_click: 'browser',
+  browser_type: 'browser',
+  browser_scroll: 'browser',
+  browser_screenshot: 'browser',
 };
 
 export type ToolApprovalType = NonNullable<
@@ -160,6 +174,12 @@ export type BuiltinToolCallParams = {
   glob_files: { pattern: string; limit: number };
   web_search: { query: string; k: number };
   browse_url: { url: string };
+  browser_navigate: { url: string };
+  browser_snapshot: { pageId: string };
+  browser_click: { pageId: string; ref: string; element: string };
+  browser_type: { pageId: string; ref: string; element: string; text: string; submit: boolean };
+  browser_scroll: { pageId: string; direction: 'up' | 'down' };
+  browser_screenshot: { pageId: string };
   save_memory: { type: MemoryType; key: string; value: string; tags: string[] | null };
   run_subagent: { description: string; prompt: string };
   run_parallel_subagents: { tasks: ParallelSubagentTask[] };
@@ -247,6 +267,12 @@ export type BuiltinToolResultType = {
   glob_files: { files: GlobFileHit[]; truncated: boolean };
   web_search: { results: WebSearchHit[] };
   browse_url: { content: string; title: string | null; url: string };
+  browser_navigate: BrowserToolResult;
+  browser_snapshot: BrowserToolResult;
+  browser_click: BrowserToolResult;
+  browser_type: BrowserToolResult;
+  browser_scroll: BrowserToolResult;
+  browser_screenshot: BrowserToolResult;
   save_memory: { acknowledged: true; key: string };
   run_subagent: {
     summary: string;

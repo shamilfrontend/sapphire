@@ -65,6 +65,9 @@ import './sapphireOnboardingService.js';
 // Режим Агент overlay + titlebar switch
 import './sapphireAgentsWindowService.js';
 
+// Кнопка браузера в title bar (слева от Terminal)
+import './sapphireBrowserTitlebar.js';
+
 // прочие contribution
 import './miscWokrbenchContrib.js';
 

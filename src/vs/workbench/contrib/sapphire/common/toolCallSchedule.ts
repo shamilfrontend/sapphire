@@ -38,7 +38,7 @@ export function parallelReadOnlyToolNames(): readonly string[] {
 /** Правило Plan/Agent: батчить те же read-only tools, что и планировщик. */
 export function parallelReadOnlyToolPrompt(): string {
   const names = parallelReadOnlyToolNames().join(', ');
-  return `You may call several read-only tools in one response (${names}). Edits, terminal, MCP, and plan tools must be one at a time.`;
+  return `You may call several read-only tools in one response (${names}). Edits, terminal, browser, MCP, and plan tools must be one at a time.`;
 }
 
 /** Правило Plan/Agent: компактный результат tool не заменяет чтение файла. */

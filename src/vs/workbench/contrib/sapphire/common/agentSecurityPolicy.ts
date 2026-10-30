@@ -18,6 +18,7 @@
  * 2. Secret paths (.env, *.pem, …) блокируются для agent tools даже внутри workspace.
  * 3. autoApprove.edits default = false; subagent наследует ту же UI approval matrix.
  * 4. Network tools (web_search/browse_url) требуют approval type `network` (default off).
+ *    Browser tools (click/type/navigate) требуют approval type `browser` (default off).
  * 5. Remote: ForwardAgent default false; Void REH URL убран — нужен явный template.
  */
 

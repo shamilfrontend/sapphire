@@ -10,17 +10,18 @@
 | Планы | `create_plan`, `update_plan` | не требуется |
 | Правки | `edit_file`, `rewrite_file`, `create_*`, `delete_*`, `rename_symbol` | edits |
 | Терминал | `run_command`, persistent terminal | terminal |
-| Сеть (только Agent) | `web_search`, `browse_url` | не требуется (трафик вне шлюза) |
+| Сеть (только Agent) | `web_search`, `browse_url` | network |
+| Браузер (только Agent) | `browser_navigate`, `browser_snapshot`, `browser_click`, `browser_type`, `browser_scroll`, `browser_screenshot` | browser |
 | Память / subagents | `save_memory`, `run_subagent`, `run_parallel_subagents` | не требуется |
 | MCP | `enable_mcp_server` + tools серверов | MCP tools |
 
 ## По режимам
 
 - **Chat** — без builtin tools.
-- **Plan** — read/search + `create_plan` / `update_plan` (без правок, терминала, web, memory, subagents, MCP).
+- **Plan** — read/search + `create_plan` / `update_plan` (без правок, терминала, web, браузера, memory, subagents, MCP).
 - **Agent** — все builtin кроме `create_plan`; MCP после deferred enable. `update_plan` только во время «Сделать по плану» (build утверждённого плана).
 
-Соседние read-only tools из одного ответа выполняются параллельно. Правки, терминал, MCP, планы, web и subagents — по одному.
+Соседние read-only tools из одного ответа выполняются параллельно. Правки, терминал, браузер, MCP, планы, web и subagents — по одному.
 
 ## Memories, subagents, web
 
@@ -28,15 +29,16 @@
 - **`run_subagent`** — изолированный дочерний агент; в prompt нужно передать весь контекст. Таймаут до 10 мин; Stop родителя прерывает раньше.
 - **`run_parallel_subagents`** — до 4 read-only исследований параллельно (без правок и сети).
 - **`web_search` / `browse_url`** — публичный интернет; см. [Приватность](/guide/privacy).
+- **Браузер** — видимая панель. `browser_navigate` открывает http(s), включая localhost. Дальше `browser_snapshot` даёт `ref`, по ним `browser_click` / `browser_type` / `browser_scroll`. `browser_screenshot` показывает картинку в чате. Кнопка в title bar слева от Terminal открывает ту же панель без агента.
 
 ## Approve / Reject
 
 Перед действием с типом approval IDE показывает запрос (если auto-approve выключен). Можно одобрить один вызов, отклонить или включить auto-approve в Settings → Tools.
 
-**Дефолты Sapphire:** `edits` — auto-approve **включён**; `terminal` и `MCP tools` — **выключены**.
+**Дефолты Sapphire:** `edits`, `terminal`, `MCP tools`, `network` и `browser` — auto-approve **выключены**.
 
 ## Политика для корпоративного использования
 
-Оставляйте ручной approve на **terminal** и **MCP**. Учитывайте, что web-tools ходят наружу даже без отдельного approve.
+Оставляйте ручной approve на **terminal**, **браузер** и **MCP**. `web_search` и `browse_url` ходят в публичную сеть и ждут approval `network`.
 
 Настройка MCP-серверов: [Settings → MCP](/guide/settings#mcp).
