@@ -249,10 +249,10 @@ async function startup(codeCachePath: string | undefined, nlsConfig: INLSConfigu
 }
 
 function configureCommandlineSwitchesSync(cliArgs: NativeParsedArgs) {
-	// Ad-hoc dev builds have no Team ID. macOS Keychain then prompts once per
-	// process (main and Helper) and does not keep "Always Allow". One prompt is
-	// acceptable; a second is not. The mock keychain skips the login keychain.
-	if (process.platform === 'darwin' && process.env['VSCODE_DEV'] && !process.argv.includes('--use-mock-keychain')) {
+	// Packaged macOS builds are linker-signed and have no Team ID. Keychain then
+	// prompts once per process (main and Helper) on every launch. The mock
+	// keychain skips the login keychain for every macOS start, not only dev.
+	if (process.platform === 'darwin' && !process.argv.includes('--use-mock-keychain')) {
 		app.commandLine.appendSwitch('use-mock-keychain');
 	}
 

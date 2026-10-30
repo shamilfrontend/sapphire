@@ -136,6 +136,19 @@ suite('officeExtract', () => {
 		assert.ok(!payload.body.includes('No text layer'));
 	});
 
+	test('OCR failure returns a distinct message, not the no-text-layer stub', async () => {
+		const payload = await extractOfficeBuffer(buildPdf(''), 'scan.pdf', {
+			recognizeScan: async () => {
+				throw new Error('tessdata missing');
+			},
+		});
+		assertNoBinary(payload);
+		assert.strictEqual(payload.textOrigin, undefined);
+		assert.ok(payload.body.startsWith('Scan recognition failed:'));
+		assert.ok(payload.body.includes('tessdata missing'));
+		assert.ok(!payload.body.includes('recognition is not available'));
+	});
+
   test('a broken zip does not leak binary into the result', async () => {
     const payload = await extractOfficeBuffer(
       Buffer.from('PK\u0003\u0004not-a-zip'),

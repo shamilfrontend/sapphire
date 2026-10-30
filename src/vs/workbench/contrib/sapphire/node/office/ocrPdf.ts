@@ -109,15 +109,18 @@ async function hasTessdata(dir: string): Promise<boolean> {
 
 async function tessdataDir(): Promise<string> {
 	const here = dirname(fileURLToPath(import.meta.url));
+	const officeTessdata = join('vs', 'workbench', 'contrib', 'sapphire', 'node', 'office', 'tessdata');
 	let dir = here;
 	for (let i = 0; i < 12; i++) {
-		const beside = join(dir, 'tessdata');
-		const fromRepo = join(dir, 'src', 'vs', 'workbench', 'contrib', 'sapphire', 'node', 'office', 'tessdata');
-		if (await hasTessdata(beside)) {
-			return beside;
-		}
-		if (await hasTessdata(fromRepo)) {
-			return fromRepo;
+		const candidates = [
+			join(dir, 'tessdata'),
+			join(dir, officeTessdata),
+			join(dir, 'src', officeTessdata),
+		];
+		for (const candidate of candidates) {
+			if (await hasTessdata(candidate)) {
+				return candidate;
+			}
 		}
 		const parent = dirname(dir);
 		if (parent === dir) {

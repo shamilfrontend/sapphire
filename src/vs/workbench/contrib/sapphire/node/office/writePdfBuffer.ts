@@ -57,26 +57,11 @@ async function loadFontBytes(): Promise<Uint8Array> {
     return fontBytesCache;
   }
   const here = dirname(fileURLToPath(import.meta.url));
+  const officeFont = join('vs', 'workbench', 'contrib', 'sapphire', 'node', 'office', 'fonts', 'NotoSans-Regular.ttf');
   const candidates = [
     join(here, 'fonts', 'NotoSans-Regular.ttf'),
-    join(
-      here,
-      '..',
-      '..',
-      '..',
-      '..',
-      '..',
-      '..',
-      'src',
-      'vs',
-      'workbench',
-      'contrib',
-      'sapphire',
-      'node',
-      'office',
-      'fonts',
-      'NotoSans-Regular.ttf',
-    ),
+    join(here, officeFont),
+    join(here, 'src', officeFont),
   ];
   for (const path of candidates) {
     try {

@@ -231,6 +231,26 @@ suite('chatSendTrace', () => {
     assert.ok(text.includes('[22222222] submit.send chars=4'));
     _resetChatSendTraceForTests();
   });
+
+  test('format includes tool.end detail', () => {
+    _resetChatSendTraceForTests();
+    chatTrace('thread-abcdef1234567890', 'stream', 'idle -> tool name=run_command');
+    chatTrace(
+      'thread-abcdef1234567890',
+      'tool.end',
+      'name=run_command ms=60012 timeout',
+    );
+    chatTrace(
+      'thread-abcdef1234567890',
+      'stream',
+      'tool -> idle name=run_command ms=60013',
+    );
+    const text = formatChatSendTrace();
+    assert.ok(text.includes('idle -> tool name=run_command'));
+    assert.ok(text.includes('tool.end name=run_command ms=60012 timeout'));
+    assert.ok(text.includes('tool -> idle name=run_command ms=60013'));
+    _resetChatSendTraceForTests();
+  });
 });
 
 suite('chatStreamGuards', () => {

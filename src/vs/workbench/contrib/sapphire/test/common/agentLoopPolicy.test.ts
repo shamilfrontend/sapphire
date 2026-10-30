@@ -318,6 +318,18 @@ suite('agentLoopPolicy', () => {
         },
       );
     });
+
+    test('with tool calls, empty display keeps reasoning folded', () => {
+      assert.deepStrictEqual(
+        promoteEmptyDisplayFromReasoning('', 'Пользователь спрашивает. Вызову read_file.', {
+          hasToolCalls: true,
+        }),
+        {
+          displayContent: '',
+          reasoning: 'Пользователь спрашивает. Вызову read_file.',
+        },
+      );
+    });
   });
 
   suite('agentLoopStopMessage', () => {

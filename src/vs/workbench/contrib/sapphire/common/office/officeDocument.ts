@@ -20,6 +20,14 @@ export type PdfTextOrigin = 'layer' | 'ocr';
 export const PDF_NO_TEXT_LAYER =
 	'No text layer. This looks like a scan; recognition is not available.';
 
+/** Префикс body при сбое OCR (отличается от PDF_NO_TEXT_LAYER, чтобы не путать «OCR нет» и «OCR упал»). */
+export const PDF_OCR_FAILED_PREFIX = 'Scan recognition failed:';
+
+export function pdfOcrFailedBody(message: string): string {
+	const detail = message.trim() || 'unknown error';
+	return `${PDF_OCR_FAILED_PREFIX}${detail}`;
+}
+
 export type OfficeExtractPayload = {
 	kind: OfficeKind;
 	/** Список листов / число страниц / слайдов — на каждой странице read_file. */
@@ -39,7 +47,10 @@ export function pdfScanWriteError(payload: OfficeExtractPayload, fileName: strin
 	if (payload.kind !== 'pdf') {
 		return undefined;
 	}
-	const scan = payload.textOrigin === 'ocr' || payload.body.includes('No text layer');
+	const scan =
+		payload.textOrigin === 'ocr' ||
+		payload.body.includes('No text layer') ||
+		payload.body.startsWith(PDF_OCR_FAILED_PREFIX);
 	if (!scan) {
 		return undefined;
 	}

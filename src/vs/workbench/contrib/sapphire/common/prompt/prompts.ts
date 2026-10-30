@@ -949,6 +949,9 @@ Language (mandatory): If the user's latest message is in Russian, write BOTH the
     details.push(
       `Questions, options, and phrases like «скажи, если продолжаем» belong in the visible reply, in the user's language. Do not hide them only in reasoning. A turn with no tool calls ends the run and waits. If plan steps remain and you are not asking the user to choose, call the tools instead of a status like "I'll do it next".`,
     );
+    details.push(
+      `Keep the visible reply short and to the point (answer, result, what changed). Do not narrate the user's question back, do not restate SELECTIONS/file stubs, and do not announce the next tool ("I'll read_file…") in the visible reply — put that in reasoning / the «Рассуждение» panel.`,
+    );
   }
 
   if (mode === 'plan') {

@@ -12,6 +12,7 @@ import {
 	PDF_NO_TEXT_LAYER,
 	officeFileName,
 	officeKindFromPath,
+	pdfOcrFailedBody,
 } from '../../common/office/officeDocument.js';
 import {
 	PDF_OCR_MAX_PAGES,
@@ -545,6 +546,17 @@ function noTextLayerPayload(fileName: string, pageCount: number): OfficeExtractP
 	};
 }
 
+function ocrFailedPayload(fileName: string, pageCount: number, err: unknown): OfficeExtractPayload {
+	const message = err instanceof Error ? err.message : String(err);
+	console.error(`[sapphire-office] PDF OCR failed for ${fileName}:`, message);
+	return {
+		kind: 'pdf',
+		outline: `# ${fileName}\nPages: ${pageCount}`,
+		body: pdfOcrFailedBody(message),
+		truncated: false,
+	};
+}
+
 async function ocrPdf(
 	doc: PdfDocument,
 	ops: PdfJsOps,
@@ -561,8 +573,8 @@ async function ocrPdf(
 			return noTextLayerPayload(fileName, doc.numPages);
 		}
 		texts = recognizeScan ? await recognizeScan(pngs) : await recognizePngPages(pngs);
-	} catch {
-		return noTextLayerPayload(fileName, doc.numPages);
+	} catch (err) {
+		return ocrFailedPayload(fileName, doc.numPages, err);
 	}
 	const pageCount = Math.min(doc.numPages, PDF_OCR_MAX_PAGES);
 	const body = new BodyWriter(cap);
