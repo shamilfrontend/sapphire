@@ -70,10 +70,12 @@ const normalizeAssistantDisplayContent = (content: string): string => {
 /**
  * Если ответ только в reasoning — показать его как сообщение.
  * Непустой displayContent оставляет reasoning без изменений.
+ * При tool call пустой display не поднимаем из reasoning — пересказ остаётся в свёрнутом блоке.
  */
 export const promoteEmptyDisplayFromReasoning = (
   displayContent: string,
   reasoning: string,
+  opts?: { hasToolCalls?: boolean },
 ): { displayContent: string; reasoning: string } => {
   const visible = normalizeAssistantDisplayContent(displayContent);
   if (visible) {
@@ -82,6 +84,9 @@ export const promoteEmptyDisplayFromReasoning = (
   const thought = reasoning.trim();
   if (!thought) {
     return { displayContent: '', reasoning: '' };
+  }
+  if (opts?.hasToolCalls) {
+    return { displayContent: '', reasoning: thought };
   }
   return { displayContent: thought, reasoning: '' };
 };

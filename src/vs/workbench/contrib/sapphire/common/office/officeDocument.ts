@@ -14,17 +14,48 @@ export const OFFICE_EXTRACT_CHAR_CAP = 2_000_000;
 
 export type OfficeKind = 'xlsx' | 'docx' | 'pptx' | 'pdf' | 'legacy';
 
+/** `layer` — текстовый слой PDF; `ocr` — страницы были картинками. */
+export type PdfTextOrigin = 'layer' | 'ocr';
+
+export const PDF_NO_TEXT_LAYER =
+	'No text layer. This looks like a scan; recognition is not available.';
+
+/** Префикс body при сбое OCR (отличается от PDF_NO_TEXT_LAYER, чтобы не путать «OCR нет» и «OCR упал»). */
+export const PDF_OCR_FAILED_PREFIX = 'Scan recognition failed:';
+
+export function pdfOcrFailedBody(message: string): string {
+	const detail = message.trim() || 'unknown error';
+	return `${PDF_OCR_FAILED_PREFIX}${detail}`;
+}
+
 export type OfficeExtractPayload = {
-  kind: OfficeKind;
-  /** Список листов / число страниц / слайдов — на каждой странице read_file. */
-  outline: string;
-  /** Извлечённый body. Пустой при `error`. */
-  body: string;
-  /** true, если парсинг обрезан по `OFFICE_EXTRACT_CHAR_CAP`. */
-  truncated: boolean;
-  /** Заполнено, если файл не распарсен (legacy, слишком большой, нечитаемый). */
-  error?: string;
+	kind: OfficeKind;
+	/** Список листов / число страниц / слайдов — на каждой странице read_file. */
+	outline: string;
+	/** Извлечённый body. Пустой при `error`. */
+	body: string;
+	/** true, если парсинг обрезан по `OFFICE_EXTRACT_CHAR_CAP`. */
+	truncated: boolean;
+	/** Заполнено, если файл не распарсен (legacy, слишком большой, нечитаемый). */
+	error?: string;
+	/** Откуда взялся текст PDF. Нет, если слоя нет и OCR ничего не дал. */
+	textOrigin?: PdfTextOrigin;
 };
+
+/** Скан нельзя переписать поверх картинки. `undefined`, если запись текстового PDF допустима. */
+export function pdfScanWriteError(payload: OfficeExtractPayload, fileName: string): string | undefined {
+	if (payload.kind !== 'pdf') {
+		return undefined;
+	}
+	const scan =
+		payload.textOrigin === 'ocr' ||
+		payload.body.includes('No text layer') ||
+		payload.body.startsWith(PDF_OCR_FAILED_PREFIX);
+	if (!scan) {
+		return undefined;
+	}
+	return `${officeFileName(fileName)} has no text layer (looks like a scan). Recognized text can be read, but edit_file and rewrite_file cannot change this PDF.`;
+}
 
 const MODERN: Record<string, OfficeKind> = {
   xlsx: 'xlsx',

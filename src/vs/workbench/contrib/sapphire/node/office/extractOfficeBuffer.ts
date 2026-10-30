@@ -6,12 +6,23 @@
 import type { Entry, ZipFile } from 'yauzl';
 import { Readable } from 'stream';
 import {
-  OFFICE_EXTRACT_CHAR_CAP,
-  OfficeExtractPayload,
-  OfficeKind,
-  officeFileName,
-  officeKindFromPath,
+	OFFICE_EXTRACT_CHAR_CAP,
+	OfficeExtractPayload,
+	OfficeKind,
+	PDF_NO_TEXT_LAYER,
+	officeFileName,
+	officeKindFromPath,
+	pdfOcrFailedBody,
 } from '../../common/office/officeDocument.js';
+import {
+	PDF_OCR_MAX_PAGES,
+	PDF_OCR_TAIL_NOTE,
+	RecognizeScan,
+	collectPagePngs,
+	recognizePngPages,
+	type OcrPdfPage,
+	type PdfJsOps,
+} from './ocrPdf.js';
 
 const UNCOMPRESSED_XML_CAP = 80 * 1024 * 1024;
 const MAX_SHEET_COLS = 64;
@@ -20,7 +31,9 @@ const BUILTIN_DATE_FMT = new Set([14, 15, 16, 17, 18, 19, 20, 21, 22, 45, 46, 47
 const BUILTIN_TIME_FMT = new Set([18, 19, 20, 21, 22, 45, 46, 47]);
 
 type ExtractOfficeOptions = {
-  charCap?: number;
+	charCap?: number;
+	/** Подмена OCR в тестах. В проде страницы распознаёт tesseract (rus+eng). */
+	recognizeScan?: RecognizeScan;
 };
 
 class BodyWriter {
@@ -487,13 +500,17 @@ function extractPptx(
 }
 
 type PdfTextItem = { str?: string; hasEOL?: boolean };
+type PdfPage = OcrPdfPage & {
+	getTextContent(): Promise<{ items: PdfTextItem[] }>;
+};
 type PdfDocument = {
-  numPages: number;
-  getPage(n: number): Promise<{ getTextContent(): Promise<{ items: PdfTextItem[] }> }>;
-  destroy(): Promise<void> | void;
+	numPages: number;
+	getPage(n: number): Promise<PdfPage>;
+	destroy(): Promise<void> | void;
 };
 type PdfJsModule = {
-  getDocument(src: Record<string, unknown>): { promise: Promise<PdfDocument> };
+	getDocument(src: Record<string, unknown>): { promise: Promise<PdfDocument> };
+	OPS: PdfJsOps;
 };
 
 let pdfJsModule: PdfJsModule | undefined;
@@ -520,55 +537,123 @@ async function loadPdfJs(): Promise<PdfJsModule> {
   return pdfJsModule;
 }
 
-async function extractPdf(
-  bytes: Buffer,
-  fileName: string,
-  cap: number,
+function noTextLayerPayload(fileName: string, pageCount: number): OfficeExtractPayload {
+	return {
+		kind: 'pdf',
+		outline: `# ${fileName}\nPages: ${pageCount}`,
+		body: PDF_NO_TEXT_LAYER,
+		truncated: false,
+	};
+}
+
+function ocrFailedPayload(fileName: string, pageCount: number, err: unknown): OfficeExtractPayload {
+	const message = err instanceof Error ? err.message : String(err);
+	console.error(`[sapphire-office] PDF OCR failed for ${fileName}:`, message);
+	return {
+		kind: 'pdf',
+		outline: `# ${fileName}\nPages: ${pageCount}`,
+		body: pdfOcrFailedBody(message),
+		truncated: false,
+	};
+}
+
+async function ocrPdf(
+	doc: PdfDocument,
+	ops: PdfJsOps,
+	fileName: string,
+	cap: number,
+	recognizeScan: RecognizeScan | undefined,
 ): Promise<OfficeExtractPayload> {
-  const pdfjs = await loadPdfJs();
-  const doc = await pdfjs.getDocument({
-    data: new Uint8Array(bytes),
-    verbosity: 0,
-    isEvalSupported: false,
-    disableFontFace: true,
-    useSystemFonts: false,
-  }).promise;
-  try {
-    const body = new BodyWriter(cap);
-    let anyText = false;
-    for (let i = 1; i <= doc.numPages; i++) {
-      const page = await doc.getPage(i);
-      const content = await page.getTextContent();
-      const text = content.items
-        .map((item) => `${item.str ?? ''}${item.hasEOL ? '\n' : ' '}`)
-        .join('')
-        .replace(/[ \t]+\n/g, '\n')
-        .replace(/[ \t]{2,}/g, ' ')
-        .trim();
-      if (text) {
-        anyText = true;
-      }
-      if (!body.push(`## Page ${i}\n${text}\n\n`)) {
-        break;
-      }
-    }
-    const outline = `# ${fileName}\nPages: ${doc.numPages}`;
-    if (!anyText && !body.truncated) {
-      return {
-        kind: 'pdf',
-        outline,
-        body: 'No text layer. This looks like a scan; recognition is not available.',
-        truncated: false,
-      };
-    }
-    return { kind: 'pdf', outline, body: body.text().trimEnd(), truncated: body.truncated };
-  } finally {
-    try {
-      await doc.destroy();
-    } catch {
-      /* освобождение pdf.js worker — по возможности */
-    }
-  }
+	const outline = `# ${fileName}\nPages: ${doc.numPages}`;
+	let texts: readonly string[];
+	try {
+		const pngs = await collectPagePngs(doc, ops, PDF_OCR_MAX_PAGES);
+		const hasBitmap = pngs.some((page) => page && page.byteLength > 0);
+		if (!recognizeScan && !hasBitmap) {
+			return noTextLayerPayload(fileName, doc.numPages);
+		}
+		texts = recognizeScan ? await recognizeScan(pngs) : await recognizePngPages(pngs);
+	} catch (err) {
+		return ocrFailedPayload(fileName, doc.numPages, err);
+	}
+	const pageCount = Math.min(doc.numPages, PDF_OCR_MAX_PAGES);
+	const body = new BodyWriter(cap);
+	let anyText = false;
+	for (let i = 0; i < pageCount; i++) {
+		const text = (texts[i] ?? '').trim();
+		if (text) {
+			anyText = true;
+		}
+		if (!body.push(`## Page ${i + 1}\n${text}\n\n`)) {
+			break;
+		}
+	}
+	if (doc.numPages > PDF_OCR_MAX_PAGES) {
+		body.push(`${PDF_OCR_TAIL_NOTE}\n`);
+	}
+	if (!anyText && !body.truncated) {
+		return noTextLayerPayload(fileName, doc.numPages);
+	}
+	return {
+		kind: 'pdf',
+		outline,
+		body: body.text().trimEnd(),
+		truncated: body.truncated,
+		textOrigin: 'ocr',
+	};
+}
+
+async function extractPdf(
+	bytes: Buffer,
+	fileName: string,
+	cap: number,
+	recognizeScan: RecognizeScan | undefined,
+): Promise<OfficeExtractPayload> {
+	const pdfjs = await loadPdfJs();
+	const doc = await pdfjs.getDocument({
+		data: new Uint8Array(bytes),
+		verbosity: 0,
+		isEvalSupported: false,
+		disableFontFace: true,
+		useSystemFonts: false,
+	}).promise;
+	try {
+		const body = new BodyWriter(cap);
+		let anyText = false;
+		for (let i = 1; i <= doc.numPages; i++) {
+			const page = await doc.getPage(i);
+			const content = await page.getTextContent();
+			const text = content.items
+				.map((item) => `${item.str ?? ''}${item.hasEOL ? '\n' : ' '}`)
+				.join('')
+				.replace(/[ \t]+\n/g, '\n')
+				.replace(/[ \t]{2,}/g, ' ')
+				.trim();
+			if (text) {
+				anyText = true;
+			}
+			if (!body.push(`## Page ${i}\n${text}\n\n`)) {
+				break;
+			}
+		}
+		const outline = `# ${fileName}\nPages: ${doc.numPages}`;
+		if (!anyText && !body.truncated) {
+			return await ocrPdf(doc, pdfjs.OPS, fileName, cap, recognizeScan);
+		}
+		return {
+			kind: 'pdf',
+			outline,
+			body: body.text().trimEnd(),
+			truncated: body.truncated,
+			textOrigin: 'layer',
+		};
+	} finally {
+		try {
+			await doc.destroy();
+		} catch {
+			/* освобождение pdf.js worker — по возможности */
+		}
+	}
 }
 
 function payloadOfKind(
@@ -614,9 +699,9 @@ export async function extractOfficeBuffer(
   }
   const cap = opts?.charCap ?? OFFICE_EXTRACT_CHAR_CAP;
   try {
-    if (kind === 'pdf') {
-      return await extractPdf(bytes, name, cap);
-    }
+		if (kind === 'pdf') {
+			return await extractPdf(bytes, name, cap, opts?.recognizeScan);
+		}
     const entries = await readZipXml(bytes);
     return payloadOfKind(kind, name, entries, cap);
   } catch (e) {

@@ -1,0 +1,109 @@
+/*---------------------------------------------------------------------------------------------
+ *  Copyright (c) Microsoft Corporation. All rights reserved.
+ *  Licensed under the MIT License. See License.txt in the project root for license information.
+ *--------------------------------------------------------------------------------------------*/
+
+html, body {
+	width: 100%;
+	height: 100%;
+	margin: 0;
+	padding: 0;
+	overflow: hidden;
+	background: var(--vscode-editor-background);
+	color: var(--vscode-foreground);
+	-webkit-user-select: none;
+	user-select: none;
+}
+
+body {
+	display: flex;
+	flex-direction: column;
+}
+
+.toolbar {
+	display: none;
+	flex: 0 0 auto;
+	align-items: center;
+	justify-content: center;
+	gap: 8px;
+	padding: 6px 10px;
+	border-bottom: 1px solid var(--vscode-panel-border, rgba(128, 128, 128, 0.35));
+	background: var(--vscode-editorWidget-background, var(--vscode-editor-background));
+}
+
+.ready .toolbar {
+	display: flex;
+}
+
+.toolbar button {
+	min-width: 28px;
+	height: 24px;
+	border: 1px solid var(--vscode-button-border, transparent);
+	border-radius: 2px;
+	background: var(--vscode-button-secondaryBackground);
+	color: var(--vscode-button-secondaryForeground);
+	cursor: pointer;
+}
+
+.toolbar button:hover {
+	background: var(--vscode-button-secondaryHoverBackground);
+}
+
+#page-label {
+	min-width: 4.5em;
+	text-align: center;
+	font-variant-numeric: tabular-nums;
+}
+
+.canvas-wrap {
+	display: none;
+	flex: 1 1 auto;
+	overflow: auto;
+	text-align: center;
+	padding: 12px;
+}
+
+.ready .canvas-wrap {
+	display: block;
+}
+
+#page {
+	max-width: none;
+	box-shadow: 0 1px 4px rgba(0, 0, 0, 0.35);
+	background: #fff;
+}
+
+.loading-indicator {
+	width: 30px;
+	height: 30px;
+	margin: auto;
+	background-image: url('./loading.svg');
+	background-size: cover;
+}
+
+.loading-indicator,
+.loading-error,
+.git-lfs-info {
+	display: none;
+}
+
+.loading .loading-indicator,
+.error .loading-error,
+.git-lfs .git-lfs-info {
+	display: block;
+	margin: auto;
+}
+
+.loading-error,
+.git-lfs-info {
+	margin: 1em;
+	text-align: center;
+}
+
+.vscode-dark .loading-indicator {
+	background-image: url('./loading-dark.svg');
+}
+
+.vscode-high-contrast .loading-indicator {
+	background-image: url('./loading-hc.svg');
+}

@@ -8,7 +8,7 @@
 | --- | --- | --- |
 | Чтение / поиск | `read_file`, `ls_dir`, `grep_search`, `glob_files`, `search_*`, `get_diagnostics`, LSP (`go_to_definition`, `find_references`, `search_symbols`), `get_chat_history` | не требуется |
 | Планы | `create_plan`, `update_plan` | не требуется |
-| Правки | `edit_file`, `rewrite_file`, `create_*`, `delete_*`, `rename_symbol` | edits |
+| Правки | `edit_file`, `rewrite_file`, `create_*`, `delete_*`, `rename_symbol` (для `.pdf` — текстовый PDF; OOXML не пишется) | edits |
 | Терминал | `run_command`, persistent terminal | terminal |
 | Сеть (только Agent) | `web_search`, `browse_url` | network |
 | Браузер (только Agent) | `browser_navigate`, `browser_snapshot`, `browser_click`, `browser_type`, `browser_scroll`, `browser_screenshot` | browser |

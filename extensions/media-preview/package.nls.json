@@ -1,13 +1,16 @@
 {
 	"displayName": "Media Preview",
-	"description": "Provides VS Code's built-in previews for images, audio, and video",
+	"description": "Provides VS Code's built-in previews for images, audio, video, and PDF",
 	"customEditor.audioPreview.displayName": "Audio Preview",
 	"customEditor.imagePreview.displayName": "Image Preview",
 	"customEditor.videoPreview.displayName": "Video Preview",
+	"customEditor.pdfPreview.displayName": "PDF Preview",
 	"videoPreviewerAutoPlay": "Start playing videos on mute automatically.",
 	"videoPreviewerLoop": "Loop videos over again automatically.",
 	"command.zoomIn": "Zoom in",
 	"command.zoomOut": "Zoom out",
+	"command.prevPage": "Previous page",
+	"command.nextPage": "Next page",
 	"command.copyImage": "Copy",
 	"command.reopenAsPreview": "Reopen as image preview",
 	"command.reopenAsText": "Reopen as source text"

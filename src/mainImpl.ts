@@ -249,6 +249,13 @@ async function startup(codeCachePath: string | undefined, nlsConfig: INLSConfigu
 }
 
 function configureCommandlineSwitchesSync(cliArgs: NativeParsedArgs) {
+	// Packaged macOS builds are linker-signed and have no Team ID. Keychain then
+	// prompts once per process (main and Helper) on every launch. The mock
+	// keychain skips the login keychain for every macOS start, not only dev.
+	if (process.platform === 'darwin' && !process.argv.includes('--use-mock-keychain')) {
+		app.commandLine.appendSwitch('use-mock-keychain');
+	}
+
 	const SUPPORTED_ELECTRON_SWITCHES = [
 
 		// alias from us for --disable-gpu

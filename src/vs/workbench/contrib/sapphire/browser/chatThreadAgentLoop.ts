@@ -544,7 +544,9 @@ ${planBody}`;
     if (this._s.streamState[threadId]?.isRunning === 'LLM') {
       const { displayContentSoFar, reasoningSoFar, toolCallsSoFar } =
         this._s.streamState[threadId].llmInfo;
-      const visibleTurn = promoteEmptyDisplayFromReasoning(displayContentSoFar, reasoningSoFar);
+      const visibleTurn = promoteEmptyDisplayFromReasoning(displayContentSoFar, reasoningSoFar, {
+        hasToolCalls: !!(toolCallsSoFar && toolCallsSoFar.length > 0),
+      });
       this._s._addMessageToThread(threadId, {
         role: 'assistant',
         displayContent: visibleTurn.displayContent,
@@ -853,13 +855,13 @@ ${planBody}`;
       }
       // Checkpoint перед правкой файла
       if (toolName === 'edit_file') {
-        this._s._addToolEditCheckpoint({
+        await this._s._addToolEditCheckpoint({
           threadId,
           uri: (toolParams as BuiltinToolCallParams['edit_file']).uri,
         });
       }
       if (toolName === 'rewrite_file') {
-        this._s._addToolEditCheckpoint({
+        await this._s._addToolEditCheckpoint({
           threadId,
           uri: (toolParams as BuiltinToolCallParams['rewrite_file']).uri,
         });
@@ -891,6 +893,13 @@ ${planBody}`;
 
     // 3. Вызов tool (race: interrupt, absolute timeout, stale result)
     const startedAt = Date.now();
+    const traceToolEnd = (outcome: 'ok' | 'error' | 'timeout' | 'interrupted') => {
+      chatTrace(
+        threadId,
+        'tool.end',
+        `name=${toolName}${mcpServerName ? ` mcp=${mcpServerName}` : ''} ms=${Date.now() - startedAt} ${outcome}`,
+      );
+    };
     const runningTool = {
       role: 'tool',
       type: 'running_now',
@@ -1072,15 +1081,18 @@ ${planBody}`;
       ])) as ToolResult<ToolName>;
 
       if (isStaleToolResult()) {
+        traceToolEnd('interrupted');
         return { interrupted: true };
       }
     } catch (error) {
       interruptToolFn?.();
       if (interrupted || (error as { isToolInterrupt?: boolean })?.isToolInterrupt) {
+        traceToolEnd('interrupted');
         return { interrupted: true };
       }
 
       const errorMessage = getErrorMessage(error);
+      const timedOut = !!(error as { isToolTimeout?: boolean })?.isToolTimeout;
       // tool_error только если результат ещё актуален (не rejected после abort).
       if (!isStaleToolResult()) {
         this._updateLatestTool(threadId, {
@@ -1097,6 +1109,7 @@ ${planBody}`;
           durationMs: Date.now() - startedAt,
         });
       }
+      traceToolEnd(timedOut ? 'timeout' : 'error');
       return {};
     } finally {
       if (absoluteTimeoutId !== undefined) {
@@ -1107,6 +1120,7 @@ ${planBody}`;
     // 4. Строка результата для LLM
     try {
       if (isStaleToolResult()) {
+        traceToolEnd('interrupted');
         return { interrupted: true };
       }
       if (isBuiltInTool) {
@@ -1138,11 +1152,13 @@ ${planBody}`;
           durationMs: Date.now() - startedAt,
         });
       }
+      traceToolEnd('error');
       return {};
     }
 
     // 5. success в историю; side effects (plan, enable_mcp_server)
     if (isStaleToolResult()) {
+      traceToolEnd('interrupted');
       return { interrupted: true };
     }
     this._updateLatestTool(threadId, {
@@ -1182,6 +1198,7 @@ ${planBody}`;
       }
     }
 
+    traceToolEnd('ok');
     return {};
   };
 
@@ -1276,6 +1293,11 @@ ${planBody}`;
         mcpServerName: first.mcpServerName,
       },
     });
+    chatTrace(
+      threadId,
+      'tool.group',
+      `n=${prepared.length} ${prepared.map((p) => p.tc.name).join(',')}`,
+    );
 
     const group = {
       isInterrupted: () => groupInterrupted,
@@ -1899,6 +1921,7 @@ ${planBody}`;
                 const visibleTurn = promoteEmptyDisplayFromReasoning(
                   displayContentSoFar,
                   reasoningSoFar,
+                  { hasToolCalls: !!(toolCallsSoFar && toolCallsSoFar.length > 0) },
                 );
                 this._s._addMessageToThread(threadId, {
                   role: 'assistant',
@@ -1943,6 +1966,7 @@ ${planBody}`;
                 const visibleTurn = promoteEmptyDisplayFromReasoning(
                   displayContentSoFar,
                   reasoningSoFar,
+                  { hasToolCalls: !!(toolCallsSoFar && toolCallsSoFar.length > 0) },
                 );
                 this._s._addMessageToThread(threadId, {
                   role: 'assistant',
@@ -2015,7 +2039,9 @@ ${planBody}`;
             if (!isActive()) {return;}
             if (translated) {reasoning = translated;}
           }
-          const visibleTurn = promoteEmptyDisplayFromReasoning(info.fullText, reasoning);
+          const visibleTurn = promoteEmptyDisplayFromReasoning(info.fullText, reasoning, {
+            hasToolCalls: !!(toolCalls && toolCalls.length > 0),
+          });
           const assistantDisplayContent = visibleTurn.displayContent;
           reasoning = visibleTurn.reasoning;
           this._s._addMessageToThread(threadId, {

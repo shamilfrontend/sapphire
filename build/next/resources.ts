@@ -77,6 +77,10 @@ const desktopResourcePatterns = [
 	// Sessions - built-in prompts and skills
 	'vs/sessions/prompts/*.prompt.md',
 	'vs/sessions/skills/**/SKILL.md',
+
+	// Sapphire PDF OCR + write font (node main; not bundled into JS)
+	'vs/workbench/contrib/sapphire/node/office/tessdata/*.traineddata',
+	'vs/workbench/contrib/sapphire/node/office/fonts/*',
 ];
 
 // Resources for server target (minimal - no UI)

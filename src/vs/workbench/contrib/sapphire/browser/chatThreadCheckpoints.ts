@@ -9,9 +9,32 @@ import { ChatMessage, CheckpointEntry } from '../common/chatThreadServiceTypes.j
 import { findLastIdx } from '../../../../base/common/arraysFind.js';
 import { SapphireFileSnapshot } from '../common/editCodeServiceTypes.js';
 import { manualEditBaselinesForCheckpoint } from '../common/manualEditCheckpoint.js';
+import { officeKindFromPath } from '../common/office/officeDocument.js';
+import { encodePdfSnapshot, isPdfSnapshot, decodePdfSnapshot } from '../common/office/pdfCheckpoint.js';
+import { VSBuffer } from '../../../../base/common/buffer.js';
 
 export class ChatThreadCheckpoints {
   constructor(private readonly _s: ChatThreadCollaboratorHost) {}
+
+  private async _restoreFileSnapshot(fsPath: string, snapshot: SapphireFileSnapshot) {
+    if (isPdfSnapshot(snapshot.entireFileCode)) {
+      const uri = URI.file(fsPath);
+      const bytes = decodePdfSnapshot(snapshot.entireFileCode);
+      if (bytes.byteLength === 0) {
+        if (await this._s._fileService.exists(uri)) {
+          await this._s._fileService.del(uri);
+        }
+        return;
+      }
+      if (await this._s._fileService.exists(uri)) {
+        await this._s._fileService.writeFile(uri, bytes);
+      } else {
+        await this._s._fileService.createFile(uri, bytes);
+      }
+      return;
+    }
+    this._s._editCodeService.restoreVoidFileSnapshot(URI.file(fsPath), snapshot);
+  }
 
   _addCheckpoint(threadId: string, checkpoint: CheckpointEntry) {
     this._s._addMessageToThread(threadId, checkpoint);
@@ -120,10 +143,32 @@ export class ChatThreadCheckpoints {
     this._s._userModifiedFilesToCheckInCheckpoints.clear();
   }
 
-  // вызывать сразу после правки файла tool/LLM
-  _addToolEditCheckpoint({ threadId, uri }: { threadId: string; uri: URI }) {
+  // вызывать перед правкой файла tool/LLM
+  async _addToolEditCheckpoint({ threadId, uri }: { threadId: string; uri: URI }) {
     const thread = this._s.state.allThreads[threadId];
     if (!thread) {return;}
+    if (officeKindFromPath(uri.fsPath) === 'pdf') {
+      let entireFileCode = '';
+      try {
+        if (await this._s._fileService.exists(uri)) {
+          const file = await this._s._fileService.readFile(uri);
+          entireFileCode = encodePdfSnapshot(file.value);
+        } else {
+          entireFileCode = encodePdfSnapshot(VSBuffer.fromString(''));
+        }
+      } catch {
+        entireFileCode = encodePdfSnapshot(VSBuffer.fromString(''));
+      }
+      this._addCheckpoint(threadId, {
+        role: 'checkpoint',
+        type: 'tool_edit',
+        sapphireFileSnapshotOfURI: {
+          [uri.fsPath]: { snapshottedDiffAreaOfId: {}, entireFileCode },
+        },
+        userModifications: { sapphireFileSnapshotOfURI: {} },
+      });
+      return;
+    }
     const { model } = this._s._sapphireModelService.getModel(uri);
     if (!model) {return;} // не должно случаться
     const diffAreasSnapshot = this._s._editCodeService.getVoidFileSnapshot(uri);
@@ -210,7 +255,7 @@ export class ChatThreadCheckpoints {
     }
   }
 
-  jumpToCheckpointBeforeMessageIdx({
+  async jumpToCheckpointBeforeMessageIdx({
     threadId,
     messageIdx,
     jumpToUserModified,
@@ -288,7 +333,7 @@ A B C D E F G H I
           if (!res) {continue;}
           const { sapphireFileSnapshot } = res;
           if (!sapphireFileSnapshot) {continue;}
-          this._s._editCodeService.restoreVoidFileSnapshot(URI.file(fsPath), sapphireFileSnapshot);
+          await this._restoreFileSnapshot(fsPath, sapphireFileSnapshot);
           break;
         }
       }
@@ -327,7 +372,7 @@ A B C D E F G H I J
           if (!res) {continue;}
           const { sapphireFileSnapshot } = res;
           if (!sapphireFileSnapshot) {continue;}
-          this._s._editCodeService.restoreVoidFileSnapshot(URI.file(fsPath), sapphireFileSnapshot);
+          await this._restoreFileSnapshot(fsPath, sapphireFileSnapshot);
           break;
         }
       }

@@ -48,8 +48,16 @@ function code() {
 		DISABLE_TEST_EXTENSION=""
 	fi
 
+	# Dev Electron is ad-hoc signed, so the login keychain asks separately for
+	# the main process and Sapphire Helper. Pass the flag on argv before
+	# Chromium starts; appending it later is too late for the helper.
+	KEYCHAIN_SWITCH=""
+	if [[ "$OSTYPE" == "darwin"* && " $* " != *" --use-mock-keychain "* ]]; then
+		KEYCHAIN_SWITCH="--use-mock-keychain"
+	fi
+
 	# Launch Code
-	exec "$CODE" . $DISABLE_TEST_EXTENSION "$@"
+	exec "$CODE" . $DISABLE_TEST_EXTENSION $KEYCHAIN_SWITCH "$@"
 }
 
 function code-wsl()

@@ -17,8 +17,11 @@
 | `browser/chatThreadCheckpoints.ts` | checkpoints |
 | `browser/chatThreadService.ts` | треды (фасад) |
 | `common/office/officeDocument.ts` | лимиты офисных файлов |
-| `common/officeExtractService.ts` | клиент разбора xlsx/docx/pptx/pdf |
+| `common/office/pdfCheckpoint.ts` | base64-снимки PDF для checkpoints |
+| `common/officeExtractService.ts` | клиент разбора/записи xlsx/docx/pptx/pdf |
 | `node/office/extractOfficeBuffer.ts` | разбор ZIP и PDF |
+| `node/office/writePdfBuffer.ts` | запись PDF (edit/rewrite) |
+| `extensions/media-preview/src/pdfPreview.ts` | встроенный PDF viewer |
 | `browser/projectIndexService.ts` | фоновый индекс `.sapphire/index` |
 | `common/projectIndex/*` | типы, analyze, search индекса |
 | `browser/editCodeService.ts` | Apply / Ctrl+K / diffs |

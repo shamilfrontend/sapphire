@@ -10,9 +10,11 @@ import { isCancellationError } from '../../../../../base/common/errors.js';
 import {
   ChatPrepTimeoutError,
   isChatPrepTimeoutError,
-  SAPPHIRE_CHAT_HEURISTIC_TIMEOUT_MS,
-  SAPPHIRE_CHAT_PREP_TIMEOUT_MS,
-  racePrepAwait,
+	prepTimeoutMsForPaths,
+	SAPPHIRE_CHAT_HEURISTIC_TIMEOUT_MS,
+	SAPPHIRE_CHAT_PREP_OCR_TIMEOUT_MS,
+	SAPPHIRE_CHAT_PREP_TIMEOUT_MS,
+	racePrepAwait,
 } from '../../common/chatPrepGuard.js';
 import {
   canEnqueueFollowUp,
@@ -36,9 +38,15 @@ import {
 suite('chatPrepGuard', () => {
   ensureNoDisposablesAreLeakedInTestSuite();
 
-  test('SAPPHIRE_CHAT_PREP_TIMEOUT_MS is 8s', () => {
-    assert.strictEqual(SAPPHIRE_CHAT_PREP_TIMEOUT_MS, 8_000);
-  });
+	test('SAPPHIRE_CHAT_PREP_TIMEOUT_MS is 8s', () => {
+		assert.strictEqual(SAPPHIRE_CHAT_PREP_TIMEOUT_MS, 8_000);
+	});
+
+	test('PDF paths get the longer prep budget', () => {
+		assert.strictEqual(SAPPHIRE_CHAT_PREP_OCR_TIMEOUT_MS, 45_000);
+		assert.strictEqual(prepTimeoutMsForPaths(['/tmp/notes.md']), SAPPHIRE_CHAT_PREP_TIMEOUT_MS);
+		assert.strictEqual(prepTimeoutMsForPaths(['/tmp/scan.PDF']), SAPPHIRE_CHAT_PREP_OCR_TIMEOUT_MS);
+	});
 
   test('SAPPHIRE_CHAT_HEURISTIC_TIMEOUT_MS is 3s', () => {
     assert.strictEqual(SAPPHIRE_CHAT_HEURISTIC_TIMEOUT_MS, 3_000);
@@ -221,6 +229,26 @@ suite('chatSendTrace', () => {
     const text = formatChatSendTrace();
     assert.ok(text.includes('[11111111] thread.open'));
     assert.ok(text.includes('[22222222] submit.send chars=4'));
+    _resetChatSendTraceForTests();
+  });
+
+  test('format includes tool.end detail', () => {
+    _resetChatSendTraceForTests();
+    chatTrace('thread-abcdef1234567890', 'stream', 'idle -> tool name=run_command');
+    chatTrace(
+      'thread-abcdef1234567890',
+      'tool.end',
+      'name=run_command ms=60012 timeout',
+    );
+    chatTrace(
+      'thread-abcdef1234567890',
+      'stream',
+      'tool -> idle name=run_command ms=60013',
+    );
+    const text = formatChatSendTrace();
+    assert.ok(text.includes('idle -> tool name=run_command'));
+    assert.ok(text.includes('tool.end name=run_command ms=60012 timeout'));
+    assert.ok(text.includes('tool -> idle name=run_command ms=60013'));
     _resetChatSendTraceForTests();
   });
 });

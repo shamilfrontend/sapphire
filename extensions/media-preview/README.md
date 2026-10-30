@@ -4,7 +4,7 @@
 
 ## Features
 
-This extension provides basic preview for images, audio and video files.
+This extension provides basic preview for images, audio, video and PDF files.
 
 ### Supported image file extensions
 
@@ -26,3 +26,7 @@ This extension provides basic preview for images, audio and video files.
 
 - `.mp4` (does not support `aac` audio tracks)
 - `.webm` (vp8 only)
+
+### Supported PDF
+
+- `.pdf` (page navigation and zoom; read-only preview)

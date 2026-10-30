@@ -65,6 +65,7 @@ export const unicodeFilter = Object.freeze<string[]>([
 	'!extensions/**/out/**',
 	'!extensions/**/snippets/**',
 	'!extensions/**/colorize-fixtures/**',
+	'!extensions/media-preview/media/pdfjs/**',
 	'!extensions/terminal-suggest/src/shell/fishBuiltinsCache.ts',
 
 	// extensions/copilot has its own code style
@@ -241,6 +242,7 @@ export const copyrightFilter = Object.freeze<string[]>([
 	'!extensions/markdown-language-features/media/highlight.css',
 	'!extensions/markdown-math/notebook-out/**',
 	'!extensions/ipynb/notebook-out/**',
+	'!extensions/media-preview/media/pdfjs/**',
 	'!extensions/simple-browser/media/codicon.css',
 	'!extensions/terminal-suggest/src/completions/upstream/**',
 	'!extensions/typescript-language-features/node-maintainer/**',

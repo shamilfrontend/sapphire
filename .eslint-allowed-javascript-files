@@ -72,6 +72,8 @@ extensions/latex/build/update-grammars.js
 extensions/less/build/update-grammar.js
 extensions/media-preview/media/audioPreview.js
 extensions/media-preview/media/imagePreview.js
+extensions/media-preview/media/pdfjs/pdf.min.mjs
+extensions/media-preview/media/pdfjs/pdf.worker.min.mjs
 extensions/media-preview/media/videoPreview.js
 extensions/microsoft-authentication/packageMocks/dpapi/dpapi.js
 extensions/microsoft-authentication/packageMocks/keytar/index.js
