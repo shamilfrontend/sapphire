@@ -198,7 +198,7 @@ export const builtinTools: {
 
   read_file: {
     name: 'read_file',
-    description: `Returns full contents of a given file. Office files (.xlsx, .xlsm, .docx, .pptx, .pdf) come back as extracted text (sheets, paragraphs, slides, or pages), not raw bytes.`,
+    description: `Returns full contents of a given file. Office files (.xlsx, .xlsm, .docx, .pptx, .pdf) come back as extracted text (sheets, paragraphs, slides, or pages), not raw bytes. A scanned PDF with no text layer is recognized locally (OCR, Russian and English).`,
     params: {
       ...uriParam('file'),
       start_line: {
@@ -586,7 +586,7 @@ export const builtinTools: {
 
   edit_file: {
     name: 'edit_file',
-    description: `Edit the contents of a file. You must provide the file's URI as well as a SINGLE string of SEARCH/REPLACE block(s) that will be used to apply the edit.`,
+    description: `Edit the contents of a file. You must provide the file's URI as well as a SINGLE string of SEARCH/REPLACE block(s) that will be used to apply the edit. For .pdf with a text layer, ORIGINAL/UPDATED match the extracted text from read_file; the file is rebuilt as a new text PDF (original layout/images are not kept). Do NOT use edit_file on a scanned PDF (OCR text) or on .docx/.xlsx/.xlsm/.pptx — those cannot be written back.`,
     params: {
       ...uriParam('file'),
       search_replace_blocks: { description: replaceTool_description },
@@ -595,7 +595,7 @@ export const builtinTools: {
 
   rewrite_file: {
     name: 'rewrite_file',
-    description: `Creates a file if it does not exist, or replaces all contents of an existing file, with your new_content. Prefer this single call for new files instead of create_file_or_folder + rewrite_file.`,
+    description: `Creates a file if it does not exist, or replaces all contents of an existing file, with your new_content. Prefer this single call for new files instead of create_file_or_folder + rewrite_file. For .pdf with a text layer, builds a new multi-page text PDF from new_content (layout of the previous file is not preserved). Do NOT use rewrite_file on a scanned PDF or on .docx/.xlsx/.xlsm/.pptx.`,
     params: {
       ...uriParam('file'),
       new_content: { description: `The new contents of the file. Must be a string.` },

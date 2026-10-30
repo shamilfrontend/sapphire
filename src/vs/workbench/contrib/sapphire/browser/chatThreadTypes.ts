@@ -295,7 +295,7 @@ export interface ChatThreadCollaboratorHost {
   readonly _terminalToolService: ITerminalToolService;
 
   _addMessageToThread(threadId: string, message: ChatMessage): void;
-  _addToolEditCheckpoint(opts: { threadId: string; uri: URI }): void;
+  _addToolEditCheckpoint(opts: { threadId: string; uri: URI }): void | Promise<void>;
   _addUserCheckpoint(opts: { threadId: string }): void;
   _bumpAgentRunEpoch(threadId: string): number;
   _editMessageInThread(threadId: string, messageIdx: number, newMessage: ChatMessage): void;

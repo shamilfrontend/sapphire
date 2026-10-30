@@ -653,6 +653,7 @@ const esbuildMediaScripts: { script: string; tsconfig: string }[] = [
 	{ script: 'markdown-math/esbuild.notebook.mts', tsconfig: 'markdown-math/notebook/tsconfig.json' },
 	// mermaid-markdown-features: excluded from Sapphire packaging (chat/plans use root `mermaid` + Vue MermaidBlock)
 	{ script: 'notebook-renderers/esbuild.notebook.mts', tsconfig: 'notebook-renderers/tsconfig.json' },
+	{ script: 'media-preview/esbuild.webview.mts', tsconfig: 'media-preview/preview-src/tsconfig.json' },
 	{ script: 'simple-browser/esbuild.webview.mts', tsconfig: 'simple-browser/preview-src/tsconfig.json' },
 ];
 

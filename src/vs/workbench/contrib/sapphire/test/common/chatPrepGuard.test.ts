@@ -10,9 +10,11 @@ import { isCancellationError } from '../../../../../base/common/errors.js';
 import {
   ChatPrepTimeoutError,
   isChatPrepTimeoutError,
-  SAPPHIRE_CHAT_HEURISTIC_TIMEOUT_MS,
-  SAPPHIRE_CHAT_PREP_TIMEOUT_MS,
-  racePrepAwait,
+	prepTimeoutMsForPaths,
+	SAPPHIRE_CHAT_HEURISTIC_TIMEOUT_MS,
+	SAPPHIRE_CHAT_PREP_OCR_TIMEOUT_MS,
+	SAPPHIRE_CHAT_PREP_TIMEOUT_MS,
+	racePrepAwait,
 } from '../../common/chatPrepGuard.js';
 import {
   canEnqueueFollowUp,
@@ -36,9 +38,15 @@ import {
 suite('chatPrepGuard', () => {
   ensureNoDisposablesAreLeakedInTestSuite();
 
-  test('SAPPHIRE_CHAT_PREP_TIMEOUT_MS is 8s', () => {
-    assert.strictEqual(SAPPHIRE_CHAT_PREP_TIMEOUT_MS, 8_000);
-  });
+	test('SAPPHIRE_CHAT_PREP_TIMEOUT_MS is 8s', () => {
+		assert.strictEqual(SAPPHIRE_CHAT_PREP_TIMEOUT_MS, 8_000);
+	});
+
+	test('PDF paths get the longer prep budget', () => {
+		assert.strictEqual(SAPPHIRE_CHAT_PREP_OCR_TIMEOUT_MS, 45_000);
+		assert.strictEqual(prepTimeoutMsForPaths(['/tmp/notes.md']), SAPPHIRE_CHAT_PREP_TIMEOUT_MS);
+		assert.strictEqual(prepTimeoutMsForPaths(['/tmp/scan.PDF']), SAPPHIRE_CHAT_PREP_OCR_TIMEOUT_MS);
+	});
 
   test('SAPPHIRE_CHAT_HEURISTIC_TIMEOUT_MS is 3s', () => {
     assert.strictEqual(SAPPHIRE_CHAT_HEURISTIC_TIMEOUT_MS, 3_000);

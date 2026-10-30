@@ -853,13 +853,13 @@ ${planBody}`;
       }
       // Checkpoint перед правкой файла
       if (toolName === 'edit_file') {
-        this._s._addToolEditCheckpoint({
+        await this._s._addToolEditCheckpoint({
           threadId,
           uri: (toolParams as BuiltinToolCallParams['edit_file']).uri,
         });
       }
       if (toolName === 'rewrite_file') {
-        this._s._addToolEditCheckpoint({
+        await this._s._addToolEditCheckpoint({
           threadId,
           uri: (toolParams as BuiltinToolCallParams['rewrite_file']).uri,
         });

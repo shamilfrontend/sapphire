@@ -26,10 +26,11 @@ import { getErrorMessage } from '../common/sendLLMMessageTypes.js';
 import { ISapphireSettingsService } from '../common/sapphireSettingsService.js';
 import { ChatMode } from '../common/sapphireSettingsTypes.js';
 import {
-  isChatPrepTimeoutError,
-  SAPPHIRE_CHAT_HEURISTIC_TIMEOUT_MS,
-  SAPPHIRE_CHAT_PREP_TIMEOUT_MS,
-  racePrepAwait,
+	isChatPrepTimeoutError,
+	prepTimeoutMsForPaths,
+	SAPPHIRE_CHAT_HEURISTIC_TIMEOUT_MS,
+	SAPPHIRE_CHAT_PREP_TIMEOUT_MS,
+	racePrepAwait,
 } from '../common/chatPrepGuard.js';
 import { chatTrace } from '../common/chatSendTrace.js';
 import { IToolsService } from './toolsService.js';
@@ -241,7 +242,7 @@ export interface IChatThreadService {
     threadId: string;
     messageIdx: number;
     jumpToUserModified: boolean;
-  }): void;
+  }): Promise<void>;
 
   /** Сохранить/прочитать URI для кнопки Apply (переживает remount React). */
   setApplyBoxUri(applyBoxId: string, uri: URI | undefined): void;
@@ -911,7 +912,14 @@ class ChatThreadService extends Disposable implements IChatThreadService {
         }
 
         chatTrace(threadId, 'prep.content.start', `selns=${selns.length}`);
-        setPreparing('Готовлю сообщение…');
+        const contentPaths = selns
+          .filter((seln) => seln.type === 'File' || seln.type === 'CodeSelection')
+          .map((seln) => seln.uri.path);
+        setPreparing(
+          prepTimeoutMsForPaths(contentPaths) === SAPPHIRE_CHAT_PREP_TIMEOUT_MS
+            ? 'Готовлю сообщение…'
+            : 'Распознаю текст скана…',
+        );
         const userMessageContent = await chat_userMessageContent(instructions, selns, {
           directoryStrService: this._directoryStringService,
           fileService: this._fileService,
@@ -922,9 +930,22 @@ class ChatThreadService extends Disposable implements IChatThreadService {
       };
 
       let userMessageContent: string;
-      chatTrace(threadId, 'prep.local.start', `timeoutMs=${SAPPHIRE_CHAT_PREP_TIMEOUT_MS}`);
+      const prepPaths: string[] = [];
+      for (const seln of currSelns) {
+        if (seln.type === 'File' || seln.type === 'CodeSelection' || seln.type === 'Folder') {
+          prepPaths.push(seln.uri.path);
+        }
+      }
+      if (!skipAutoAttach) {
+        const activePath = this._editorService.activeEditor?.resource?.path;
+        if (activePath) {
+          prepPaths.push(activePath);
+        }
+      }
+      const prepTimeoutMs = prepTimeoutMsForPaths(prepPaths);
+      chatTrace(threadId, 'prep.local.start', `timeoutMs=${prepTimeoutMs}`);
       try {
-        const local = await racePrepAwait(runLocalPrep(), prepCts.token, SAPPHIRE_CHAT_PREP_TIMEOUT_MS);
+        const local = await racePrepAwait(runLocalPrep(), prepCts.token, prepTimeoutMs);
         currSelns = local.selns;
         userMessageContent = local.userMessageContent;
         chatTrace(threadId, 'prep.local.done');
@@ -1080,8 +1101,8 @@ class ChatThreadService extends Disposable implements IChatThreadService {
     threadId: string;
     messageIdx: number;
     jumpToUserModified: boolean;
-  }): void {
-    this._checkpoints.jumpToCheckpointBeforeMessageIdx(opts);
+  }): Promise<void> {
+    return this._checkpoints.jumpToCheckpointBeforeMessageIdx(opts);
   }
 
   setApplyBoxUri(applyBoxId: string, uri: URI | undefined): void {

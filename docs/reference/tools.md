@@ -28,8 +28,8 @@
 | `rename_symbol` | ✗ | ✓ | edits | Rename через LSP |
 | `create_file_or_folder` | ✗ | ✓ | edits | Создать файл или папку |
 | `delete_file_or_folder` | ✗ | ✓ | edits | Удалить файл или папку |
-| `edit_file` | ✗ | ✓ | edits | SEARCH/REPLACE |
-| `rewrite_file` | ✗ | ✓ | edits | Полная перезапись / создание с содержимым |
+| `edit_file` | ✗ | ✓ | edits | SEARCH/REPLACE (для `.pdf` — текстовый слой) |
+| `rewrite_file` | ✗ | ✓ | edits | Полная перезапись / создание; для `.pdf` — новый текстовый PDF |
 | `run_command` | ✗ | ✓ | terminal | Команда в терминале |
 | `run_persistent_command` | ✗ | ✓ | terminal | Команда в persistent terminal |
 | `open_persistent_terminal` | ✗ | ✓ | terminal | Открыть persistent terminal |
@@ -54,7 +54,8 @@
 
 ## Заметки
 
-- `read_file` / `search_in_file` для `.xlsx` / `.xlsm`, `.docx`, `.pptx`, `.pdf` — извлечённый текст; файл > 25 МБ не разбирается. См. [Офисные файлы](/guide/office), [архитектура](/architecture/office-extract).
+- `read_file` / `search_in_file` для `.xlsx` / `.xlsm`, `.docx`, `.pptx`, `.pdf` — извлечённый текст; скан PDF распознаётся локально (rus+eng). Файл > 25 МБ не разбирается. См. [Офисные файлы](/guide/office), [архитектура](/architecture/office-extract).
+- `edit_file` / `rewrite_file` для `.pdf` с текстовым слоем пишут байты PDF. Скан (OCR) и `.docx` / `.xlsx` / `.pptx` эти tools не пишут.
 - `search_project_index` — локальный индекс (token-score). См. [Индекс проекта](/architecture/project-index).
 - `diff_impact` — BFS до 2 hops по графу индекса (импорты и вызовы) для относительных путей. Тот же расчёт попадает в генерацию commit message.
 - `get_project_tour` — шаги онбординга из `.sapphire/index/tour.json` (появляется сам после индексации, если тура нет или он устарел).

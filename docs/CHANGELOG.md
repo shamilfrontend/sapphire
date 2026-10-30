@@ -6,6 +6,8 @@
 
 ### Added
 
+- OCR сканов PDF локально (rus+eng, до 10 страниц) для чата, `read_file`, `search_in_file` и индекса. `edit_file` / `rewrite_file` такой файл не переписывают — [Офисные файлы](/guide/office)
+- Встроенный просмотр `.pdf` во вкладке (клик в Explorer): страницы, zoom, prev/next. Правки агентом: `edit_file` / `rewrite_file` собирают новый текстовый PDF из (отредактированного) извлечённого текста, с кириллицей. Сканы без текстового слоя и OOXML (docx/xlsx/pptx) этими tools не пишутся — [Офисные файлы](/guide/office)
 - Кнопка браузера в title bar слева от Terminal открывает встроенный браузер
 - В Agent tools `browser_navigate`, `browser_snapshot`, `browser_click`, `browser_type`, `browser_scroll`, `browser_screenshot` (localhost разрешён; каждое действие ждёт подтверждения)
 - Агент видит уже открытые вкладки встроенного браузера в system info и может читать/кликать их через `browser_snapshot` (с share); `page_id` необязателен
@@ -24,6 +26,10 @@
 ### Removed
 
 - Жёсткий лимит 25 LLM-шагов за один запуск агента и кнопка «Продолжить». Остаётся остановка, если один и тот же набор инструментов запрошен 3 раза подряд
+
+### Fixed
+
+- Превью PDF больше не ждёт кросс-origin Worker pdf.js: файл около 100 КБ открывался десятки секунд
 
 ## [2026-10-05]
 

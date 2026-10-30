@@ -73,6 +73,16 @@
             "filenamePattern": "*.{mp4,webm}"
           }
         ]
+      },
+      {
+        "viewType": "vscode.pdfPreview",
+        "displayName": "%customEditor.pdfPreview.displayName%",
+        "priority": "builtin",
+        "selector": [
+          {
+            "filenamePattern": "*.pdf"
+          }
+        ]
       }
     ],
     "commands": [
@@ -102,6 +112,26 @@
         "title": "%command.reopenAsText%",
         "category": "Image Preview",
         "icon": "$(go-to-file)"
+      },
+      {
+        "command": "pdfPreview.zoomIn",
+        "title": "%command.zoomIn%",
+        "category": "PDF Preview"
+      },
+      {
+        "command": "pdfPreview.zoomOut",
+        "title": "%command.zoomOut%",
+        "category": "PDF Preview"
+      },
+      {
+        "command": "pdfPreview.prevPage",
+        "title": "%command.prevPage%",
+        "category": "PDF Preview"
+      },
+      {
+        "command": "pdfPreview.nextPage",
+        "title": "%command.nextPage%",
+        "category": "PDF Preview"
       }
     ],
     "menus": {
@@ -129,6 +159,26 @@
           "command": "imagePreview.reopenAsText",
           "when": "activeCustomEditorId == 'imagePreview.previewEditor' && resourceExtname == '.svg'",
           "group": "navigation"
+        },
+        {
+          "command": "pdfPreview.zoomIn",
+          "when": "activeCustomEditorId == 'vscode.pdfPreview'",
+          "group": "1_pdfPreview"
+        },
+        {
+          "command": "pdfPreview.zoomOut",
+          "when": "activeCustomEditorId == 'vscode.pdfPreview'",
+          "group": "1_pdfPreview"
+        },
+        {
+          "command": "pdfPreview.prevPage",
+          "when": "activeCustomEditorId == 'vscode.pdfPreview'",
+          "group": "1_pdfPreview"
+        },
+        {
+          "command": "pdfPreview.nextPage",
+          "when": "activeCustomEditorId == 'vscode.pdfPreview'",
+          "group": "1_pdfPreview"
         }
       ],
       "webview/context": [
@@ -152,10 +202,11 @@
     }
   },
   "scripts": {
-    "compile": "gulp compile-extension:media-preview",
+    "compile": "gulp compile-extension:media-preview && npm run build-preview",
     "watch": "npm run build-preview && gulp watch-extension:media-preview",
-    "vscode:prepublish": "npm run build-ext",
+    "vscode:prepublish": "npm run build-ext && npm run build-preview",
     "build-ext": "node ../../node_modules/gulp/bin/gulp.js --gulpfile ../../build/gulpfile.extensions.mjs compile-extension:media-preview ./tsconfig.json",
+    "build-preview": "node ./esbuild.webview.mts",
     "compile-web": "npm-run-all2 -lp bundle-web typecheck-web",
     "bundle-web": "node ./esbuild.browser.mts",
     "typecheck-web": "node ../../node_modules/@typescript/native/lib/tsc.js --project ./tsconfig.browser.json --noEmit",

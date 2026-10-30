@@ -113,8 +113,15 @@ import { WORKSPACE_DOT_DIR } from '../common/workspaceDotDir.js';
 import { migrateLegacyWorkspaceDotDir } from './migrateWorkspaceDotDir.js';
 import { IChatThreadService } from './chatThreadService.js';
 import { IMCPService } from '../common/mcpService.js';
-import { IOfficeExtractService } from '../common/officeExtractService.js';
-import { formatOfficePage, officePlainText } from '../common/office/officeDocument.js';
+import {
+  IOfficeExtractService,
+  isOfficeBinaryWriteBlocked,
+} from '../common/officeExtractService.js';
+import {
+  formatOfficePage,
+  officeKindFromPath,
+  officePlainText,
+} from '../common/office/officeDocument.js';
 import { onlineMcpServerNames } from '../common/prompt/mcpToolDisclosure.js';
 import { IProjectIndexService } from './projectIndexService.js';
 import {
@@ -1667,6 +1674,16 @@ class ToolsService implements IToolsService {
       },
 
       rewrite_file: async ({ uri, newContent }) => {
+        const blockedKind = isOfficeBinaryWriteBlocked(uri.fsPath);
+        if (blockedKind) {
+          throw new Error(
+            `Cannot rewrite .${blockedKind} with rewrite_file as plain text — there is no OOXML writer. Prefer CSV/Markdown, or ask the user to edit in Excel/Word/PowerPoint.`,
+          );
+        }
+        if (officeKindFromPath(uri.fsPath) === 'pdf') {
+          await this.officeExtractService.rewritePdf(uri, newContent);
+          return { result: Promise.resolve({ lintErrors: null }) };
+        }
         if (!(await fileService.exists(uri))) {
           await fileService.createFile(uri);
         }
@@ -1692,6 +1709,16 @@ class ToolsService implements IToolsService {
       },
 
       edit_file: async ({ uri, searchReplaceBlocks }) => {
+        const blockedKind = isOfficeBinaryWriteBlocked(uri.fsPath);
+        if (blockedKind) {
+          throw new Error(
+            `Cannot edit .${blockedKind} with edit_file as plain text — there is no OOXML writer. Prefer CSV/Markdown, or ask the user to edit in Excel/Word/PowerPoint.`,
+          );
+        }
+        if (officeKindFromPath(uri.fsPath) === 'pdf') {
+          await this.officeExtractService.editPdf(uri, searchReplaceBlocks);
+          return { result: Promise.resolve({ lintErrors: null }) };
+        }
         await sapphireModelService.initializeModel(uri);
         const { model } = sapphireModelService.getModel(uri);
         if (!model) {

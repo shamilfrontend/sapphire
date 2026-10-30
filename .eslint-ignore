@@ -61,6 +61,8 @@
 # Vendored third-party libraries
 src/vs/base/common/lit-html/**
 src/vs/base/common/signals-core/**
+**/extensions/media-preview/media/pdfPreview.js
+**/extensions/media-preview/media/pdfjs/**
 
 # Sapphire files with a third-party copyright and their own formatting
 src/vs/workbench/contrib/sapphire/browser/autocompleteService.ts

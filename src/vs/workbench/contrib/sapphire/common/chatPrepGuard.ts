@@ -9,6 +9,18 @@ import { CancellationError } from '../../../../base/common/errors.js';
 /** Максимальное ожидание всего local prep (heuristic / model / office), мс. */
 export const SAPPHIRE_CHAT_PREP_TIMEOUT_MS = 8_000;
 
+/** Разбор PDF может включать OCR скана. Обычные сообщения остаются на 8 с. */
+export const SAPPHIRE_CHAT_PREP_OCR_TIMEOUT_MS = 45_000;
+
+export function prepTimeoutMsForPaths(paths: readonly string[]): number {
+	for (const path of paths) {
+		if (path.replace(/\\/g, '/').toLowerCase().endsWith('.pdf')) {
+			return SAPPHIRE_CHAT_PREP_OCR_TIMEOUT_MS;
+		}
+	}
+	return SAPPHIRE_CHAT_PREP_TIMEOUT_MS;
+}
+
 /** Отдельный лимит на heuristic search — иначе fileSearch может съесть весь prep. */
 export const SAPPHIRE_CHAT_HEURISTIC_TIMEOUT_MS = 3_000;
 

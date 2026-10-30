@@ -108,20 +108,33 @@ suite('officeExtract', () => {
     assert.ok(payload.body.includes('Say this'));
   });
 
-  test('pdf with a text layer returns that text', async () => {
-    const payload = await extractOfficeBuffer(buildPdf('Hello PDF'), 'spec.pdf');
-    assertNoBinary(payload);
-    assert.ok(payload.outline.includes('Pages: 1'));
-    assert.ok(payload.body.includes('Hello PDF'));
-    assert.ok(!payload.body.includes('scan'));
-  });
+	test('pdf with a text layer returns that text', async () => {
+		const payload = await extractOfficeBuffer(buildPdf('Hello PDF'), 'spec.pdf');
+		assertNoBinary(payload);
+		assert.ok(payload.outline.includes('Pages: 1'));
+		assert.ok(payload.body.includes('Hello PDF'));
+		assert.ok(!payload.body.includes('scan'));
+		assert.strictEqual(payload.textOrigin, 'layer');
+	});
 
-  test('pdf without text says there is no text layer', async () => {
-    const payload = await extractOfficeBuffer(buildPdf(''), 'scan.pdf');
-    assertNoBinary(payload);
-    assert.ok(payload.outline.includes('Pages: 1'));
-    assert.ok(payload.body.includes('No text layer'));
-  });
+	test('pdf without text says there is no text layer', async () => {
+		const payload = await extractOfficeBuffer(buildPdf(''), 'scan.pdf');
+		assertNoBinary(payload);
+		assert.ok(payload.outline.includes('Pages: 1'));
+		assert.ok(payload.body.includes('No text layer'));
+		assert.strictEqual(payload.textOrigin, undefined);
+	});
+
+	test('injected OCR text is marked and not treated as a text layer', async () => {
+		const payload = await extractOfficeBuffer(buildPdf(''), 'scan.pdf', {
+			recognizeScan: async () => ['Распознанная строка'],
+		});
+		assertNoBinary(payload);
+		assert.strictEqual(payload.textOrigin, 'ocr');
+		assert.ok(payload.body.includes('## Page 1'));
+		assert.ok(payload.body.includes('Распознанная строка'));
+		assert.ok(!payload.body.includes('No text layer'));
+	});
 
   test('a broken zip does not leak binary into the result', async () => {
     const payload = await extractOfficeBuffer(

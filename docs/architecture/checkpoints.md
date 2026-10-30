@@ -20,7 +20,7 @@ UI: `SidebarThreadSelector.tsx`, `SidebarChat.tsx`, `agents-window-tsx/`.
 
 Типы checkpoint:
 
-- `tool_edit` — перед `edit_file` / `rewrite_file` (один URI, состояние до правки);
+- `tool_edit` — перед `edit_file` / `rewrite_file` (один URI, состояние до правки); для `.pdf` в snapshot кладутся байты (`sapphire-pdf-b64:…`), откат пишет файл через `IFileService`;
 - `user_edit` — после завершения/abort агента: все URI из истории checkpoints, у которых контент изменился, **плюс** файлы, которые пользователь правил вручную вне agent history (`onDidUserChangeContent` → LRU → `_computeNewCheckpointInfo`).
 
 Это отдельный механизм от git — удобен для итераций Agent внутри IDE.
