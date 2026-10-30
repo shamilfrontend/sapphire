@@ -12,6 +12,8 @@ import {
 import { createDecorator } from '../../../../platform/instantiation/common/instantiation.js';
 import { IWorkspaceContextService } from '../../../../platform/workspace/common/workspace.js';
 import { IEditorService } from '../../../services/editor/common/editorService.js';
+import { IBrowserViewWorkbenchService } from '../../browserView/common/browserView.js';
+import { formatOpenBrowserTabsForPrompt } from './sapphireAgentBrowser.js';
 import {
   ChatImageAttachment,
   ChatMessage,
@@ -400,6 +402,7 @@ class ConvertToLLMMessageService extends Disposable implements IConvertToLLMMess
     @IModelService private readonly modelService: IModelService,
     @IWorkspaceContextService private readonly workspaceContextService: IWorkspaceContextService,
     @IEditorService private readonly editorService: IEditorService,
+    @IBrowserViewWorkbenchService private readonly browserViewService: IBrowserViewWorkbenchService,
     @IDirectoryStrService private readonly directoryStrService: IDirectoryStrService,
     @ITerminalToolService private readonly terminalToolService: ITerminalToolService,
     @ISapphireSettingsService private readonly sapphireSettingsService: ISapphireSettingsService,
@@ -641,12 +644,17 @@ class ConvertToLLMMessageService extends Disposable implements IConvertToLLMMess
     });
 
     const persistentTerminalIDs = this.terminalToolService.listPersistentTerminalIds();
+    const openBrowserTabs =
+      chatMode === 'agent'
+        ? formatOpenBrowserTabsForPrompt(this.editorService, this.browserViewService)
+        : undefined;
     const systemMessage = chat_systemMessage({
       workspaceFolders,
       openedURIs,
       directoryStr,
       activeURI,
       persistentTerminalIDs,
+      openBrowserTabs,
       chatMode,
     });
     const memories =

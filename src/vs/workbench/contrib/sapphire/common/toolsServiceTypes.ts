@@ -175,11 +175,11 @@ export type BuiltinToolCallParams = {
   web_search: { query: string; k: number };
   browse_url: { url: string };
   browser_navigate: { url: string };
-  browser_snapshot: { pageId: string };
-  browser_click: { pageId: string; ref: string; element: string };
-  browser_type: { pageId: string; ref: string; element: string; text: string; submit: boolean };
-  browser_scroll: { pageId: string; direction: 'up' | 'down' };
-  browser_screenshot: { pageId: string };
+  browser_snapshot: { pageId: string | undefined };
+  browser_click: { pageId: string | undefined; ref: string; element: string };
+  browser_type: { pageId: string | undefined; ref: string; element: string; text: string; submit: boolean };
+  browser_scroll: { pageId: string | undefined; direction: 'up' | 'down' };
+  browser_screenshot: { pageId: string | undefined };
   save_memory: { type: MemoryType; key: string; value: string; tags: string[] | null };
   run_subagent: { description: string; prompt: string };
   run_parallel_subagents: { tasks: ParallelSubagentTask[] };

@@ -350,7 +350,7 @@ export const builtinTools: {
 
   browser_navigate: {
     name: 'browser_navigate',
-    description: `Open an http(s) URL in the integrated browser the user can see, including localhost. Returns pageId and an accessibility snapshot with element refs. Reuses the last page opened by this tool. Call this before browser_click, browser_type, browser_scroll, or browser_screenshot.`,
+    description: `Open an http(s) URL in the integrated browser the user can see, including localhost. Returns pageId and an accessibility snapshot with element refs. Reuses the last page opened by this tool. Prefer browser_snapshot on an already-listed open tab instead of navigating to the same URL again.`,
     params: {
       url: { description: 'Absolute http(s) URL. localhost and 127.0.0.1 are allowed. Private LAN addresses are not.' },
     },
@@ -358,9 +358,9 @@ export const builtinTools: {
 
   browser_snapshot: {
     name: 'browser_snapshot',
-    description: `Read the current accessibility snapshot of an open browser page, including element refs. Call this after navigation or any DOM change before the next click or type.`,
+    description: `Read the current accessibility snapshot of an open browser page, including element refs. Call this after navigation or any DOM change before the next click or type. Works on tabs the user already opened (see Open browser tabs in system info).`,
     params: {
-      page_id: { description: 'Page id returned by browser_navigate.' },
+      page_id: { description: 'Optional. Page id from system info or browser_navigate. Omit to use the active/visible browser tab.' },
     },
   },
 
@@ -368,7 +368,7 @@ export const builtinTools: {
     name: 'browser_click',
     description: `Click an element in the integrated browser. ref must come from the latest browser_navigate or browser_snapshot. Do not invent refs.`,
     params: {
-      page_id: { description: 'Page id returned by browser_navigate.' },
+      page_id: { description: 'Optional. Page id from system info or browser_navigate. Omit to use the active/visible browser tab.' },
       ref: { description: 'Element ref from the latest snapshot (aria-ref).' },
       element: { description: 'Short human-readable name of the element, shown in the approval card.' },
     },
@@ -378,7 +378,7 @@ export const builtinTools: {
     name: 'browser_type',
     description: `Type text into an element in the integrated browser. ref must come from the latest snapshot. Set submit true to press Enter after filling.`,
     params: {
-      page_id: { description: 'Page id returned by browser_navigate.' },
+      page_id: { description: 'Optional. Page id from system info or browser_navigate. Omit to use the active/visible browser tab.' },
       ref: { description: 'Element ref from the latest snapshot (aria-ref).' },
       element: { description: 'Short human-readable name of the field, shown in the approval card.' },
       text: { description: 'Text to fill into the element.' },
@@ -390,7 +390,7 @@ export const builtinTools: {
     name: 'browser_scroll',
     description: `Scroll the integrated browser page up or down, then return a fresh snapshot.`,
     params: {
-      page_id: { description: 'Page id returned by browser_navigate.' },
+      page_id: { description: 'Optional. Page id from system info or browser_navigate. Omit to use the active/visible browser tab.' },
       direction: { description: 'Either "up" or "down".' },
     },
   },
@@ -399,7 +399,7 @@ export const builtinTools: {
     name: 'browser_screenshot',
     description: `Capture a screenshot of the integrated browser page for the user. Also returns the accessibility snapshot.`,
     params: {
-      page_id: { description: 'Page id returned by browser_navigate.' },
+      page_id: { description: 'Optional. Page id from system info or browser_navigate. Omit to use the active/visible browser tab.' },
     },
   },
 
@@ -813,6 +813,7 @@ export const chat_systemMessage = ({
   activeURI,
   persistentTerminalIDs,
   directoryStr,
+  openBrowserTabs,
   chatMode: mode,
 }: {
   workspaceFolders: string[];
@@ -820,6 +821,8 @@ export const chat_systemMessage = ({
   openedURIs: string[];
   activeURI: string | undefined;
   persistentTerminalIDs: string[];
+  /** Agent-only list of integrated browser tabs (title, url, page id). */
+  openBrowserTabs?: string;
   chatMode: ChatMode;
 }) => {
   const isAgent = mode === 'agent';
@@ -836,6 +839,14 @@ ${
 You will be given instructions to follow from the user, and you may also be given a list of files that the user has specifically selected for context, \`SELECTIONS\`.
 Please assist the user with their query.`;
 
+  const browserTabsBlock =
+    isAgent
+      ? `
+
+- Open browser tabs (page id for browser_snapshot / click / type; not page content):
+${openBrowserTabs?.trim() || 'none open'}`
+      : '';
+
   const sysInfo = `Here is the user's system information:
 <system_info>
 - ${os}
@@ -847,7 +858,7 @@ ${workspaceFolders.join('\n') || 'NO FOLDERS OPEN'}
 ${activeURI}
 
 - Open files:
-${openedURIs.join('\n') || 'NO OPENED FILES'}${'' /* разделитель перед терминалами */}${
+${openedURIs.join('\n') || 'NO OPENED FILES'}${browserTabsBlock}${'' /* разделитель перед терминалами */}${
     isAgent && persistentTerminalIDs.length !== 0
       ? `
 
@@ -909,7 +920,7 @@ Language (mandatory): If the user's latest message is in Russian, write BOTH the
       `Use run_subagent for a focused research or implementation subtask that would clutter this thread. Put ALL context the child needs in prompt (it cannot see this chat). Prefer one clear subtask per call. For independent read-only investigations, prefer run_parallel_subagents (max 4). End your own turn after synthesizing the child's summary — do not re-do the child's work.`,
     );
     details.push(
-      `Use web_search / browse_url for public docs and facts not in the workspace. To open a page the user can see and then click, type, or scroll — including localhost — use browser_navigate, then browser_snapshot, then browser_click / browser_type / browser_scroll with refs from that snapshot. Do not invent refs. Use browser_screenshot when the user should see the page. Use save_memory for durable project decisions or user preferences that should stick across turns.`,
+      `Use web_search / browse_url for public docs and facts not in the workspace. Open browser tabs in system info list integrated browser pages the user already opened (title, url, page id) — answer "do you see the browser?" from that list without tools. To read the DOM, click, type, or scroll an already-open tab, call browser_snapshot with that page id (or omit page_id for the active tab); do not browser_navigate to the same URL again. To open a new page — including localhost — use browser_navigate, then browser_snapshot, then browser_click / browser_type / browser_scroll with refs from that snapshot. Do not invent refs. Use browser_screenshot when the user should see the page. Use save_memory for durable project decisions or user preferences that should stick across turns.`,
     );
     details.push(
       `SKILLS lists always-on instructions plus a catalog of available skills (from Settings, .claude/skills/**/SKILL.md, .agents/skills/**/SKILL.md, and long .skills files). To load a catalog skill's full body, the latest user message must include its /slug (for example /design-landing). Do not invent skill contents that were not loaded.`,

@@ -8,6 +8,7 @@
 
 - Кнопка браузера в title bar слева от Terminal открывает встроенный браузер
 - В Agent tools `browser_navigate`, `browser_snapshot`, `browser_click`, `browser_type`, `browser_scroll`, `browser_screenshot` (localhost разрешён; каждое действие ждёт подтверждения)
+- Агент видит уже открытые вкладки встроенного браузера в system info и может читать/кликать их через `browser_snapshot` (с share); `page_id` необязателен
 - После Tab автодополнение предлагает следующую правку в другом месте файла: ghost inline edit и Tab, чтобы перейти к ней. Та же модель FIM, что и у Tab
 - Agent Skills open standard: каталог `.claude/skills/**/SKILL.md` и `.agents/skills/**/SKILL.md`; полное тело по `/slug`. Длинный `.skills` больше не всегда в system — только каталог `/workspace-skills`
 - Режим Agent «довести до зелёного»: настройка или `/verify` — после правок цикл diagnostics/тесты → fix до чистоты или лимита раундов
@@ -16,6 +17,7 @@
 
 ### Changed
 
+- Дубль глобуса Browser справа в title bar скрыт по умолчанию (`workbench.browser.showInTitleBar: false`); остаётся кнопка Sapphire слева от Terminal
 - Placeholder композера чата всегда указывает офисные форматы (xlsx, docx, pptx, pdf); при `supportsVision` у выбранной модели добавляются картинки (png/jpeg/webp/gif)
 - Документация VitePress синхронизирована с кодом: полный каталог tools, MCP+Debug, privacy/web, Layout Agents, сжатый Roadmap
 

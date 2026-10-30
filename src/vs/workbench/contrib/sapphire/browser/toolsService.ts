@@ -157,10 +157,19 @@ const validateStr = (argName: string, value: unknown) => {
   return value;
 };
 
-const requireBrowserPageId = (value: unknown): string => {
-  const pageId = validateStr('pageId', value).trim();
-  if (!pageId) {
-    throw new Error('page_id is required. Call browser_navigate first.');
+/** Optional page_id: missing/empty → resolve active/visible tab at call time. */
+const optionalBrowserPageId = (value: unknown): string | undefined => {
+  if (value === null || value === undefined) {
+    return undefined;
+  }
+  if (typeof value !== 'string') {
+    throw new Error(
+      `Invalid LLM output format: pageId must be a string, but its type is "${typeof value}". Full value: ${JSON.stringify(value)}.`,
+    );
+  }
+  const pageId = value.trim();
+  if (!pageId || pageId === 'null' || pageId === 'undefined') {
+    return undefined;
   }
   return pageId;
 };
@@ -757,12 +766,12 @@ class ToolsService implements IToolsService {
       },
 
       browser_snapshot: (params: RawToolParamsObj) => {
-        return { pageId: requireBrowserPageId(params.page_id) };
+        return { pageId: optionalBrowserPageId(params.page_id) };
       },
 
       browser_click: (params: RawToolParamsObj) => {
         return {
-          pageId: requireBrowserPageId(params.page_id),
+          pageId: optionalBrowserPageId(params.page_id),
           ref: requireBrowserRef(params.ref),
           element: browserElementLabel(params.element),
         };
@@ -771,7 +780,7 @@ class ToolsService implements IToolsService {
       browser_type: (params: RawToolParamsObj) => {
         const submit = String(params.submit ?? '').trim().toLowerCase() === 'true';
         return {
-          pageId: requireBrowserPageId(params.page_id),
+          pageId: optionalBrowserPageId(params.page_id),
           ref: requireBrowserRef(params.ref),
           element: browserElementLabel(params.element),
           text: validateStr('text', params.text),
@@ -784,11 +793,11 @@ class ToolsService implements IToolsService {
         if (directionRaw !== 'up' && directionRaw !== 'down') {
           throw new Error('browser_scroll: direction must be "up" or "down"');
         }
-        return { pageId: requireBrowserPageId(params.page_id), direction: directionRaw };
+        return { pageId: optionalBrowserPageId(params.page_id), direction: directionRaw };
       },
 
       browser_screenshot: (params: RawToolParamsObj) => {
-        return { pageId: requireBrowserPageId(params.page_id) };
+        return { pageId: optionalBrowserPageId(params.page_id) };
       },
 
       save_memory: (params: RawToolParamsObj) => {

@@ -6,7 +6,8 @@
 import { IEditorService } from '../../../services/editor/common/editorService.js';
 import { getAgentBrowserViewCreationDefaults } from '../../../../platform/browserView/common/browserView.js';
 import { IPlaywrightService } from '../../../../platform/browserView/common/playwrightService.js';
-import { IBrowserViewWorkbenchService } from '../../browserView/common/browserView.js';
+import { BrowserEditorInput } from '../../browserView/common/browserEditorInput.js';
+import { BrowserViewSharingState, IBrowserViewWorkbenchService } from '../../browserView/common/browserView.js';
 
 export const SAPPHIRE_BROWSER_SESSION = 'sapphire';
 
@@ -52,6 +53,96 @@ function requireKnownPage(browserViewService: IBrowserViewWorkbenchService, page
 	return input;
 }
 
+/** Список открытых вкладок для system prompt (без DOM / cookies). */
+export function formatOpenBrowserTabsForPrompt(
+	editorService: IEditorService,
+	browserViewService: IBrowserViewWorkbenchService,
+): string {
+	const views = [...browserViewService.getKnownBrowserViews().values()];
+	if (views.length === 0) {
+		return 'none open';
+	}
+	const active = editorService.activeEditor;
+	const visible = new Set(editorService.visibleEditors);
+	return views.map(input => {
+		const title = (input.title || 'Browser').replace(/\s+/g, ' ').trim();
+		const url = input.url || 'about:blank';
+		const shared = input.model?.sharingState === BrowserViewSharingState.Shared ? 'shared' : 'not-shared';
+		const hint = input === active ? 'active' : visible.has(input) ? 'visible' : 'hidden';
+		return `- [${input.id}] ${title} (${url}) (${hint}, ${shared})`;
+	}).join('\n');
+}
+
+function resolvePageId(
+	browserViewService: IBrowserViewWorkbenchService,
+	editorService: IEditorService,
+	pageId: string | undefined,
+): string {
+	if (pageId) {
+		requireKnownPage(browserViewService, pageId);
+		return pageId;
+	}
+
+	const active = editorService.activeEditor;
+	if (active instanceof BrowserEditorInput) {
+		return active.id;
+	}
+	for (const editor of editorService.visibleEditors) {
+		if (editor instanceof BrowserEditorInput) {
+			return editor.id;
+		}
+	}
+	if (lastPageId && browserViewService.getKnownBrowserViews().has(lastPageId)) {
+		return lastPageId;
+	}
+	const first = browserViewService.getKnownBrowserViews().keys().next().value;
+	if (typeof first === 'string') {
+		return first;
+	}
+	throw new Error('No browser page is open. Call browser_navigate first or open the integrated browser.');
+}
+
+async function ensurePageShared(
+	browserViewService: IBrowserViewWorkbenchService,
+	editorService: IEditorService,
+	pageId: string,
+): Promise<string> {
+	const input = requireKnownPage(browserViewService, pageId);
+	const model = await input.resolve();
+	if (model.sharingState === BrowserViewSharingState.Shared) {
+		lastPageId = pageId;
+		return pageId;
+	}
+	const shared = await model.setSharedWithAgent(true);
+	if (!shared) {
+		throw new Error('User declined sharing this browser tab with the agent.');
+	}
+	lastPageId = shared.id;
+	const sharedInput = browserViewService.getKnownBrowserViews().get(shared.id) ?? input;
+	await editorService.openEditor(sharedInput);
+	return shared.id;
+}
+
+async function preparePage(
+	browserViewService: IBrowserViewWorkbenchService,
+	playwrightService: IPlaywrightService,
+	editorService: IEditorService,
+	pageId: string | undefined,
+): Promise<{ pageId: string; input: BrowserEditorInput }> {
+	const resolved = resolvePageId(browserViewService, editorService, pageId);
+	const sharedId = await ensurePageShared(browserViewService, editorService, resolved);
+	const input = requireKnownPage(browserViewService, sharedId);
+	await editorService.openEditor(input);
+	// После share пользовательской вкладки Playwright может ещё не видеть page — ждём discovery.
+	await playwrightService.waitForPageAndGetSummary(
+		SAPPHIRE_BROWSER_SESSION,
+		sharedId,
+		input.url || 'about:blank',
+		PAGE_READY_TIMEOUT_MS,
+	);
+	return { pageId: sharedId, input };
+}
+
 export async function navigateSapphireBrowser(
 	browserViewService: IBrowserViewWorkbenchService,
 	playwrightService: IPlaywrightService,
@@ -86,47 +177,45 @@ async function runOnPage(
 	browserViewService: IBrowserViewWorkbenchService,
 	playwrightService: IPlaywrightService,
 	editorService: IEditorService,
-	pageId: string,
+	pageId: string | undefined,
 	fn: string,
 	args: unknown[],
-): Promise<{ url: string; summary: string; result: unknown }> {
-	const input = requireKnownPage(browserViewService, pageId);
-	await editorService.openEditor(input);
-	const invoked = await playwrightService.invokeFunction(SAPPHIRE_BROWSER_SESSION, pageId, fn, args);
+): Promise<{ pageId: string; url: string; summary: string; result: unknown }> {
+	const prepared = await preparePage(browserViewService, playwrightService, editorService, pageId);
+	const invoked = await playwrightService.invokeFunction(SAPPHIRE_BROWSER_SESSION, prepared.pageId, fn, args);
 	if (invoked.error) {
 		throw new Error(invoked.error);
 	}
-	return { url: input.url || '', summary: invoked.summary, result: invoked.result };
+	return { pageId: prepared.pageId, url: prepared.input.url || '', summary: invoked.summary, result: invoked.result };
 }
 
 export async function snapshotSapphireBrowser(
 	browserViewService: IBrowserViewWorkbenchService,
 	playwrightService: IPlaywrightService,
 	editorService: IEditorService,
-	pageId: string,
+	pageId: string | undefined,
 ): Promise<SapphireBrowserToolResult> {
-	const input = requireKnownPage(browserViewService, pageId);
-	await editorService.openEditor(input);
-	const summary = await playwrightService.getSummary(SAPPHIRE_BROWSER_SESSION, pageId);
-	return pageResult(pageId, input.url || '', summary);
+	const prepared = await preparePage(browserViewService, playwrightService, editorService, pageId);
+	const summary = await playwrightService.getSummary(SAPPHIRE_BROWSER_SESSION, prepared.pageId);
+	return pageResult(prepared.pageId, prepared.input.url || '', summary);
 }
 
 export async function clickSapphireBrowser(
 	browserViewService: IBrowserViewWorkbenchService,
 	playwrightService: IPlaywrightService,
 	editorService: IEditorService,
-	pageId: string,
+	pageId: string | undefined,
 	ref: string,
 ): Promise<SapphireBrowserToolResult> {
 	const ran = await runOnPage(browserViewService, playwrightService, editorService, pageId, CLICK_FN, [`aria-ref=${ref}`]);
-	return pageResult(pageId, ran.url, ran.summary);
+	return pageResult(ran.pageId, ran.url, ran.summary);
 }
 
 export async function typeSapphireBrowser(
 	browserViewService: IBrowserViewWorkbenchService,
 	playwrightService: IPlaywrightService,
 	editorService: IEditorService,
-	pageId: string,
+	pageId: string | undefined,
 	ref: string,
 	text: string,
 	submit: boolean,
@@ -139,14 +228,14 @@ export async function typeSapphireBrowser(
 		TYPE_FN,
 		[`aria-ref=${ref}`, text, submit],
 	);
-	return pageResult(pageId, ran.url, ran.summary);
+	return pageResult(ran.pageId, ran.url, ran.summary);
 }
 
 export async function scrollSapphireBrowser(
 	browserViewService: IBrowserViewWorkbenchService,
 	playwrightService: IPlaywrightService,
 	editorService: IEditorService,
-	pageId: string,
+	pageId: string | undefined,
 	direction: 'up' | 'down',
 ): Promise<SapphireBrowserToolResult> {
 	const ran = await runOnPage(
@@ -157,17 +246,17 @@ export async function scrollSapphireBrowser(
 		SCROLL_FN,
 		[direction === 'up' ? -600 : 600],
 	);
-	return pageResult(pageId, ran.url, ran.summary);
+	return pageResult(ran.pageId, ran.url, ran.summary);
 }
 
 export async function screenshotSapphireBrowser(
 	browserViewService: IBrowserViewWorkbenchService,
 	playwrightService: IPlaywrightService,
 	editorService: IEditorService,
-	pageId: string,
+	pageId: string | undefined,
 ): Promise<SapphireBrowserToolResult> {
 	const ran = await runOnPage(browserViewService, playwrightService, editorService, pageId, SCREENSHOT_FN, []);
 	const raw = typeof ran.result === 'string' ? ran.result : '';
 	const imageDataUrl = raw && raw.length <= SCREENSHOT_MAX_CHARS ? `data:image/png;base64,${raw}` : null;
-	return pageResult(pageId, ran.url, ran.summary, imageDataUrl);
+	return pageResult(ran.pageId, ran.url, ran.summary, imageDataUrl);
 }

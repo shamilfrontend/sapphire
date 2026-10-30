@@ -29,7 +29,7 @@
 - **`run_subagent`** — изолированный дочерний агент; в prompt нужно передать весь контекст. Таймаут до 10 мин; Stop родителя прерывает раньше.
 - **`run_parallel_subagents`** — до 4 read-only исследований параллельно (без правок и сети).
 - **`web_search` / `browse_url`** — публичный интернет; см. [Приватность](/guide/privacy).
-- **Браузер** — видимая панель. `browser_navigate` открывает http(s), включая localhost. Дальше `browser_snapshot` даёт `ref`, по ним `browser_click` / `browser_type` / `browser_scroll`. `browser_screenshot` показывает картинку в чате. Кнопка в title bar слева от Terminal открывает ту же панель без агента.
+- **Браузер** — видимая панель. Кнопка слева от Terminal открывает её без агента. В Agent в system info есть список уже открытых вкладок (title, url, page id). `browser_navigate` открывает новый http(s), включая localhost. Чтобы работать с уже открытой вкладкой — `browser_snapshot` (с `page_id` или без, для активной); дальше `browser_click` / `browser_type` / `browser_scroll` по `ref`. `browser_screenshot` показывает картинку в чате.
 
 ## Approve / Reject
 

@@ -506,7 +506,7 @@ const toolNameToDesc = (toolName: BuiltinToolName, _toolParams: BuiltinToolCallP
     browser_snapshot: () => {
       const toolParams = _toolParams as BuiltinToolCallParams['browser_snapshot'];
       return {
-        desc1: toolParams.pageId
+        desc1: toolParams.pageId || 'active tab'
       };
     },
     browser_click: () => {
@@ -530,7 +530,7 @@ const toolNameToDesc = (toolName: BuiltinToolName, _toolParams: BuiltinToolCallP
     browser_screenshot: () => {
       const toolParams = _toolParams as BuiltinToolCallParams['browser_screenshot'];
       return {
-        desc1: toolParams.pageId
+        desc1: toolParams.pageId || 'active tab'
       };
     },
     save_memory: () => {
