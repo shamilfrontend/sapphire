@@ -8,7 +8,9 @@
 | --- | --- |
 | **FeatureName** | `Autocomplete` \| `Chat` \| `Ctrl+K` \| `Apply` \| `SCM` |
 | **ModelSelection** | пара `{ providerName, modelName }` |
-| **ProviderName** | ключ провайдера: `openAI`, `deepseek`, `anthropic`, … |
+| **Auto** | sentinel `modelName: 'auto'` в Chat; роутинг → конкретная модель (см. [auto-mode.md](./auto-mode.md)) |
+| **Thread model** | пикер Chat в сайдбаре пишет `thread.state.modelSelection`; Settings Chat — `modelSelectionOfFeature.Chat` (fallback / дефолт для старых тредов) |
+| **ProviderName** | ключ провайдера: `openAI`, `deepseek`, `kimi`, `anthropic`, … |
 | **ModelName** | ID модели, напр. `deepseek-chat` |
 | **ChatMode** | `normal` \| `plan` \| `agent` |
 | **LayoutMode** | `ide` \| `agents` |

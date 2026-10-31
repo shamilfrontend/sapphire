@@ -16,7 +16,7 @@ import { ChatFolder } from '../common/chatFolders.js';
 import { IDirectoryStrService } from '../common/directoryStrService.js';
 import { IMCPService } from '../common/mcpService.js';
 import { ISapphireModelService } from '../common/sapphireModelService.js';
-import { ChatMode } from '../common/sapphireSettingsTypes.js';
+import { ChatMode, ModelSelection } from '../common/sapphireSettingsTypes.js';
 import { ISapphireSettingsService } from '../common/sapphireSettingsService.js';
 import { ILLMMessageService } from '../common/sendLLMMessageService.js';
 import { RawToolCallObj, RawToolParamsObj } from '../common/sendLLMMessageTypes.js';
@@ -94,6 +94,9 @@ export type ThreadType = {
 
     /** Режим этого чата. Нет поля — берётся общий fallback, чтобы старые треды не сменили режим разом. */
     chatMode?: ChatMode;
+
+    /** Модель этого чата. Нет поля — берётся global Chat, чтобы старые треды не сменили модель разом. */
+    modelSelection?: ModelSelection;
 
     /** Неотправленный текст композера (переживает переключение вкладок). */
     draftText?: string;
@@ -191,6 +194,8 @@ export type ThreadStreamState = {
           toolCallsSoFar: RawToolCallObj[] | null;
           /** Wall-clock первого непустого чанка. Нет, пока не пришли text/reasoning/tool call. */
           firstTokenAt?: number;
+          /** Подпись Auto на первом ходе прогона. Нет у явной модели и у следующих LLM-ходов. */
+          autoResolvedDisplayName?: string;
         };
         toolInfo?: undefined;
         interrupt: Promise<() => void>; // на state не влияет (иначе путаница) — только отмена tool
@@ -329,4 +334,5 @@ export interface ChatThreadCollaboratorHost {
   getCurrentThread(): ThreadType;
   openNewThread(folderId?: string | null): void;
   setThreadChatMode(threadId: string, chatMode: ChatMode): void;
+  setThreadModelSelection(threadId: string, modelSelection: ModelSelection): void;
 }

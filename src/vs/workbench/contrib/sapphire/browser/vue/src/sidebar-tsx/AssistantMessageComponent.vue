@@ -41,6 +41,13 @@ const isEmpty = computed(() => !displayContent.value && !props.chatMessage.reaso
 
 <template>
   <template v-if="!isEmpty">
+    <div
+      v-if="chatMessage.autoResolvedDisplayName"
+      class="mb-1 text-[11px] text-void-fg-3"
+      :class="isCheckpointGhost ? 'opacity-50' : ''"
+    >
+      Auto → {{ chatMessage.autoResolvedDisplayName }}
+    </div>
     <!-- Блок рассуждений -->
     <div v-if="hasReasoning" :class="isCheckpointGhost ? 'opacity-50' : ''">
       <ReasoningWrapper :isDoneReasoning="isDoneReasoning" :isStreaming="!isCommitted">

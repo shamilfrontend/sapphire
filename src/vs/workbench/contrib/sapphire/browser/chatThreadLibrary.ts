@@ -12,7 +12,11 @@ import {
 } from '../common/chatFolders.js';
 import { buildChatHistorySummary } from '../common/chatHistorySummary.js';
 import { chatTrace } from '../common/chatSendTrace.js';
-import { isChatMode, resolveThreadChatMode } from '../common/sapphireSettingsTypes.js';
+import {
+  isChatMode,
+  resolveThreadChatMode,
+  resolveThreadModelSelection,
+} from '../common/sapphireSettingsTypes.js';
 import { ChatThreadCollaboratorHost, ChatThreads, ThreadType } from './chatThreadTypes.js';
 
 export const newThreadObject = (): ThreadType => {
@@ -103,13 +107,18 @@ export class ChatThreadLibrary {
     if (folderId && this._s.state.folders.some((folder: ChatFolder) => folder.id === folderId)) {
       newThread.folderId = folderId;
     }
-    // Новый чат стартует с режима текущего, но дальше хранит свой — смена в одном не трогает другой.
+    // Новый чат стартует с режима/модели текущего, но дальше хранит свои — смена в одном не трогает другой.
     const source = currentThreads[currentThreadId];
     const globalMode = this._s._settingsService?.state?.globalSettings?.chatMode;
     newThread.state.chatMode = resolveThreadChatMode(
       source?.state.chatMode,
       isChatMode(globalMode) ? globalMode : 'normal',
     );
+    const globalModel = this._s._settingsService?.state?.modelSelectionOfFeature?.Chat ?? null;
+    const seededModel = resolveThreadModelSelection(source?.state.modelSelection, globalModel);
+    if (seededModel) {
+      newThread.state.modelSelection = seededModel;
+    }
 
     const newThreads: ChatThreads = {
       ...currentThreads,

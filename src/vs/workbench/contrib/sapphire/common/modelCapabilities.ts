@@ -3,12 +3,15 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import {
+import type {
 	FeatureName,
 	ModelSelectionOptions,
 	OverridesOfModel,
 	ProviderName,
 } from './sapphireSettingsTypes.js';
+
+/** Совпадает с `SAPPHIRE_AUTO_MODEL_NAME`; литерал здесь, чтобы не тянуть runtime-цикл STS ↔ MC. */
+const AUTO_MODEL_NAME = 'auto';
 
 export const defaultProviderSettings = {
 	anthropic: {
@@ -18,6 +21,9 @@ export const defaultProviderSettings = {
 		apiKey: '',
 	},
 	deepseek: {
+		apiKey: '',
+	},
+	kimi: {
 		apiKey: '',
 	},
 	ollama: {
@@ -93,6 +99,7 @@ export const defaultModelsOfProvider = {
 		'gemini-2.5-pro-preview-05-06',
 	],
 	deepseek: ['deepseek-flash', 'deepseek-v4-pro', 'deepseek-chat', 'deepseek-reasoner'],
+	kimi: [],
 	ollama: [],
 	vLLM: [],
 	lmStudio: [],
@@ -454,6 +461,53 @@ const deepseekModelOptions = {
 	}),
 } as const satisfies { [s: string]: SapphireStaticModelInfo };
 
+const kimiK3Reasoning = reasoningOn({
+	canTurnOff: false,
+	reserved: 32_768,
+	slider: { type: 'effort_slider' as const, values: ['low', 'high', 'max'], default: 'max' },
+});
+
+const kimiK3Capabilities = {
+	contextWindow: 1_048_576,
+	reservedOutputTokenSpace: 32_768,
+	supportsVision: true,
+	reasoningCapabilities: kimiK3Reasoning,
+} satisfies Partial<SapphireStaticModelInfo> & Pick<SapphireStaticModelInfo, 'contextWindow'>;
+
+const kimiK2Capabilities = {
+	contextWindow: 262_144,
+	reservedOutputTokenSpace: 32_768,
+	supportsVision: true,
+	reasoningCapabilities: reasoningOn({ canTurnOff: false, reserved: 32_768 }),
+} satisfies Partial<SapphireStaticModelInfo> & Pick<SapphireStaticModelInfo, 'contextWindow'>;
+
+const kimiModelOptions = {
+	'kimi-k3': model({
+		displayName: 'Kimi K3',
+		...kimiK3Capabilities,
+	}),
+	'kimi-k3.1-pro': model({
+		displayName: 'Kimi K3.1 Pro',
+		...kimiK3Capabilities,
+	}),
+	'kimi-k3.1-pro-highspeed': model({
+		displayName: 'Kimi K3.1 Pro Highspeed',
+		...kimiK3Capabilities,
+	}),
+	'kimi-k2.6': model({
+		displayName: 'Kimi K2.6',
+		...kimiK2Capabilities,
+	}),
+	'kimi-k2.7-code': model({
+		displayName: 'Kimi K2.7 Code',
+		...kimiK2Capabilities,
+	}),
+	'kimi-k2.7-code-highspeed': model({
+		displayName: 'Kimi K2.7 Code Highspeed',
+		...kimiK2Capabilities,
+	}),
+} as const satisfies { [s: string]: SapphireStaticModelInfo };
+
 const mistralModelOptions = {
 	'codestral-latest': model({
 		contextWindow: 32_000,
@@ -572,6 +626,9 @@ const extensiveModelOptionsFallback: SapphireStaticProviderInfo['modelOptionsFal
 		{return toFallback(openSourceProfiles, 'deepseekR1');}
 	if (lower.includes('deepseek')) {return toFallback(openSourceProfiles, 'deepseekChat');}
 
+	if (lower.includes('kimi-k3')) {return toFallback(kimiModelOptions, 'kimi-k3');}
+	if (lower.includes('kimi-k2')) {return toFallback(kimiModelOptions, 'kimi-k2.6');}
+
 	if (lower.includes('llama')) {return toFallback(openSourceProfiles, 'llama3');}
 	if (lower.includes('qwen') && lower.includes('coder')) {return toFallback(openSourceProfiles, 'qwen2_5coder');}
 	if (lower.includes('qwen') || lower.includes('glm')) {return toFallback(openSourceProfiles, 'qwen3');}
@@ -630,6 +687,7 @@ const modelSettingsOfProvider: { [providerName in ProviderName]: SapphireStaticP
 	anthropic: providerSettings(anthropicModelOptions, false),
 	openAI: providerSettings(openAIModelOptions, true),
 	deepseek: providerSettings(deepseekModelOptions, true),
+	kimi: providerSettings(kimiModelOptions, true),
 	ollama: providerSettings({}, true),
 	vLLM: providerSettings({}, true),
 	openRouter: providerSettings({}, true),
@@ -691,7 +749,13 @@ export const getModelDisplayName = (
 	providerName: ProviderName,
 	modelName: string,
 	overridesOfModel?: OverridesOfModel,
-): string => getModelCapabilities(providerName, modelName, overridesOfModel).displayName ?? modelName;
+): string => {
+	// Sentinel Auto: сравниваем id напрямую (без isAutoModelSelection — цикл импортов в Vue-бандле).
+	if (modelName.trim().toLowerCase() === AUTO_MODEL_NAME) {
+		return 'Auto';
+	}
+	return getModelCapabilities(providerName, modelName, overridesOfModel).displayName ?? modelName;
+};
 
 export const getIsReasoningEnabledState = (
 	featureName: FeatureName,

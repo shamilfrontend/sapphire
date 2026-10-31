@@ -118,6 +118,10 @@ export type ChatMessage =
        * В старых тредах поля нет.
        */
       pauseReason?: 'stop_repeat';
+      /**
+       * Подпись «Auto → …» на первом ответе хода. Нет у явной модели и у следующих tool-ходов.
+       */
+      autoResolvedDisplayName?: string;
     }
   | {
       /** Сохранённый context compaction — заменяет старые turn'ы в LLM и UI. */

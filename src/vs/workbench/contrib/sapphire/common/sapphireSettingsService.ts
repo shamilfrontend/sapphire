@@ -62,6 +62,11 @@ import {
   UserSkill,
 } from './sapphireSettingsTypes.js';
 import { generateUuid } from '../../../../base/common/uuid.js';
+import {
+  isAutoModelSelection,
+  SAPPHIRE_AUTO_MODEL_NAME,
+  SAPPHIRE_AUTO_SELECTION,
+} from './sapphireSettingsTypes.js';
 
 // name — подпись в dropdown
 export type ModelOption = { name: string; selection: ModelSelection };
@@ -177,13 +182,15 @@ export const modelFilterOfFeatureName: {
 } = {
   Autocomplete: {
     filter: (o, opts) =>
+      !isAutoModelSelection(o) &&
       getModelCapabilities(o.providerName, o.modelName, opts.overridesOfModel).supportsFIM,
     emptyMessage: { message: 'Нет моделей с поддержкой FIM', priority: 'always' },
   },
+  // Auto только для Chat; остальные feature — явная модель.
   Chat: { filter: (_o) => true, emptyMessage: null },
-  'Ctrl+K': { filter: (_o) => true, emptyMessage: null },
-  Apply: { filter: (_o) => true, emptyMessage: null },
-  SCM: { filter: (_o) => true, emptyMessage: null },
+  'Ctrl+K': { filter: (o) => !isAutoModelSelection(o), emptyMessage: null },
+  Apply: { filter: (o) => !isAutoModelSelection(o), emptyMessage: null },
+  SCM: { filter: (o) => !isAutoModelSelection(o), emptyMessage: null },
 };
 
 const _stateWithMergedDefaultModels = (state: SapphireSettingsState): SapphireSettingsState => {
@@ -242,24 +249,34 @@ const _validatedModelState = (
   }
 
   // optionsOfModel — только настроенные и включённые провайдеры
-  const newModelOptions: ModelOption[] = [];
+  const realModelOptions: ModelOption[] = [];
   const seenModelKeys = new Set<string>();
   for (const providerName of providerNames) {
     const providerTitle = providerName; // намеренно без displayInfo — короткое имя
     const settingsAtProvider = newSettingsOfProvider[providerName];
     if (!settingsAtProvider._didFillInProviderSettings) {continue;} // не настроен — без options
     if (settingsAtProvider.isEnabled === false) {continue;} // пользователь выключил — без options
-    for (const { modelName, isHidden } of settingsAtProvider.models) {
+    const modelsForPicker = [...settingsAtProvider.models].sort((a, b) =>
+      a.modelName.localeCompare(b.modelName),
+    );
+    for (const { modelName, isHidden } of modelsForPicker) {
       if (isHidden) {continue;}
+      if (modelName === SAPPHIRE_AUTO_MODEL_NAME) {continue;}
       const key = `${providerName}:${modelName}`;
       if (seenModelKeys.has(key)) {continue;}
       seenModelKeys.add(key);
-      newModelOptions.push({
+      realModelOptions.push({
         name: `${modelName} (${providerTitle})`,
         selection: { providerName, modelName },
       });
     }
   }
+
+  // Auto первой в списке, если есть хотя бы одна реальная модель (роутинг только в Chat).
+  const newModelOptions: ModelOption[] =
+    realModelOptions.length > 0
+      ? [{ name: 'Auto', selection: { ...SAPPHIRE_AUTO_SELECTION } }, ...realModelOptions]
+      : [];
 
   // валидировать modelSelectionOfFeature
   let newModelSelectionOfFeature = state.modelSelectionOfFeature;
@@ -780,9 +797,22 @@ class SapphireSettingsService extends Disposable implements ISapphireSettingsSer
   setAutodetectedModels(providerName: ProviderName, autodetectedModelNames: string[]) {
     const { models } = this.state.settingsOfProvider[providerName];
 
+    // API (например Moonshot) может отдавать id в разном порядке на каждый poll —
+    // фиксируем порядок, иначе пикер «прыгает» каждые несколько секунд.
+    const sortedNames = [...autodetectedModelNames].sort((a, b) => a.localeCompare(b));
+    const currentAutodetected = models
+      .filter((m) => m.type === 'autodetected')
+      .map((m) => m.modelName);
+    if (
+      currentAutodetected.length === sortedNames.length &&
+      currentAutodetected.every((name, i) => name === sortedNames[i])
+    ) {
+      return;
+    }
+
     const newModels = _modelsWithSwappedInNewModels({
       existingModels: models,
-      models: autodetectedModelNames,
+      models: sortedNames,
       type: 'autodetected',
     });
     this.setSettingOfProvider(providerName, 'models', newModels);

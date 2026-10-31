@@ -75,6 +75,7 @@ export default withMermaid(
             { text: 'Шлюз: улучшения', link: '/architecture/llm-gateway-improvements' },
             { text: 'Apply / DiffZone', link: '/architecture/apply' },
             { text: 'Settings model', link: '/architecture/settings' },
+            { text: 'Режим Auto', link: '/architecture/auto-mode' },
             { text: 'Checkpoints и треды', link: '/architecture/checkpoints' },
             { text: 'Офисные файлы (разбор)', link: '/architecture/office-extract' },
             { text: 'Индекс проекта', link: '/architecture/project-index' },

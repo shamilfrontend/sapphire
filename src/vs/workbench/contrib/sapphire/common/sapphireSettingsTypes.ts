@@ -3,7 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { DEEPSEEK_USAGE_URL } from './llmProviderConfig.js';
+import { DEEPSEEK_USAGE_URL, KIMI_USAGE_URL } from './llmProviderConfig.js';
 import {
   defaultModelsOfProvider,
   defaultProviderSettings,
@@ -20,6 +20,7 @@ export const providerNames = Object.keys(defaultProviderSettings) as ProviderNam
 /** Видимые облачные провайдеры в порядке отображения (DeepSeek первым). */
 export const cloudProviderNames = [
   'deepseek',
+  'kimi',
   'anthropic',
   'openAI',
   'openRouter',
@@ -119,6 +120,12 @@ export const displayInfoOfProviderName = (
         title: 'DeepSeek',
         desc: 'https://api.deepseek.com/v1',
         usageUrl: DEEPSEEK_USAGE_URL,
+      };
+    case 'kimi':
+      return {
+        title: 'Kimi',
+        desc: 'https://api.moonshot.ai/v1',
+        usageUrl: KIMI_USAGE_URL,
       };
     case 'ollama':
       return { title: 'Ollama', desc: 'Локальный сервер' };
@@ -244,6 +251,7 @@ export const defaultSettingsOfProvider: SettingsOfProvider = {
   anthropic: settingsOf('anthropic'),
   openAI: settingsOf('openAI'),
   deepseek: settingsOf('deepseek'),
+  kimi: settingsOf('kimi'),
   ollama: settingsOf('ollama'),
   vLLM: settingsOf('vLLM'),
   openRouter: settingsOf('openRouter'),
@@ -263,6 +271,21 @@ export type ModelSelection = { providerName: ProviderName; modelName: string };
 
 export const modelSelectionsEqual = (m1: ModelSelection, m2: ModelSelection) =>
   m1.modelName === m2.modelName && m1.providerName === m2.providerName;
+
+/** Sentinel model id в пикере Chat; `providerName` у опции Auto игнорируется при роутинге. */
+export const SAPPHIRE_AUTO_MODEL_NAME = 'auto';
+
+/** Placeholder provider для синтетической опции Auto (не участвует в выборе). */
+export const SAPPHIRE_AUTO_PROVIDER_NAME: ProviderName = 'deepseek';
+
+export const SAPPHIRE_AUTO_SELECTION: ModelSelection = {
+  providerName: SAPPHIRE_AUTO_PROVIDER_NAME,
+  modelName: SAPPHIRE_AUTO_MODEL_NAME,
+};
+
+export const isAutoModelSelection = (
+  selection: ModelSelection | null | undefined,
+): boolean => !!selection && selection.modelName === SAPPHIRE_AUTO_MODEL_NAME;
 
 // элемент state
 export const featureNames = ['Chat', 'Ctrl+K', 'Autocomplete', 'Apply', 'SCM'] as const;
@@ -306,6 +329,13 @@ export const isFeatureNameDisabled = (
   const selectedProvider = settingsState.modelSelectionOfFeature[featureName];
 
   if (selectedProvider) {
+    // Auto не привязан к sentinel-провайдеру — достаточно любой реальной модели в пуле.
+    if (isAutoModelSelection(selectedProvider)) {
+      const hasRealModel = (settingsState._modelOptions ?? []).some(
+        (option) => !isAutoModelSelection(option.selection),
+      );
+      return hasRealModel ? false : 'addModel';
+    }
     const { providerName } = selectedProvider;
     return isProviderNameDisabled(providerName, settingsState);
   }
@@ -348,6 +378,19 @@ export const resolveThreadChatMode = (chatMode: unknown, fallback: ChatMode): Ch
   if (chatMode === 'debug') {return 'agent';}
   return isChatMode(chatMode) ? chatMode : fallback;
 };
+
+export const isModelSelection = (value: unknown): value is ModelSelection =>
+  !!value &&
+  typeof value === 'object' &&
+  typeof (value as ModelSelection).providerName === 'string' &&
+  typeof (value as ModelSelection).modelName === 'string' &&
+  !!(value as ModelSelection).modelName;
+
+/** Модель треда, если сохранена; иначе общий Chat-fallback (старые чаты без своего выбора). */
+export const resolveThreadModelSelection = (
+  threadSelection: unknown,
+  fallback: ModelSelection | null,
+): ModelSelection | null => (isModelSelection(threadSelection) ? threadSelection : fallback);
 
 /** Оболочка workbench: режим IDE (классический редактор) или полноэкранный chat-first «Режим Агент». */
 export type LayoutMode = 'ide' | 'agents';
