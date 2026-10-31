@@ -15,11 +15,19 @@ import {
 } from '../common/office/officeDocument.js';
 import { extractOfficeBuffer } from '../node/office/extractOfficeBuffer.js';
 import { editPdfTextLayer, rewritePdfFromText } from '../node/office/writePdfBuffer.js';
+import { editOfficeText } from '../node/office/editOfficeText.js';
+import { patchOfficeBuffer } from '../node/office/patchOfficeBuffer.js';
+import { readOfficeModel } from '../node/office/readOfficeModel.js';
+import { rewriteOfficeFromText } from '../node/office/rewriteOfficeBuffer.js';
+import { OfficeTextEdit } from '../common/office/officeModel.js';
 
 type OfficeChannelArg = {
   fsPath?: string;
   searchReplaceBlocks?: string;
   newContent?: string;
+  edits?: OfficeTextEdit[];
+  size?: number;
+  mtime?: number;
 };
 
 export class OfficeExtractChannel implements IServerChannel {
@@ -38,6 +46,18 @@ export class OfficeExtractChannel implements IServerChannel {
     }
     if (command === 'rewritePdf') {
       return (await this.rewritePdf(arg)) as T;
+    }
+    if (command === 'readModel') {
+      return (await this.readModel(arg)) as T;
+    }
+    if (command === 'patchOffice') {
+      return (await this.patchOffice(arg)) as T;
+    }
+    if (command === 'editOffice') {
+      return (await this.editOffice(arg)) as T;
+    }
+    if (command === 'rewriteOffice') {
+      return (await this.rewriteOffice(arg)) as T;
     }
     throw new Error(`Unknown office extract command: ${command}`);
   }
@@ -129,5 +149,101 @@ export class OfficeExtractChannel implements IServerChannel {
     this.extractCache.delete(fsPath);
     await fs.writeFile(fsPath, Buffer.from(next));
     return { ok: true as const, bytesWritten: next.byteLength };
+  }
+
+  private async readModel(arg?: OfficeChannelArg) {
+    const fsPath = this.requirePath(arg);
+    const kind = officeKindFromPath(fsPath);
+    if (kind !== 'xlsx' && kind !== 'docx' && kind !== 'pptx') {
+      throw new Error('readModel only supports .xlsx, .xlsm, .docx, and .pptx.');
+    }
+    const stat = await fs.stat(fsPath);
+    if (!stat.isFile()) {
+      throw new Error('Not a file.');
+    }
+    if (stat.size > OFFICE_MAX_FILE_BYTES) {
+      throw new Error('File is larger than 25 MB and was not opened.');
+    }
+    const bytes = await fs.readFile(fsPath);
+    const model = await readOfficeModel(bytes, fsPath, { images: true });
+    return { model, size: stat.size, mtime: Math.round(stat.mtimeMs) };
+  }
+
+  private async patchOffice(arg?: OfficeChannelArg) {
+    const fsPath = this.requirePath(arg);
+    const kind = officeKindFromPath(fsPath);
+    if (kind !== 'xlsx' && kind !== 'docx' && kind !== 'pptx') {
+      throw new Error('patchOffice only supports .xlsx, .xlsm, .docx, and .pptx.');
+    }
+    if (!Array.isArray(arg?.edits)) {
+      throw new Error('Missing office edits.');
+    }
+    const stat = await fs.stat(fsPath);
+    if (!stat.isFile()) {
+      throw new Error('Not a file.');
+    }
+    if (stat.size > OFFICE_MAX_FILE_BYTES) {
+      throw new Error('File is larger than 25 MB and was not edited.');
+    }
+    if (arg?.size !== stat.size || Math.round(arg?.mtime ?? -1) !== Math.round(stat.mtimeMs)) {
+      throw new Error('Office file changed on disk. Reload the editor before saving.');
+    }
+    const bytes = await fs.readFile(fsPath);
+    const next = await patchOfficeBuffer(bytes, fsPath, arg.edits);
+    this.extractCache.delete(fsPath);
+    await fs.writeFile(fsPath, next);
+    const written = await fs.stat(fsPath);
+    return { ok: true as const, bytesWritten: next.byteLength, size: written.size, mtime: Math.round(written.mtimeMs) };
+  }
+
+  private async editOffice(arg?: OfficeChannelArg) {
+    const fsPath = this.requirePath(arg);
+    const searchReplaceBlocks = arg?.searchReplaceBlocks;
+    if (typeof searchReplaceBlocks !== 'string') {
+      throw new Error('Missing search_replace_blocks.');
+    }
+    const kind = officeKindFromPath(fsPath);
+    if (kind !== 'xlsx' && kind !== 'docx' && kind !== 'pptx') {
+      throw new Error('editOffice only supports .xlsx, .xlsm, .docx, and .pptx.');
+    }
+    const stat = await fs.stat(fsPath);
+    if (!stat.isFile()) {
+      throw new Error('Not a file.');
+    }
+    if (stat.size > OFFICE_MAX_FILE_BYTES) {
+      throw new Error('File is larger than 25 MB and was not edited.');
+    }
+    const bytes = await fs.readFile(fsPath);
+    const next = await editOfficeText(bytes, fsPath, searchReplaceBlocks);
+    this.extractCache.delete(fsPath);
+    await fs.writeFile(fsPath, next);
+    return { ok: true as const, bytesWritten: next.byteLength };
+  }
+
+  private async rewriteOffice(arg?: OfficeChannelArg) {
+    const fsPath = this.requirePath(arg);
+    const newContent = arg?.newContent;
+    if (typeof newContent !== 'string') {
+      throw new Error('Missing new_content.');
+    }
+    const kind = officeKindFromPath(fsPath);
+    if (kind !== 'xlsx' && kind !== 'docx' && kind !== 'pptx') {
+      throw new Error('rewriteOffice only supports .xlsx, .xlsm, .docx, and .pptx.');
+    }
+    const next = await rewriteOfficeFromText(fsPath, newContent);
+    if (next.byteLength > OFFICE_MAX_FILE_BYTES) {
+      throw new Error('File is larger than 25 MB and was not written.');
+    }
+    this.extractCache.delete(fsPath);
+    await fs.writeFile(fsPath, next);
+    return { ok: true as const, bytesWritten: next.byteLength };
+  }
+
+  private requirePath(arg?: OfficeChannelArg): string {
+    const fsPath = arg?.fsPath;
+    if (!fsPath) {
+      throw new Error('Missing file path.');
+    }
+    return fsPath;
   }
 }

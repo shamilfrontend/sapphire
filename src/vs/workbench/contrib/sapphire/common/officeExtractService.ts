@@ -16,34 +16,44 @@ import { IFileService } from '../../../../platform/files/common/files.js';
 import {
   OFFICE_MAX_FILE_BYTES,
   OfficeExtractPayload,
-  OfficeKind,
   legacyOfficePayload,
   officeFileName,
   officeKindFromPath,
   tooLargeOfficePayload,
 } from './office/officeDocument.js';
+import {
+  OfficeDocumentModel,
+  OfficeFileStamp,
+  OfficeTextEdit,
+} from './office/officeModel.js';
 
-export type OfficePdfWriteResult = { ok: true; bytesWritten: number };
+export type OfficePdfWriteResult = { ok: true; bytesWritten: number; size?: number; mtime?: number };
+
+export type OfficeReadResult = { model: OfficeDocumentModel; size: number; mtime: number };
 
 export interface IOfficeExtractService {
   readonly _serviceBrand: undefined;
   /** `null`, если путь не office-документ — оставляем обычное чтение текста. */
   extractIfOffice(uri: URI): Promise<OfficeExtractPayload | null>;
+  /** Структурная модель для вкладки. */
+  readOfficeModel(uri: URI): Promise<OfficeReadResult>;
   /** Правка текстового слоя `.pdf` через SEARCH/REPLACE (main process пишет байты). */
   editPdf(uri: URI, searchReplaceBlocks: string): Promise<OfficePdfWriteResult>;
   /** Собрать новый текстовый `.pdf` из `newContent` и записать на диск. */
   rewritePdf(uri: URI, newContent: string): Promise<OfficePdfWriteResult>;
+  /** Точечная правка текста в существующем xlsx/docx/pptx. */
+  patchOffice(uri: URI, edits: readonly OfficeTextEdit[], stamp: OfficeFileStamp): Promise<OfficePdfWriteResult>;
+  /** SEARCH/REPLACE по тексту extract, запись в те же XML-узлы. */
+  editOffice(uri: URI, searchReplaceBlocks: string): Promise<OfficePdfWriteResult>;
+  /** Новый простой xlsx/docx/pptx из текста в формате extract. */
+  rewriteOffice(uri: URI, newContent: string): Promise<OfficePdfWriteResult>;
 }
 
 export const IOfficeExtractService = createDecorator<IOfficeExtractService>('officeExtractService');
 
-/** Расширения, которые нельзя писать как обычный текст через edit/rewrite. */
-export function isOfficeBinaryWriteBlocked(fsPath: string): OfficeKind | null {
+function isOoxmlPath(fsPath: string): boolean {
   const kind = officeKindFromPath(fsPath);
-  if (kind === 'xlsx' || kind === 'docx' || kind === 'pptx') {
-    return kind;
-  }
-  return null;
+  return kind === 'xlsx' || kind === 'docx' || kind === 'pptx';
 }
 
 class OfficeExtractService implements IOfficeExtractService {
@@ -116,6 +126,48 @@ class OfficeExtractService implements IOfficeExtractService {
       await this.fileService.createFile(uri, VSBuffer.fromString(''));
     }
     return this.channel.call<OfficePdfWriteResult>('rewritePdf', {
+      fsPath: uri.fsPath,
+      newContent,
+    });
+  }
+
+  async readOfficeModel(uri: URI): Promise<OfficeReadResult> {
+    if (!isOoxmlPath(uri.fsPath)) {
+      throw new Error('readOfficeModel only supports .xlsx, .xlsm, .docx, and .pptx.');
+    }
+    return this.channel.call<OfficeReadResult>('readModel', { fsPath: uri.fsPath });
+  }
+
+  async patchOffice(uri: URI, edits: readonly OfficeTextEdit[], stamp: OfficeFileStamp): Promise<OfficePdfWriteResult> {
+    if (!isOoxmlPath(uri.fsPath)) {
+      throw new Error('patchOffice only supports .xlsx, .xlsm, .docx, and .pptx.');
+    }
+    return this.channel.call<OfficePdfWriteResult>('patchOffice', {
+      fsPath: uri.fsPath,
+      edits,
+      size: stamp.size,
+      mtime: stamp.mtime,
+    });
+  }
+
+  async editOffice(uri: URI, searchReplaceBlocks: string): Promise<OfficePdfWriteResult> {
+    if (!isOoxmlPath(uri.fsPath)) {
+      throw new Error('editOffice only supports .xlsx, .xlsm, .docx, and .pptx.');
+    }
+    return this.channel.call<OfficePdfWriteResult>('editOffice', {
+      fsPath: uri.fsPath,
+      searchReplaceBlocks,
+    });
+  }
+
+  async rewriteOffice(uri: URI, newContent: string): Promise<OfficePdfWriteResult> {
+    if (!isOoxmlPath(uri.fsPath)) {
+      throw new Error('rewriteOffice only supports .xlsx, .xlsm, .docx, and .pptx.');
+    }
+    if (!(await this.fileService.exists(uri))) {
+      await this.fileService.createFile(uri, VSBuffer.fromString(''));
+    }
+    return this.channel.call<OfficePdfWriteResult>('rewriteOffice', {
       fsPath: uri.fsPath,
       newContent,
     });

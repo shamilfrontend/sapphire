@@ -3,13 +3,13 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { spawn, type ChildProcess } from 'node:child_process';
-import fs from 'node:fs';
-import path from 'node:path';
-import type { Readable } from 'node:stream';
-import { fileURLToPath } from 'node:url';
+const { spawn } = require('node:child_process') as typeof import('node:child_process');
+const fs = require('node:fs') as typeof import('node:fs');
+const path = require('node:path') as typeof import('node:path');
+type ChildProcess = import('node:child_process').ChildProcess;
+type Readable = import('node:stream').Readable;
 
-const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+const root = path.resolve(__dirname, '..');
 const isWin = process.platform === 'win32';
 
 const mainJs = path.join(root, 'out/main.js');
@@ -211,29 +211,33 @@ process.on('SIGTERM', () => {
 	void finish(143);
 });
 
-try {
-	startWatchers();
-	const buildReady = await waitForInitialBuild();
-	if (!buildReady || shuttingDown) {
-		await finish(130);
-	} else {
-		syncVueRuntime();
-		console.log('[dev] starting');
-		app = startApp(process.argv.slice(2));
-		app.on('error', err => {
-			console.error('[dev] failed to start the app:', err);
-			void finish(1);
-		});
-		app.on('exit', (code, signal) => {
-			if (shuttingDown) {
-				return;
-			}
-			const exitCode = code ?? (signal === 'SIGINT' ? 130 : signal === 'SIGTERM' ? 143 : 1);
-			void finish(exitCode);
-		});
+async function main(): Promise<void> {
+	try {
+		startWatchers();
+		const buildReady = await waitForInitialBuild();
+		if (!buildReady || shuttingDown) {
+			await finish(130);
+		} else {
+			syncVueRuntime();
+			console.log('[dev] starting');
+			app = startApp(process.argv.slice(2));
+			app.on('error', err => {
+				console.error('[dev] failed to start the app:', err);
+				void finish(1);
+			});
+			app.on('exit', (code, signal) => {
+				if (shuttingDown) {
+					return;
+				}
+				const exitCode = code ?? (signal === 'SIGINT' ? 130 : signal === 'SIGTERM' ? 143 : 1);
+				void finish(exitCode);
+			});
+		}
+	} catch (err) {
+		console.error(err instanceof Error ? err.message : err);
+		await stopWatchers();
+		process.exit(watcherStatus?.code || 1);
 	}
-} catch (err) {
-	console.error(err instanceof Error ? err.message : err);
-	await stopWatchers();
-	process.exit(watcherStatus?.code || 1);
 }
+
+void main();

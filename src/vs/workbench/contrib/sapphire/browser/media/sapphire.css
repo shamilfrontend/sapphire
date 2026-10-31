@@ -272,3 +272,114 @@
   transform: translate(-50%, -50%);
   background: #333333;
 }
+
+.sapphire-office-editor {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  background: var(--vscode-editor-background);
+  color: var(--vscode-editor-foreground);
+  overflow: hidden;
+}
+
+.sapphire-office-banner {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  padding: 8px 12px;
+  background: var(--vscode-inputValidation-warningBackground, rgba(255, 180, 0, 0.15));
+  color: var(--vscode-editor-foreground);
+}
+
+.sapphire-office-tabs {
+  display: flex;
+  gap: 4px;
+  padding: 6px 8px;
+  border-bottom: 1px solid var(--vscode-editorWidget-border, transparent);
+  overflow-x: auto;
+}
+
+.sapphire-office-tabs button {
+  border: 1px solid var(--vscode-editorWidget-border, transparent);
+  background: transparent;
+  color: inherit;
+  padding: 4px 10px;
+  cursor: pointer;
+}
+
+.sapphire-office-tabs button.active {
+  border-color: var(--vscode-focusBorder);
+}
+
+.sapphire-office-scroll {
+  flex: 1;
+  overflow: auto;
+  padding: 12px;
+}
+
+.sapphire-office-grid {
+  border-collapse: collapse;
+  font: 13px var(--vscode-editor-font-family, sans-serif);
+}
+
+.sapphire-office-grid th,
+.sapphire-office-grid td {
+  border: 1px solid var(--vscode-editorWidget-border, rgba(128, 128, 128, 0.4));
+  min-width: 72px;
+  height: 24px;
+  padding: 2px 6px;
+  vertical-align: top;
+}
+
+.sapphire-office-grid th {
+  color: var(--vscode-descriptionForeground);
+  font-weight: 500;
+  background: var(--vscode-editorWidget-background, transparent);
+}
+
+.sapphire-office-grid input,
+.sapphire-office-grid textarea,
+.sapphire-office-p,
+.sapphire-office-shape textarea {
+  width: 100%;
+  box-sizing: border-box;
+  border: none;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  resize: vertical;
+}
+
+.sapphire-office-doc .sapphire-office-p {
+  display: block;
+  margin: 0 0 12px;
+  padding: 4px 0;
+}
+
+.sapphire-office-doc .heading-1 { font-size: 22px; font-weight: 650; }
+.sapphire-office-doc .heading-2 { font-size: 18px; font-weight: 650; }
+.sapphire-office-doc .heading-3 { font-size: 16px; font-weight: 600; }
+
+.sapphire-office-slide {
+  position: relative;
+  width: min(960px, 100%);
+  background: #fff;
+  color: #1a1a1a;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.25);
+}
+
+.sapphire-office-slide img,
+.sapphire-office-shape {
+  position: absolute;
+}
+
+.sapphire-office-shape textarea {
+  height: 100%;
+  color: #1a1a1a;
+  background: rgba(255, 255, 255, 0.72);
+}
+
+.sapphire-office-note {
+  margin: 12px 0 4px;
+  color: var(--vscode-descriptionForeground);
+}

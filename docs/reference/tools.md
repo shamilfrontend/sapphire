@@ -55,7 +55,7 @@
 ## Заметки
 
 - `read_file` / `search_in_file` для `.xlsx` / `.xlsm`, `.docx`, `.pptx`, `.pdf` — извлечённый текст; скан PDF распознаётся локально (rus+eng). Файл > 25 МБ не разбирается. См. [Офисные файлы](/guide/office), [архитектура](/architecture/office-extract).
-- `edit_file` / `rewrite_file` для `.pdf` с текстовым слоем пишут байты PDF. Скан (OCR) и `.docx` / `.xlsx` / `.pptx` эти tools не пишут.
+- `edit_file` / `rewrite_file` для `.pdf` с текстовым слоем пишут байты PDF. Для `.docx` / `.xlsx` / `.xlsm` / `.pptx` `edit_file` меняет текст в существующем файле, `rewrite_file` собирает новый простой пакет. Скан PDF (OCR) эти tools не пишут.
 - `search_project_index` — локальный индекс (token-score). См. [Индекс проекта](/architecture/project-index).
 - `diff_impact` — BFS до 2 hops по графу индекса (импорты и вызовы) для относительных путей. Тот же расчёт попадает в генерацию commit message.
 - `get_project_tour` — шаги онбординга из `.sapphire/index/tour.json` (появляется сам после индексации, если тура нет или он устарел).

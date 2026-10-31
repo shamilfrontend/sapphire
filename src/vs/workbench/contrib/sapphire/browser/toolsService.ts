@@ -115,7 +115,6 @@ import { IChatThreadService } from './chatThreadService.js';
 import { IMCPService } from '../common/mcpService.js';
 import {
   IOfficeExtractService,
-  isOfficeBinaryWriteBlocked,
 } from '../common/officeExtractService.js';
 import {
   formatOfficePage,
@@ -1674,14 +1673,18 @@ class ToolsService implements IToolsService {
       },
 
       rewrite_file: async ({ uri, newContent }) => {
-        const blockedKind = isOfficeBinaryWriteBlocked(uri.fsPath);
-        if (blockedKind) {
+        const kind = officeKindFromPath(uri.fsPath);
+        if (kind === 'legacy') {
           throw new Error(
-            `Cannot rewrite .${blockedKind} with rewrite_file as plain text — there is no OOXML writer. Prefer CSV/Markdown, or ask the user to edit in Excel/Word/PowerPoint.`,
+            'Cannot rewrite .doc, .xls, or .ppt. Save the file as .docx, .xlsx, or .pptx.',
           );
         }
-        if (officeKindFromPath(uri.fsPath) === 'pdf') {
+        if (kind === 'pdf') {
           await this.officeExtractService.rewritePdf(uri, newContent);
+          return { result: Promise.resolve({ lintErrors: null }) };
+        }
+        if (kind === 'xlsx' || kind === 'docx' || kind === 'pptx') {
+          await this.officeExtractService.rewriteOffice(uri, newContent);
           return { result: Promise.resolve({ lintErrors: null }) };
         }
         if (!(await fileService.exists(uri))) {
@@ -1709,14 +1712,18 @@ class ToolsService implements IToolsService {
       },
 
       edit_file: async ({ uri, searchReplaceBlocks }) => {
-        const blockedKind = isOfficeBinaryWriteBlocked(uri.fsPath);
-        if (blockedKind) {
+        const kind = officeKindFromPath(uri.fsPath);
+        if (kind === 'legacy') {
           throw new Error(
-            `Cannot edit .${blockedKind} with edit_file as plain text — there is no OOXML writer. Prefer CSV/Markdown, or ask the user to edit in Excel/Word/PowerPoint.`,
+            'Cannot edit .doc, .xls, or .ppt. Save the file as .docx, .xlsx, or .pptx.',
           );
         }
-        if (officeKindFromPath(uri.fsPath) === 'pdf') {
+        if (kind === 'pdf') {
           await this.officeExtractService.editPdf(uri, searchReplaceBlocks);
+          return { result: Promise.resolve({ lintErrors: null }) };
+        }
+        if (kind === 'xlsx' || kind === 'docx' || kind === 'pptx') {
+          await this.officeExtractService.editOffice(uri, searchReplaceBlocks);
           return { result: Promise.resolve({ lintErrors: null }) };
         }
         await sapphireModelService.initializeModel(uri);

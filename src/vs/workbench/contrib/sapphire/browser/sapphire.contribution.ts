@@ -30,6 +30,9 @@ import './sapphireSettingsPane.js';
 // редактор .plan.md (Preview / Markdown)
 import './planEditor.js';
 
+// редактор xlsx / docx / pptx
+import './officeEditor.js';
+
 // стили void и разовый переход профиля на тему Sapphire UI
 import './media/sapphire.css';
 import './sapphireCursorChrome.js';
