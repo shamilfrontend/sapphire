@@ -8,6 +8,7 @@ import { computed, onMounted, onWatcherCleanup, ref, watch } from 'vue';
 import { autoUpdate, offset, shift, useFloating } from '@floating-ui/vue';
 import {
   type FeatureName,
+  isAutoModelSelection,
   isFeatureNameDisabled,
   modelSelectionsEqual,
 } from '../../../../../../../workbench/contrib/sapphire/common/sapphireSettingsTypes.js';
@@ -23,12 +24,16 @@ import {
 } from '../../../../common/modelCapabilities.js';
 import ModelDropdown from '../void-settings-tsx/ModelDropdown.vue';
 import SapphireSwitch from '../util/SapphireSwitch.vue';
+import { useCurrentThreadModelSelection } from './ChatComposer.js';
 
 const props = defineProps<{ featureName: FeatureName }>();
 
 const accessor = useAccessor();
 const sapphireSettingsService = accessor.get('ISapphireSettingsService');
+const chatThreadsService = accessor.get('IChatThreadService');
 const settingsState = useSettingsState();
+const threadModelSelection = useCurrentThreadModelSelection();
+const isChatThreadScoped = computed(() => props.featureName === 'Chat');
 
 const { filter } = modelFilterOfFeatureName[props.featureName];
 
@@ -56,8 +61,10 @@ const syncOptions = () => {
 onMounted(syncOptions);
 watch(() => settingsState.value._modelOptions, syncOptions);
 
-const modelSelection = computed(
-  () => settingsState.value.modelSelectionOfFeature[props.featureName],
+const modelSelection = computed(() =>
+  isChatThreadScoped.value
+    ? threadModelSelection.value
+    : settingsState.value.modelSelectionOfFeature[props.featureName],
 );
 
 const selectedOption = computed(() => {
@@ -71,15 +78,21 @@ const selectedOption = computed(() => {
   );
 });
 
+const isAutoOption = (option: ModelOption) =>
+  isAutoModelSelection(option.selection) ||
+  option.selection.modelName.trim().toLowerCase() === 'auto' ||
+  option.name === 'Auto';
+
 const modelName = computed(() => {
   const option = selectedOption.value;
   if (!option) return '';
+  if (isAutoOption(option)) return 'Auto';
   return getModelDisplayName(option.selection.providerName, option.selection.modelName);
 });
 
 const reasoningView = computed(() => {
   const selection = modelSelection.value;
-  if (!selection) return null;
+  if (!selection || isAutoModelSelection(selection)) return null;
   const { modelName: selectedModel, providerName } = selection;
   const overridesOfModel = settingsState.value.overridesOfModel;
   const { reasoningCapabilities } = getModelCapabilities(providerName, selectedModel, overridesOfModel);
@@ -270,7 +283,14 @@ const onEffort = (newVal: number) => {
 };
 
 const onModel = (option: ModelOption) => {
-  sapphireSettingsService.setModelSelectionOfFeature(props.featureName, option.selection);
+  if (isChatThreadScoped.value) {
+    chatThreadsService.setThreadModelSelection(
+      chatThreadsService.state.currentThreadId,
+      option.selection,
+    );
+  } else {
+    sapphireSettingsService.setModelSelectionOfFeature(props.featureName, option.selection);
+  }
   isOpen.value = false;
 };
 
@@ -285,10 +305,19 @@ const isSelectedModel = (option: ModelOption) =>
   !!selectedOption.value && modelSelectionsEqual(option.selection, selectedOption.value.selection);
 
 const optionDetail = (option: ModelOption) => {
+  // Auto: справа смысл режима, не sentinel-провайдер (deepseek).
+  if (isAutoOption(option)) {
+    return 'Баланс качества и скорости';
+  }
   const { providerName, modelName: rawName } = option.selection;
   const displayName = getModelDisplayName(providerName, rawName);
   return displayName !== rawName ? rawName : providerName;
 };
+
+const optionDisplayName = (option: ModelOption) =>
+  isAutoOption(option)
+    ? 'Auto'
+    : getModelDisplayName(option.selection.providerName, option.selection.modelName);
 
 const isDisabled = computed(() => isFeatureNameDisabled(props.featureName, settingsState.value));
 </script>
@@ -297,6 +326,7 @@ const isDisabled = computed(() => isFeatureNameDisabled(props.featureName, setti
   <ModelDropdown
     v-if="isDisabled || !hasNuance"
     :featureName="featureName"
+    :threadScoped="isChatThreadScoped"
     class="text-xs text-void-fg-3 rounded"
   />
   <div v-else class="min-w-0 max-w-full">
@@ -465,9 +495,7 @@ const isDisabled = computed(() => isFeatureNameDisabled(props.featureName, setti
               />
             </svg>
           </span>
-          <span class="truncate">{{
-            getModelDisplayName(option.selection.providerName, option.selection.modelName)
-          }}</span>
+          <span class="truncate">{{ optionDisplayName(option) }}</span>
           <span class="ml-auto shrink-0 text-void-fg-4 truncate max-w-[90px]">{{
             optionDetail(option)
           }}</span>

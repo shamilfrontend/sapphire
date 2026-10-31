@@ -10,6 +10,7 @@ import {
   ChatMode,
   ModelSelection,
   resolveThreadChatMode,
+  resolveThreadModelSelection,
 } from '../../../../../../../workbench/contrib/sapphire/common/sapphireSettingsTypes.js';
 import {
   ChatImageAttachment,
@@ -95,6 +96,20 @@ export const useCurrentThreadChatMode = () => {
     return resolveThreadChatMode(
       thread?.state.chatMode,
       settingsState.value.globalSettings.chatMode,
+    );
+  });
+};
+
+/** Модель открытого чата. Смена в другом чате этот computed не двигает. */
+export const useCurrentThreadModelSelection = () => {
+  const settingsState = useSettingsState();
+  const threadsState = useChatThreadsState();
+  return computed(() => {
+    const state = threadsState.value;
+    const thread = state.allThreads[state.currentThreadId];
+    return resolveThreadModelSelection(
+      thread?.state.modelSelection,
+      settingsState.value.modelSelectionOfFeature.Chat,
     );
   });
 };

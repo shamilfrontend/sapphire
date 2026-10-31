@@ -24,7 +24,7 @@ import { chat_userMessageContent } from '../common/prompt/prompts.js';
 import { ChatFolder, normalizeChatFolders } from '../common/chatFolders.js';
 import { getErrorMessage } from '../common/sendLLMMessageTypes.js';
 import { ISapphireSettingsService } from '../common/sapphireSettingsService.js';
-import { ChatMode } from '../common/sapphireSettingsTypes.js';
+import { ChatMode, ModelSelection, modelSelectionsEqual } from '../common/sapphireSettingsTypes.js';
 import {
 	isChatPrepTimeoutError,
 	prepTimeoutMsForPaths,
@@ -131,6 +131,8 @@ export interface IChatThreadService {
   setCurrentThreadState: (newState: Partial<ThreadType['state']>) => void;
   /** Режим только этого чата. Не пишет globalSettings.chatMode. */
   setThreadChatMode: (threadId: string, chatMode: ChatMode) => void;
+  /** Модель только этого чата. Не пишет modelSelectionOfFeature.Chat. */
+  setThreadModelSelection: (threadId: string, modelSelection: ModelSelection) => void;
   /** Тихо сохранить черновик композера (без notify/remount). */
   setComposerDraft: (
     threadId: string,
@@ -1013,7 +1015,7 @@ class ChatThreadService extends Disposable implements IChatThreadService {
       this._wrapRunAgentToNotify(
         this._runChatAgent({
           threadId,
-          ...this._currentModelSelectionProps(),
+          ...this._currentModelSelectionProps(threadId),
           runEpoch: prepEpoch,
         }),
         threadId,
@@ -1315,6 +1317,18 @@ class ChatThreadService extends Disposable implements IChatThreadService {
     if (!thread || thread.state.chatMode === chatMode) {return;}
     // Без remount композера: смена режима не должна сбрасывать черновик и фокус.
     this._setThreadState(threadId, { chatMode }, true);
+    this._storeAllThreads(this.state.allThreads);
+  }
+  setThreadModelSelection(threadId: string, modelSelection: ModelSelection): void {
+    const thread = this.state.allThreads[threadId];
+    if (
+      !thread ||
+      (thread.state.modelSelection && modelSelectionsEqual(thread.state.modelSelection, modelSelection))
+    ) {
+      return;
+    }
+    // Без remount композера: смена модели не должна сбрасывать черновик и фокус.
+    this._setThreadState(threadId, { modelSelection }, true);
     this._storeAllThreads(this.state.allThreads);
   }
   setComposerDraft = (

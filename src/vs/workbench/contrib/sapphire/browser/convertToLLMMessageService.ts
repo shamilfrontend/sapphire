@@ -53,9 +53,11 @@ import {
 } from '../common/sendLLMMessageTypes.js';
 import { isAttachableActiveFileUri } from '../common/activeFileAttach.js';
 import { ISapphireSettingsService } from '../common/sapphireSettingsService.js';
+import { resolveAutoContextEstimateSelection } from '../common/autoModeRouter.js';
 import {
   ChatMode,
   FeatureName,
+  isAutoModelSelection,
   ModelSelection,
   ProviderName,
   parseSlashSkillSlugs,
@@ -833,11 +835,20 @@ class ConvertToLLMMessageService extends Disposable implements IConvertToLLMMess
   }) => {
     if (modelSelection === null) {return null;}
 
-    const { overridesOfModel } = this.sapphireSettingsService.state;
-    const { providerName, modelName } = modelSelection;
+    const { overridesOfModel, _modelOptions, optionsOfModelSelection } =
+      this.sapphireSettingsService.state;
+    // Sentinel Auto: окно/резерв по router пула, иначе getModelCapabilities даёт дефолт 4096.
+    const estimateSelection =
+      isAutoModelSelection(modelSelection)
+        ? (resolveAutoContextEstimateSelection(
+            (_modelOptions ?? []).map((option) => option.selection),
+            overridesOfModel,
+          ) ?? modelSelection)
+        : modelSelection;
+    const { providerName, modelName } = estimateSelection;
     const { contextWindow } = getModelCapabilities(providerName, modelName, overridesOfModel);
     const modelSelectionOptions =
-      this.sapphireSettingsService.state.optionsOfModelSelection.Chat[providerName]?.[modelName];
+      optionsOfModelSelection.Chat[providerName]?.[modelName];
     const isReasoningEnabled = getIsReasoningEnabledState(
       'Chat',
       providerName,

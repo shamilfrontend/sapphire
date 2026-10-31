@@ -41,11 +41,23 @@ import {
 } from '../common/sendLLMMessageTypes.js';
 import {
   FeatureName,
+  isAutoModelSelection,
   ModelSelection,
   ModelSelectionOptions,
   ChatMode,
   resolveThreadChatMode,
+  resolveThreadModelSelection,
 } from '../common/sapphireSettingsTypes.js';
+import {
+  AUTO_ROUTER_TIMEOUT_MS,
+  buildAutoRouterSystemPrompt,
+  buildAutoRouterUserPrompt,
+  parseRouterChoice,
+  pickFallbackModel,
+  prepareAutoPool,
+} from '../common/autoModeRouter.js';
+import { getModelDisplayName } from '../common/modelCapabilities.js';
+import { modelFilterOfFeatureName } from '../common/sapphireSettingsService.js';
 import {
   approvalTypeOfBuiltinToolName,
   BuiltinToolCallParams,
@@ -159,12 +171,21 @@ export class ChatThreadAgentLoop {
 
   constructor(private readonly _s: ChatThreadCollaboratorHost) {}
 
+  /** Кэш Auto→concrete на логический прогон (в т.ч. после Approve tool). */
+  private readonly _autoRouteCache = new Map<
+    string,
+    { modelSelection: ModelSelection; modelSelectionOptions: ModelSelectionOptions | undefined }
+  >();
+
   // ---------- стриминг LLM / tool ----------
 
-  _currentModelSelectionProps = () => {
+  _currentModelSelectionProps = (threadId?: string) => {
     // Модель и опции фиксируем на весь прогон (reasoning не меняется «на лету»)
     const featureName: FeatureName = 'Chat';
-    const modelSelection = this._s._settingsService.state.modelSelectionOfFeature[featureName];
+    const globalSelection = this._s._settingsService.state.modelSelectionOfFeature[featureName];
+    const resolvedThreadId = threadId ?? this._s.state.currentThreadId;
+    const threadSelection = this._s.state.allThreads[resolvedThreadId]?.state.modelSelection;
+    const modelSelection = resolveThreadModelSelection(threadSelection, globalSelection);
     const modelSelectionOptions = modelSelection
       ? this._s._settingsService.state.optionsOfModelSelection[featureName][
           modelSelection.providerName
@@ -172,6 +193,221 @@ export class ChatThreadAgentLoop {
       : undefined;
     return { modelSelection, modelSelectionOptions };
   };
+
+  private _optionsForSelection(
+    selection: ModelSelection | null,
+  ): ModelSelectionOptions | undefined {
+    if (!selection || isAutoModelSelection(selection)) {
+      return undefined;
+    }
+    return this._s._settingsService.state.optionsOfModelSelection.Chat?.[selection.providerName]?.[
+      selection.modelName
+    ];
+  }
+
+  private _chatModelPool(): ModelSelection[] {
+    const state = this._s._settingsService.state;
+    const { filter } = modelFilterOfFeatureName.Chat;
+    const filterOpts = {
+      chatMode: state.globalSettings.chatMode,
+      overridesOfModel: state.overridesOfModel,
+    };
+    return (state._modelOptions ?? [])
+      .map((option) => option.selection)
+      .filter(
+        (selection) =>
+          !isAutoModelSelection(selection) && filter(selection, filterOpts),
+      );
+  }
+
+  private _latestUserPromptPreview(threadId: string): {
+    preview: string;
+    hasImages: boolean;
+    attachmentHint?: string;
+  } {
+    const thread = this._s.state.allThreads[threadId];
+    const messages = thread?.messages ?? [];
+    for (let i = messages.length - 1; i >= 0; i--) {
+      const message = messages[i];
+      if (message.role !== 'user') {
+        continue;
+      }
+      const preview = (message.displayContent || message.content || '').trim();
+      const imageCount = message.images?.length ?? 0;
+      const selectionCount = message.selections?.length ?? 0;
+      const attachmentHint =
+        selectionCount > 0 || imageCount > 0
+          ? `selections=${selectionCount}, images=${imageCount}`
+          : undefined;
+      return { preview, hasImages: imageCount > 0, attachmentHint };
+    }
+    return { preview: '', hasImages: false };
+  }
+
+  private _askAutoRouterModel(opts: {
+    router: ModelSelection;
+    canTurnOffReasoning: boolean;
+    systemPrompt: string;
+    userPrompt: string;
+    isActive: () => boolean;
+  }): Promise<string | undefined> {
+    const { overridesOfModel } = this._s._settingsService.state;
+    const routerOptions = this._optionsForSelection(opts.router);
+    return new Promise((resolve) => {
+      let settled = false;
+      const finish = (text: string | undefined) => {
+        if (settled) {
+          return;
+        }
+        settled = true;
+        resolve(text);
+      };
+      const requestId = this._s._llmMessageService.sendLLMMessage({
+        messagesType: 'chatMessages',
+        chatMode: null,
+        messages: [{ role: 'user', content: opts.userPrompt }],
+        separateSystemMessage: opts.systemPrompt,
+        modelSelection: opts.router,
+        modelSelectionOptions: {
+          ...routerOptions,
+          // Выключаем reasoning у роутера только если модель позволяет.
+          ...(opts.canTurnOffReasoning ? { reasoningEnabled: false } : {}),
+        },
+        overridesOfModel,
+        featureName: 'Chat',
+        logging: { loggingName: 'Chat - Auto router' },
+        onText: () => {},
+        onFinalMessage: ({ fullText }: Parameters<OnFinalMessage>[0]) => finish(fullText),
+        onError: () => finish(undefined),
+        onAbort: () => finish(undefined),
+      });
+      if (!requestId || !opts.isActive()) {
+        finish(undefined);
+        return;
+      }
+      void timeout(AUTO_ROUTER_TIMEOUT_MS).then(() => {
+        if (!settled) {
+          this._s._llmMessageService.abort(requestId);
+          finish(undefined);
+        }
+      });
+    });
+  }
+
+  /**
+   * Если в пикере Auto — выбрать конкретную модель (1 модель сразу; иначе LLM-роутер).
+   * Кэш на thread: повтор после Approve tool без второго роутинга.
+   */
+  private async _resolveAutoModelForRun(opts: {
+    threadId: string;
+    modelSelection: ModelSelection | null;
+    modelSelectionOptions: ModelSelectionOptions | undefined;
+    reuseCache: boolean;
+    chatMode: ChatMode;
+    isActive: () => boolean;
+  }): Promise<{
+    modelSelection: ModelSelection | null;
+    modelSelectionOptions: ModelSelectionOptions | undefined;
+  }> {
+    const { threadId, modelSelection, modelSelectionOptions, reuseCache, chatMode, isActive } =
+      opts;
+    if (!modelSelection || !isAutoModelSelection(modelSelection)) {
+      this._autoRouteCache.delete(threadId);
+      return { modelSelection, modelSelectionOptions };
+    }
+
+    if (reuseCache) {
+      const cached = this._autoRouteCache.get(threadId);
+      if (cached) {
+        return cached;
+      }
+    }
+
+    const poolSelections = this._chatModelPool();
+    const prepared = prepareAutoPool(
+      poolSelections,
+      this._s._settingsService.state.overridesOfModel,
+    );
+
+    if (prepared.kind === 'empty') {
+      chatTrace(threadId, 'auto.empty', 'no visible models for Auto');
+      this._autoRouteCache.delete(threadId);
+      return { modelSelection: null, modelSelectionOptions: undefined };
+    }
+
+    if (prepared.kind === 'single') {
+      const resolved = {
+        modelSelection: prepared.selection,
+        modelSelectionOptions: this._optionsForSelection(prepared.selection),
+      };
+      this._autoRouteCache.set(threadId, resolved);
+      chatTrace(
+        threadId,
+        'auto.single',
+        `${prepared.selection.providerName}/${prepared.selection.modelName}`,
+      );
+      return resolved;
+    }
+
+    const { pool, router } = prepared;
+    const promptMeta = this._latestUserPromptPreview(threadId);
+    const systemPrompt = buildAutoRouterSystemPrompt(pool);
+    const userPrompt = buildAutoRouterUserPrompt({
+      chatMode,
+      userPromptPreview: promptMeta.preview,
+      hasImages: promptMeta.hasImages,
+      attachmentHint: promptMeta.attachmentHint,
+    });
+
+    chatTrace(
+      threadId,
+      'auto.route',
+      `router=${router.providerName}/${router.modelName} pool=${pool.length}`,
+    );
+
+    let chosen: ModelSelection | undefined;
+    if (isActive()) {
+      const stream = this._s.streamState[threadId];
+      if (stream?.isRunning === 'preparing') {
+        this._s._setStreamState(threadId, {
+          ...stream,
+          statusHint: 'Auto выбирает модель…',
+        });
+      } else if (stream?.isRunning === 'idle') {
+        this._s._setStreamState(threadId, {
+          ...stream,
+          statusHint: 'Auto выбирает модель…',
+        });
+      }
+      const reply = await this._askAutoRouterModel({
+        router: { providerName: router.providerName, modelName: router.modelName },
+        canTurnOffReasoning: router.canTurnOffReasoning,
+        systemPrompt,
+        userPrompt,
+        isActive,
+      });
+      chosen = reply ? parseRouterChoice(reply, pool) : undefined;
+    }
+
+    const fallback = pickFallbackModel(pool);
+    const selection =
+      chosen ??
+      (fallback
+        ? { providerName: fallback.providerName, modelName: fallback.modelName }
+        : pool[0]);
+
+    const resolved = {
+      modelSelection: selection,
+      modelSelectionOptions: this._optionsForSelection(selection),
+    };
+    this._autoRouteCache.set(threadId, resolved);
+    chatTrace(
+      threadId,
+      chosen ? 'auto.resolved' : 'auto.fallback',
+      `${selection.providerName}/${selection.modelName} (${getModelDisplayName(selection.providerName, selection.modelName)})`,
+    );
+    return resolved;
+  }
 
   _findToolMessageIndex(threadId: string, toolId: string): number {
     const messages = this._s.state.allThreads[threadId]?.messages;
@@ -410,7 +646,7 @@ export class ChatThreadAgentLoop {
       this._runChatAgent({
         callThisToolFirst: { ...callThisToolFirst, type: 'tool_request' },
         threadId,
-        ...this._currentModelSelectionProps(),
+        ...this._currentModelSelectionProps(threadId),
       }),
       threadId,
     );
@@ -503,7 +739,7 @@ ${planBody}`;
     this._s._setThreadState(threadId, { currCheckpointIdx: null });
 
     this._s._wrapRunAgentToNotify(
-      this._runChatAgent({ threadId, ...this._currentModelSelectionProps() }),
+      this._runChatAgent({ threadId, ...this._currentModelSelectionProps(threadId) }),
       threadId,
     );
     this._s.state.allThreads[threadId]?.state.mountedInfo?.whenMounted.then((m) => {
@@ -734,8 +970,9 @@ ${planBody}`;
   _translateReasoningToRussian(
     reasoning: string,
     isActive: () => boolean,
+    threadId?: string,
   ): Promise<string | undefined> {
-    const { modelSelection, modelSelectionOptions } = this._currentModelSelectionProps();
+    const { modelSelection, modelSelectionOptions } = this._currentModelSelectionProps(threadId);
     if (!modelSelection) {return Promise.resolve(undefined);}
     const { overridesOfModel } = this._s._settingsService.state;
     return new Promise((resolve) => {
@@ -1498,7 +1735,7 @@ ${planBody}`;
         this._s._setThreadState(childId, { enabledMcpServers: [...parentEnabled] });
       }
 
-      const { modelSelection, modelSelectionOptions } = this._currentModelSelectionProps();
+      const { modelSelection, modelSelectionOptions } = this._currentModelSelectionProps(parentThreadId);
       await this._runChatAgent({
         threadId: childId,
         modelSelection,
@@ -1610,8 +1847,8 @@ ${planBody}`;
    */
   async _runChatAgent({
     threadId,
-    modelSelection,
-    modelSelectionOptions,
+    modelSelection: requestedModelSelection,
+    modelSelectionOptions: requestedModelSelectionOptions,
     callThisToolFirst,
     runCtx,
     runEpoch: existingRunEpoch,
@@ -1648,6 +1885,50 @@ ${planBody}`;
         this._s.state.allThreads[threadId]?.state.chatMode,
         this._s._settingsService.state.globalSettings.chatMode,
       ); // фиксируем на прогон, даже если пользователь сменил режим в UI
+
+    // Auto → конкретная модель на весь прогон (кэш при продолжении после Approve).
+    const reuseAutoCache = !!callThisToolFirst || !!runCtx?.isSubagent;
+    const { modelSelection, modelSelectionOptions } = await this._resolveAutoModelForRun({
+      threadId,
+      modelSelection: requestedModelSelection,
+      modelSelectionOptions: requestedModelSelectionOptions,
+      reuseCache: reuseAutoCache,
+      chatMode,
+      isActive,
+    });
+    if (!isActive()) {
+      return;
+    }
+    if (!modelSelection) {
+      this._s._addMessageToThread(threadId, {
+        role: 'assistant',
+        displayContent:
+          'Auto: нет доступных моделей. Включите провайдер и модели в Settings → Провайдеры.',
+        reasoning: '',
+      });
+      this._s._setStreamState(threadId, undefined);
+      return;
+    }
+
+    // Подпись только на первом видимом ответе нового user-turn. Approve и subagent её не повторяют.
+    let pendingAutoLabel: string | undefined;
+    if (!reuseAutoCache && isAutoModelSelection(requestedModelSelection)) {
+      pendingAutoLabel = getModelDisplayName(
+        modelSelection.providerName,
+        modelSelection.modelName,
+      );
+    }
+    const withAutoLlmInfo = <T extends object>(info: T): T & { autoResolvedDisplayName?: string } =>
+      pendingAutoLabel ? { ...info, autoResolvedDisplayName: pendingAutoLabel } : info;
+    const takeAutoResolved = (displayContent: string, reasoning: string) => {
+      if (!pendingAutoLabel || (!displayContent.trim() && !reasoning.trim())) {
+        return {};
+      }
+      const autoResolvedDisplayName = pendingAutoLabel;
+      pendingAutoLabel = undefined;
+      return { autoResolvedDisplayName };
+    };
+
     const isSubagent = !!runCtx?.isSubagent;
     const excludedToolNames = isSubagent && !runCtx?.allowedToolNames
       ? SUBAGENT_EXCLUDED_TOOLS
@@ -1827,12 +2108,12 @@ ${planBody}`;
               );
               this._s._setStreamState(threadId, {
                 isRunning: 'LLM',
-                llmInfo: {
+                llmInfo: withAutoLlmInfo({
                   displayContentSoFar: fullText,
                   reasoningSoFar: reasoningForUi,
                   toolCallsSoFar: toolCalls ?? null,
                   ...(firstTokenAt !== undefined ? { firstTokenAt } : {}),
-                },
+                }),
                 interrupt: Promise.resolve(() => {
                   if (llmCancelToken) {this._s._llmMessageService.abort(llmCancelToken);}
                 }),
@@ -1901,7 +2182,11 @@ ${planBody}`;
           if (!isActive()) {return;}
           this._s._setStreamState(threadId, {
             isRunning: 'LLM',
-            llmInfo: { displayContentSoFar: '', reasoningSoFar: '', toolCallsSoFar: null },
+            llmInfo: withAutoLlmInfo({
+              displayContentSoFar: '',
+              reasoningSoFar: '',
+              toolCallsSoFar: null,
+            }),
             interrupt: Promise.resolve(() => this._s._llmMessageService.abort(llmCancelToken)),
           });
           const llmRes = await messageIsDonePromise;
@@ -1927,6 +2212,7 @@ ${planBody}`;
                   role: 'assistant',
                   displayContent: visibleTurn.displayContent,
                   reasoning: visibleTurn.reasoning,
+                  ...takeAutoResolved(visibleTurn.displayContent, visibleTurn.reasoning),
                 });
                 for (const tc of toolCallsSoFar ?? []) {
                   this._s._addMessageToThread(threadId, {
@@ -1972,6 +2258,7 @@ ${planBody}`;
                   role: 'assistant',
                   displayContent: visibleTurn.displayContent,
                   reasoning: visibleTurn.reasoning,
+                  ...takeAutoResolved(visibleTurn.displayContent, visibleTurn.reasoning),
                 });
                 for (const tc of toolCallsSoFar ?? []) {
                   this._s._addMessageToThread(threadId, {
@@ -2000,7 +2287,7 @@ ${planBody}`;
           // Калибровка локальных оценок токенов по usage.prompt_tokens шлюза
           if (info.usage?.prompt_tokens) {
             try {
-              const { modelSelection } = this._currentModelSelectionProps();
+              const { modelSelection } = this._currentModelSelectionProps(threadId);
               const est = await this._s._convertToLLMMessagesService.estimateChatContextUsage({
                 chatMessages: this._s.state.allThreads[threadId]?.messages ?? [],
                 chatMode,
@@ -2026,16 +2313,16 @@ ${planBody}`;
             if (running?.isRunning === 'LLM' || running?.isRunning === 'idle') {
               this._s._setStreamState(threadId, {
                 isRunning: 'LLM',
-                llmInfo: {
+                llmInfo: withAutoLlmInfo({
                   displayContentSoFar: info.fullText,
                   reasoningSoFar: 'Перевожу рассуждение…',
                   toolCallsSoFar: toolCalls ?? null,
                   ...(firstTokenAt !== undefined ? { firstTokenAt } : {}),
-                },
+                }),
                 interrupt: Promise.resolve(() => {}),
               });
             }
-            const translated = await this._translateReasoningToRussian(reasoning, isActive);
+            const translated = await this._translateReasoningToRussian(reasoning, isActive, threadId);
             if (!isActive()) {return;}
             if (translated) {reasoning = translated;}
           }
@@ -2050,6 +2337,7 @@ ${planBody}`;
             reasoning,
             ...(info.usage ? { usage: info.usage } : {}),
             ...(tokensPerSecond !== undefined ? { outputTokensPerSecond: tokensPerSecond } : {}),
+            ...takeAutoResolved(assistantDisplayContent, reasoning),
           });
 
           this._s._setStreamState(threadId, { isRunning: 'idle', interrupt: 'not_needed' });

@@ -8,7 +8,11 @@ import type { ProviderName } from './sapphireSettingsTypes.js';
 /** Кабинет ключа и расхода DeepSeek. Чат ходит на api.deepseek.com, не на эту страницу. */
 export const DEEPSEEK_USAGE_URL = 'https://platform.deepseek.com/usage';
 
+/** Кабинет ключа и расхода Kimi (Moonshot). Чат ходит на api.moonshot.ai, не на эту страницу. */
+export const KIMI_USAGE_URL = 'https://platform.kimi.ai';
+
 const DEEPSEEK_API_BASE = 'https://api.deepseek.com/v1';
+const KIMI_API_BASE = 'https://api.moonshot.ai/v1';
 
 export const LLM_IDE_TITLE = 'Sapphire';
 
@@ -40,6 +44,7 @@ export type ProviderConnectionSettings = {
 const FIXED_OPENAI_BASE: Partial<Record<ProviderName, string>> = {
 	openAI: 'https://api.openai.com/v1',
 	deepseek: DEEPSEEK_API_BASE,
+	kimi: KIMI_API_BASE,
 	openRouter: 'https://openrouter.ai/api/v1',
 	groq: 'https://api.groq.com/openai/v1',
 	xAI: 'https://api.x.ai/v1',

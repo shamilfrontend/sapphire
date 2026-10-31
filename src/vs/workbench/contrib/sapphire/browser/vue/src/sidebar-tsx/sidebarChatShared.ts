@@ -4,7 +4,11 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { computed, onWatcherCleanup, ref, watch } from 'vue';
-import { useSettingsState } from '../util/services.js';
+import { useSettingsState, useChatThreadsState } from '../util/services.js';
+import {
+  isAutoModelSelection,
+  resolveThreadModelSelection,
+} from '../../../../common/sapphireSettingsTypes.js';
 import { getModelCapabilities } from '../../../../common/modelCapabilities.js';
 import { ChatMessage } from '../../../../common/chatThreadServiceTypes.js';
 import type { Diff } from '../../../../common/editCodeServiceTypes.js';
@@ -61,12 +65,30 @@ export const scrollToBottom = (divRef: { current: HTMLElement | null }) => {
 
 export const useChatSupportsVision = () => {
   const settingsState = useSettingsState();
+  const threadsState = useChatThreadsState();
   return computed(() => {
-    const modelSelection = settingsState.value.modelSelectionOfFeature.Chat;
-    if (!modelSelection) {return false;}
+    const threads = threadsState.value;
+    const thread = threads.allThreads[threads.currentThreadId];
+    const selection = resolveThreadModelSelection(
+      thread?.state.modelSelection,
+      settingsState.value.modelSelectionOfFeature.Chat,
+    );
+    if (!selection) {return false;}
+    // Auto: разрешаем attach, если в пуле есть хотя бы одна vision-модель.
+    if (isAutoModelSelection(selection)) {
+      const overrides = settingsState.value.overridesOfModel;
+      return (settingsState.value._modelOptions ?? []).some((option) => {
+        if (isAutoModelSelection(option.selection)) {return false;}
+        return !!getModelCapabilities(
+          option.selection.providerName,
+          option.selection.modelName,
+          overrides,
+        ).supportsVision;
+      });
+    }
     return !!getModelCapabilities(
-      modelSelection.providerName,
-      modelSelection.modelName,
+      selection.providerName,
+      selection.modelName,
       settingsState.value.overridesOfModel,
     ).supportsVision;
   });

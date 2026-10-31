@@ -48,6 +48,7 @@ const refreshBasedOn: { [k in ProviderName]: (keyof SettingsOfProvider[k])[] } =
   anthropic: ['_didFillInProviderSettings', 'isEnabled', 'apiKey'],
   openAI: ['_didFillInProviderSettings', 'isEnabled', 'apiKey'],
   deepseek: ['_didFillInProviderSettings', 'isEnabled', 'apiKey'],
+  kimi: ['_didFillInProviderSettings', 'isEnabled', 'apiKey'],
   ollama: ['_didFillInProviderSettings', 'isEnabled', 'endpoint'],
   vLLM: ['_didFillInProviderSettings', 'isEnabled', 'endpoint'],
   openRouter: ['_didFillInProviderSettings', 'isEnabled', 'apiKey'],

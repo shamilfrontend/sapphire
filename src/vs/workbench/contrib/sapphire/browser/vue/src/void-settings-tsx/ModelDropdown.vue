@@ -7,10 +7,12 @@
 import { computed, onMounted, ref, watch } from 'vue';
 import {
   FeatureName,
+  isAutoModelSelection,
   isFeatureNameDisabled,
   modelSelectionsEqual,
+  resolveThreadModelSelection,
 } from '../../../../../../../workbench/contrib/sapphire/common/sapphireSettingsTypes.js';
-import { useSettingsState, useAccessor } from '../util/services.js';
+import { useSettingsState, useAccessor, useChatThreadsState } from '../util/services.js';
 import SapphireCustomDropdownBox from '../util/SapphireCustomDropdownBox.vue';
 import { SAPPHIRE_OPEN_SETTINGS_ACTION_ID } from '../../../sapphireSettingsPane.js';
 import {
@@ -25,6 +27,8 @@ const props = defineProps<{
   featureName: FeatureName;
   class: string;
   fillWidth?: boolean;
+  /** Chat в сайдбаре: модель текущего треда. Settings не передаёт — пишет global. */
+  threadScoped?: boolean;
 }>();
 
 const optionsEqual = (m1: ModelOption[], m2: ModelOption[]) => {
@@ -37,8 +41,10 @@ const optionsEqual = (m1: ModelOption[], m2: ModelOption[]) => {
 
 const accessor = useAccessor();
 const sapphireSettingsService = accessor.get('ISapphireSettingsService');
+const chatThreadsService = accessor.get('IChatThreadService');
 const commandService = accessor.get('ICommandService');
 const settingsState = useSettingsState();
+const threadsState = useChatThreadsState();
 
 const { filter, emptyMessage } = modelFilterOfFeatureName[props.featureName];
 
@@ -67,19 +73,48 @@ watch(() => settingsState.value._modelOptions, syncOptions);
 
 const selectedOption = computed(() => {
   const state = settingsState.value;
-  const selection = state.modelSelectionOfFeature[props.featureName];
+  const threads = threadsState.value;
+  const thread = threads.allThreads[threads.currentThreadId];
+  const selection =
+    props.threadScoped && props.featureName === 'Chat'
+      ? resolveThreadModelSelection(
+          thread?.state.modelSelection,
+          state.modelSelectionOfFeature.Chat,
+        )
+      : state.modelSelectionOfFeature[props.featureName];
   const options = memoizedOptions.value;
   if (!selection) return options[0];
-  return (state._modelOptions ?? []).find((v) => modelSelectionsEqual(v.selection, selection))!;
+  return (
+    (state._modelOptions ?? []).find((v) => modelSelectionsEqual(v.selection, selection)) ??
+    options[0]
+  );
 });
 
 const onChangeOption = (newOption: ModelOption) => {
+  if (props.threadScoped && props.featureName === 'Chat') {
+    chatThreadsService.setThreadModelSelection(
+      chatThreadsService.state.currentThreadId,
+      newOption.selection,
+    );
+    return;
+  }
   sapphireSettingsService.setModelSelectionOfFeature(props.featureName, newOption.selection);
 };
 
+const isAutoOption = (option: ModelOption) =>
+  isAutoModelSelection(option.selection) ||
+  option.selection.modelName.trim().toLowerCase() === 'auto' ||
+  option.name === 'Auto';
+
 const optionName = (option: ModelOption) =>
-  getModelDisplayName(option.selection.providerName, option.selection.modelName);
+  isAutoOption(option)
+    ? 'Auto'
+    : getModelDisplayName(option.selection.providerName, option.selection.modelName);
 const optionDetail = (option: ModelOption) => {
+  // Auto: справа смысл режима, не placeholder-провайдер (deepseek).
+  if (isAutoOption(option)) {
+    return 'Баланс качества и скорости';
+  }
   const { providerName, modelName } = option.selection;
   const displayName = getModelDisplayName(providerName, modelName);
   return displayName !== modelName ? modelName : providerName;

@@ -63,10 +63,13 @@ const modelSections = computed<ModelSection[]>(() => {
       const providerSettings = state.settingsOfProvider[providerName];
       if (!providerSettings._didFillInProviderSettings) continue;
 
-      const rows = providerSettings.models.map((model) => ({
-        ...model,
-        providerName,
-      }));
+      const rows = providerSettings.models
+        .map((model) => ({
+          ...model,
+          providerName,
+        }))
+        // Autodetect с API может приходить в разном порядке — в UI фиксируем.
+        .sort((a, b) => a.modelName.localeCompare(b.modelName));
       if (rows.length === 0) continue;
 
       providerGroups.push({

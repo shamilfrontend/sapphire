@@ -48,7 +48,11 @@ import ProjectIndexControls from './ProjectIndexControls.vue';
 import IconLoading from './IconLoading.vue';
 import ProseWrapper from './ProseWrapper.vue';
 import { PlanToolCard, EditToolSoFar } from './ChatToolCards.js';
-import { useChatContextUsage, useCurrentThreadChatMode } from './ChatComposer.js';
+import {
+  useChatContextUsage,
+  useCurrentThreadChatMode,
+  useCurrentThreadModelSelection,
+} from './ChatComposer.js';
 import {
   EMPTY_CHAT_MESSAGES,
   SUGGESTED_PROMPTS,
@@ -102,6 +106,10 @@ const statusHint = computed(() => {
 const displayContentSoFar = computed(() => currThreadStreamState.value?.llmInfo?.displayContentSoFar);
 const toolCallsSoFar = computed(() => currThreadStreamState.value?.llmInfo?.toolCallsSoFar);
 const reasoningSoFar = computed(() => currThreadStreamState.value?.llmInfo?.reasoningSoFar);
+const autoResolvedDisplayName = computed(() => {
+  const state = currThreadStreamState.value;
+  return state?.isRunning === 'LLM' ? state.llmInfo.autoResolvedDisplayName : undefined;
+});
 const firstTokenAt = computed(() => currThreadStreamState.value?.llmInfo?.firstTokenAt);
 const liveTokensPerSecond = useLiveOutputTokensPerSecond(
   () => displayContentSoFar.value,
@@ -171,7 +179,7 @@ const setStagingImagesAndPersist = (images: ChatImageAttachment[]) => {
   });
 };
 
-const modelSelection = computed(() => settingsState.value.modelSelectionOfFeature.Chat);
+const modelSelection = useCurrentThreadModelSelection();
 const chatMode = useCurrentThreadChatMode();
 const contextUsage = useChatContextUsage(
   () => previousMessages.value,
@@ -632,6 +640,7 @@ const onComposerFileInput = async (e: Event) => {
                 role: 'assistant',
                 displayContent: displayContentSoFar ?? '',
                 reasoning: reasoningSoFar ?? '',
+                autoResolvedDisplayName: autoResolvedDisplayName,
               }"
               :messageIdx="streamingChatIdx"
               :isCommitted="false"

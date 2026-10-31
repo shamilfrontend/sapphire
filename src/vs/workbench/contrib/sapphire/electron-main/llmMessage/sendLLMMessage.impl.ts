@@ -879,6 +879,7 @@ export const sendLLMMessageToProviderImplementation = {
   },
   openAI: openAICompat,
   deepseek: openAICompat,
+  kimi: openAICompat,
   ollama: openAICompat,
   vLLM: openAICompat,
   openRouter: openAICompat,
